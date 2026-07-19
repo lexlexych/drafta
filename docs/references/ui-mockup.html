@@ -1,0 +1,967 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Drafta — макет интерфейса</title>
+<style>
+:root{
+  --bg:#F5F6F3; --surface:#FFFFFF; --surface2:#EFF1EC; --hover:#F2F4F0;
+  --ink:#20242A; --ink2:#5A6270; --ink3:#8D95A3; --line:#E3E6E0; --line2:#D8DCD4;
+  --accent:#0E7A6B; --accent-hov:#0C6B5E; --accent-ink:#FFFFFF; --accent-soft:#E2F0ED; --accent-soft-ink:#0B5D52;
+  --draft-bg:#FBF6E8; --draft-line:#EADFB9; --draft-ink:#8A6D1F; --draft-chip:#F3E9C9;
+  --out-bg:#0E7A6B; --out-ink:#F2FAF8;
+  --ig:#D6356F; --fb:#1877F2;
+  --c-price:#0E7A6B; --c-order:#3563B8; --c-complaint:#C2543A; --c-spam:#8D95A3; --c-default:#6B7280;
+  --badge:#D8452F; --ok:#2E8B57;
+  --shadow:0 1px 2px rgba(24,28,23,.05),0 4px 16px rgba(24,28,23,.06);
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#14171A; --surface:#1C2025; --surface2:#23282E; --hover:#22272D;
+    --ink:#E8EBEE; --ink2:#A6AEB8; --ink3:#6F7883; --line:#2B3138; --line2:#343B43;
+    --accent:#3FB3A2; --accent-hov:#4FC4B2; --accent-ink:#0D211D; --accent-soft:#14332D; --accent-soft-ink:#7BCFC1;
+    --draft-bg:#252017; --draft-line:#4A3F22; --draft-ink:#D9BA60; --draft-chip:#37301C;
+    --out-bg:#0F5C50; --out-ink:#DCF2EE;
+    --c-price:#3FB3A2; --c-order:#7DA3E8; --c-complaint:#E08A72; --c-spam:#6F7883; --c-default:#9AA2AC;
+    --badge:#E06549; --ok:#57B57F;
+    --shadow:0 1px 2px rgba(0,0,0,.3),0 4px 16px rgba(0,0,0,.25);
+  }
+}
+:root[data-theme="light"]{
+  --bg:#F5F6F3; --surface:#FFFFFF; --surface2:#EFF1EC; --hover:#F2F4F0;
+  --ink:#20242A; --ink2:#5A6270; --ink3:#8D95A3; --line:#E3E6E0; --line2:#D8DCD4;
+  --accent:#0E7A6B; --accent-hov:#0C6B5E; --accent-ink:#FFFFFF; --accent-soft:#E2F0ED; --accent-soft-ink:#0B5D52;
+  --draft-bg:#FBF6E8; --draft-line:#EADFB9; --draft-ink:#8A6D1F; --draft-chip:#F3E9C9;
+  --out-bg:#0E7A6B; --out-ink:#F2FAF8;
+  --ig:#D6356F; --fb:#1877F2;
+  --c-price:#0E7A6B; --c-order:#3563B8; --c-complaint:#C2543A; --c-spam:#8D95A3; --c-default:#6B7280;
+  --badge:#D8452F; --ok:#2E8B57;
+  --shadow:0 1px 2px rgba(24,28,23,.05),0 4px 16px rgba(24,28,23,.06);
+}
+:root[data-theme="dark"]{
+  --bg:#14171A; --surface:#1C2025; --surface2:#23282E; --hover:#22272D;
+  --ink:#E8EBEE; --ink2:#A6AEB8; --ink3:#6F7883; --line:#2B3138; --line2:#343B43;
+  --accent:#3FB3A2; --accent-hov:#4FC4B2; --accent-ink:#0D211D; --accent-soft:#14332D; --accent-soft-ink:#7BCFC1;
+  --draft-bg:#252017; --draft-line:#4A3F22; --draft-ink:#D9BA60; --draft-chip:#37301C;
+  --out-bg:#0F5C50; --out-ink:#DCF2EE;
+  --c-price:#3FB3A2; --c-order:#7DA3E8; --c-complaint:#E08A72; --c-spam:#6F7883; --c-default:#9AA2AC;
+  --badge:#E06549; --ok:#57B57F;
+  --shadow:0 1px 2px rgba(0,0,0,.3),0 4px 16px rgba(0,0,0,.25);
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;height:100%}
+body{background:var(--bg);color:var(--ink);
+  font-family:"Segoe UI",system-ui,-apple-system,"Helvetica Neue",Arial,sans-serif;
+  font-size:14px;line-height:1.45;overflow:hidden}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;padding:0}
+button:focus-visible,a:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:6px}
+svg{display:block;flex:none}
+.num{font-variant-numeric:tabular-nums}
+
+/* ---------- shell ---------- */
+.app{display:flex;height:100dvh;overflow:hidden}
+.sidebar{width:236px;flex:none;display:flex;flex-direction:column;background:var(--surface);border-right:1px solid var(--line)}
+.main{flex:1;display:flex;min-width:0;min-height:0}
+.tabbar{display:none}
+
+/* ---------- sidebar ---------- */
+.logo{display:flex;align-items:center;gap:10px;padding:18px 16px 14px}
+.logo b{font-size:17px;font-weight:800;letter-spacing:-.02em}
+.logo b i{font-style:normal;color:var(--accent)}
+.logo .ws{font-size:11px;color:var(--ink3);margin-top:1px}
+.nav{flex:1;overflow-y:auto;padding:4px 8px 8px;display:flex;flex-direction:column;gap:1px}
+.nitem{display:flex;align-items:center;gap:10px;width:100%;text-align:left;padding:8px 10px;border-radius:8px;color:var(--ink2);font-weight:500}
+.nitem:hover{background:var(--hover)}
+.nitem.on{background:var(--accent-soft);color:var(--accent-soft-ink)}
+.nitem .lbl{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.nitem .cnt{font-size:11px;font-weight:700;background:var(--badge);color:#fff;border-radius:99px;min-width:18px;height:18px;display:inline-flex;align-items:center;justify-content:center;padding:0 5px}
+.nitem .chev{color:var(--ink3);transition:transform .15s}
+.nitem .chev.open{transform:rotate(180deg)}
+.sub{display:flex;flex-direction:column;gap:1px;margin:1px 0 3px}
+.sitem{display:flex;align-items:center;gap:8px;width:100%;text-align:left;padding:6px 10px 6px 38px;border-radius:8px;color:var(--ink2);font-size:13px}
+.sitem:hover{background:var(--hover)}
+.sitem.on{background:var(--accent-soft);color:var(--accent-soft-ink);font-weight:600}
+.sitem .lbl{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sitem .cnt{font-size:11px;font-weight:700;color:var(--ink3)}
+.pdot{width:8px;height:8px;border-radius:99px;flex:none}
+.pdot.instagram{background:var(--ig)} .pdot.facebook{background:var(--fb)} .pdot.all{background:var(--ink3)}
+.sfoot{border-top:1px solid var(--line);padding:12px 16px;display:flex;flex-direction:column;gap:8px}
+.user{display:flex;align-items:center;gap:10px}
+.user .who{min-width:0}
+.user .who b{display:block;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.user .who span{font-size:11px;color:var(--ink3)}
+.mocknote{font-size:10.5px;color:var(--ink3);letter-spacing:.04em;text-transform:uppercase}
+
+/* ---------- avatars & chips ---------- */
+.ava{border-radius:99px;display:inline-flex;align-items:center;justify-content:center;font-weight:700;color:#fff;flex:none}
+.ava.md{width:40px;height:40px;font-size:14px}
+.ava.sm{width:30px;height:30px;font-size:11px}
+.ava.lg{width:56px;height:56px;font-size:19px}
+.chip{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;color:var(--ink2);background:var(--surface2);border:1px solid var(--line);border-radius:99px;padding:1.5px 8px;white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis}
+.chip .pdot{width:6px;height:6px}
+.chip.cat{background:transparent}
+.cdot{width:6px;height:6px;border-radius:99px;flex:none}
+.chip.st{color:var(--ok);border-color:transparent;background:transparent;padding-left:0}
+.unread{font-size:11px;font-weight:700;background:var(--accent);color:var(--accent-ink);border-radius:99px;min-width:19px;height:19px;display:inline-flex;align-items:center;justify-content:center;padding:0 5px;flex:none}
+
+/* ---------- panes ---------- */
+.pane-list{width:340px;flex:none;display:flex;flex-direction:column;min-height:0;background:var(--surface);border-right:1px solid var(--line)}
+.pane-detail{flex:1;display:flex;flex-direction:column;min-width:0;min-height:0;background:var(--bg)}
+.phead{padding:14px 16px 10px;border-bottom:1px solid var(--line);flex:none}
+.phrow{display:flex;align-items:center;gap:10px;justify-content:space-between}
+.catsel{font:inherit;font-size:12px;font-weight:600;color:var(--ink2);background:var(--surface);border:1px solid var(--line2);border-radius:8px;padding:4px 8px;max-width:180px;flex:none}
+.empty{padding:34px 16px;color:var(--ink3);font-size:13px;text-align:center}
+.phead h2{margin:0;font-size:16px;font-weight:700;display:flex;align-items:center;gap:8px}
+.phead .sub{font-size:12px;color:var(--ink3);margin-top:2px;display:block}
+.filters{display:none;gap:6px;padding:8px 16px;border-bottom:1px solid var(--line);overflow-x:auto;flex:none;scrollbar-width:none}
+.filters::-webkit-scrollbar{display:none}
+.fchip{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--ink2);border:1px solid var(--line2);border-radius:99px;padding:4px 11px;white-space:nowrap}
+.fchip.on{background:var(--accent-soft);color:var(--accent-soft-ink);border-color:transparent}
+.list{flex:1;overflow-y:auto;min-height:0}
+.litem{display:flex;gap:11px;width:100%;text-align:left;padding:11px 14px;border-bottom:1px solid var(--line);align-items:flex-start}
+.litem:hover{background:var(--hover)}
+.litem.on{background:var(--accent-soft)}
+.litem .body{flex:1;min-width:0}
+.lrow1{display:flex;align-items:baseline;gap:8px}
+.lrow1 b{flex:1;min-width:0;font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lrow1 time{font-size:11px;color:var(--ink3)}
+.lprev{font-size:12.5px;color:var(--ink2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin:1px 0 5px}
+.litem.unrd .lprev{color:var(--ink);font-weight:600}
+.lchips{display:flex;align-items:center;gap:5px;min-width:0}
+.lchips .sp{flex:1}
+.backbtn{display:none;align-items:center;justify-content:center;width:32px;height:32px;border-radius:8px;color:var(--ink2);margin-left:-6px}
+.backbtn:hover{background:var(--hover)}
+
+/* ---------- thread ---------- */
+.thead{display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid var(--line);background:var(--surface);flex:none;min-width:0}
+.thead .who{min-width:0;flex:1}
+.thead .who b{display:block;font-size:14.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.thead .chips{display:flex;gap:5px;margin-top:3px;flex-wrap:wrap}
+.tmsgs{flex:1;overflow-y:auto;min-height:0;padding:18px 18px 10px;display:flex;flex-direction:column;gap:8px}
+.bub{max-width:min(72%,520px);padding:8px 12px;border-radius:14px;font-size:13.5px;position:relative}
+.bub.in{align-self:flex-start;background:var(--surface);border:1px solid var(--line);border-bottom-left-radius:4px}
+.bub.out{align-self:flex-end;background:var(--out-bg);color:var(--out-ink);border-bottom-right-radius:4px}
+.bub .bmeta{display:block;font-size:10.5px;margin-top:3px;opacity:.65;text-align:right}
+.bub.in .bmeta{color:var(--ink3);opacity:1}
+.att{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;background:var(--surface2);border:1px solid var(--line);border-radius:8px;padding:5px 9px;margin-bottom:5px;color:var(--ink2)}
+.bub.out .att{background:rgba(255,255,255,.14);border-color:transparent;color:var(--out-ink)}
+.sysline{align-self:center;display:flex;align-items:center;gap:7px;font-size:11px;color:var(--ink3);padding:2px 0;text-align:center}
+.sysline svg{color:var(--draft-ink)}
+.daysep{align-self:center;font-size:11px;font-weight:600;color:var(--ink3);padding:4px 0}
+
+/* ---------- draft panel ---------- */
+.dwrap{flex:none;padding:10px 14px 12px;display:flex;flex-direction:column;gap:8px}
+.draft{background:var(--draft-bg);border:1px solid var(--draft-line);border-radius:14px;padding:11px 14px 12px;box-shadow:var(--shadow)}
+.dtop{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.dtop .ai{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-weight:700;color:var(--draft-ink);letter-spacing:.05em;text-transform:uppercase}
+.dstat{font-size:11px;font-weight:700;border-radius:99px;padding:1.5px 8px;background:var(--draft-chip);color:var(--draft-ink)}
+.dstat.edited{background:var(--accent-soft);color:var(--accent-soft-ink)}
+.dcap{font-size:11px;color:var(--ink3);margin-left:auto;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dref{font-size:11.5px;color:var(--ink2);background:var(--draft-chip);border-radius:8px;padding:4px 9px;margin-top:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dtext{font-size:13.5px;margin:8px 0 2px;white-space:pre-wrap}
+.dkb{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--ink3);margin-top:7px;flex-wrap:wrap}
+.dkb .kbf{background:var(--draft-chip);color:var(--draft-ink);border-radius:6px;padding:0 6px;font-weight:600}
+.dacts{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;align-items:center}
+.btn{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:600;border-radius:9px;padding:6.5px 14px;border:1px solid transparent}
+.btn.pri{background:var(--accent);color:var(--accent-ink)}
+.btn.pri:hover{background:var(--accent-hov)}
+.btn.sec{border-color:var(--line2);color:var(--ink2);background:var(--surface)}
+.btn.sec:hover{background:var(--hover)}
+.btn.ghost{color:var(--ink3);padding:6.5px 8px}
+.btn.ghost:hover{color:var(--ink2)}
+.btn.sm{font-size:12px;padding:4.5px 11px}
+.dta{width:100%;min-height:74px;resize:vertical;font:inherit;font-size:13.5px;color:var(--ink);background:var(--surface);border:1px solid var(--draft-line);border-radius:9px;padding:8px 10px;margin-top:8px}
+.dta:focus{outline:2px solid var(--accent);outline-offset:0;border-color:transparent}
+.skel{height:11px;border-radius:6px;background:linear-gradient(90deg,var(--draft-chip) 25%,var(--draft-line) 50%,var(--draft-chip) 75%);background-size:200% 100%;animation:shimmer 1.2s infinite;margin-top:9px}
+@keyframes shimmer{from{background-position:200% 0}to{background-position:-200% 0}}
+@media (prefers-reduced-motion: reduce){.skel{animation:none}.nitem .chev{transition:none}}
+.ddone{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--ink3);background:var(--surface);border:1px dashed var(--line2);border-radius:12px;padding:9px 14px}
+.composer{display:flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--line2);border-radius:12px;padding:6px 6px 6px 14px}
+.composer input{flex:1;border:0;background:none;font:inherit;font-size:13.5px;color:var(--ink);min-width:0}
+.composer input:focus{outline:none}
+.composer input::placeholder{color:var(--ink3)}
+.sendbtn{width:34px;height:34px;border-radius:9px;background:var(--accent);color:var(--accent-ink);display:inline-flex;align-items:center;justify-content:center}
+.sendbtn:hover{background:var(--accent-hov)}
+
+/* ---------- comments ---------- */
+.postcard{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin:14px 16px 4px;flex:none}
+.postcard .pr1{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.postcard .ptext{font-size:13.5px;margin-top:7px}
+.postcard .pmeta{font-size:11.5px;color:var(--ink3);margin-top:6px;display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.plink{display:inline-flex;align-items:center;gap:4px;color:var(--accent);font-weight:600;font-size:11.5px}
+.cmt{display:flex;gap:10px;align-items:flex-start;padding:2px 0}
+.cmt.reply{margin-left:40px}
+.cmt .cbody{min-width:0;flex:1}
+.cmt .ch{display:flex;align-items:baseline;gap:7px;flex-wrap:wrap}
+.cmt .ch b{font-size:13px}
+.cmt .ch .hnd{font-size:11.5px;color:var(--ink3)}
+.cmt .ctext{font-size:13.5px;margin-top:1px}
+.cmt .cchips{display:flex;gap:5px;margin-top:4px;flex-wrap:wrap;align-items:center}
+.cmt.target .cbody{border-left:3px solid var(--draft-ink);padding-left:9px;margin-left:-12px}
+.cmt.spam .ctext,.cmt.spam .ch b{color:var(--ink3)}
+.cmt.ours .cbody{background:var(--accent-soft);border-radius:10px;padding:7px 10px}
+.cmt.ours .ch b{color:var(--accent-soft-ink)}
+.nospam{font-size:10.5px;color:var(--ink3);font-style:italic}
+
+/* ---------- dashboard ---------- */
+.single{flex:1;overflow-y:auto;min-height:0;padding:20px 22px 28px}
+.single .inner{max-width:880px;margin:0 auto}
+.h1row{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:4px}
+.h1row h1{margin:0;font-size:20px;font-weight:800;letter-spacing:-.01em}
+.h1row .date{font-size:12.5px;color:var(--ink3)}
+.statgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:14px 0}
+.stat{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:13px 15px}
+.stat .v{font-size:24px;font-weight:800;letter-spacing:-.02em}
+.stat .k{font-size:12px;color:var(--ink2);margin-top:1px}
+.stat.hot{background:var(--draft-bg);border-color:var(--draft-line)}
+.stat.hot .v{color:var(--draft-ink)}
+.twocol{display:grid;grid-template-columns:1fr 1.2fr;gap:12px;align-items:start}
+@media (max-width:1100px){.twocol{grid-template-columns:1fr}}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px 16px}
+.card h3{margin:0 0 10px;font-size:11.5px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--ink3)}
+.chrow{display:flex;align-items:center;gap:9px;padding:6px 0;font-size:13px}
+.chrow .bar{flex:1;height:6px;border-radius:99px;background:var(--surface2);overflow:hidden;min-width:40px}
+.chrow .bar i{display:block;height:100%;border-radius:99px}
+.chrow .n{font-weight:700;width:26px;text-align:right}
+.feed{display:flex;flex-direction:column}
+.frow{display:flex;gap:10px;align-items:flex-start;width:100%;text-align:left;padding:8px 6px;border-radius:10px}
+.frow:hover{background:var(--hover)}
+.frow .fb1{flex:1;min-width:0}
+.frow .ft{font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.frow .fm{display:flex;gap:6px;align-items:center;margin-top:3px;flex-wrap:wrap}
+.frow time{font-size:11px;color:var(--ink3);flex:none}
+.footnote{font-size:11.5px;color:var(--ink3);margin-top:14px;font-style:italic}
+
+/* ---------- contacts ---------- */
+.ccard{flex:1;overflow-y:auto;min-height:0;padding:20px 22px}
+.ccard .inner{max-width:640px;margin:0 auto;display:flex;flex-direction:column;gap:12px}
+.chead{display:flex;gap:14px;align-items:center}
+.chead .cn{flex:1;min-width:0}
+.chead h2{margin:0;font-size:19px;font-weight:800}
+.tags{display:flex;gap:5px;margin-top:5px;flex-wrap:wrap}
+.idrow{display:flex;align-items:center;gap:10px;padding:9px 0;border-top:1px solid var(--line);font-size:13px}
+.idrow:first-of-type{border-top:0}
+.idrow .plat{display:inline-flex;align-items:center;gap:7px;font-weight:600;width:120px;flex:none}
+.idrow .hnd{color:var(--ink2);flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.idrow .via{font-size:11.5px;color:var(--ink3)}
+.hrow{display:flex;align-items:center;gap:10px;width:100%;text-align:left;padding:9px 6px;border-radius:10px;font-size:13px}
+.hrow:hover{background:var(--hover)}
+.hrow .hl{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hrow time{font-size:11px;color:var(--ink3)}
+.notes{font-size:13px;color:var(--ink2);white-space:pre-wrap}
+
+/* ---------- settings ---------- */
+.setrow{display:flex;align-items:center;gap:12px;width:100%;text-align:left;padding:12px 16px;border-bottom:1px solid var(--line)}
+.setrow:hover{background:var(--hover)}
+.setrow.on{background:var(--accent-soft)}
+.setrow .si{width:34px;height:34px;border-radius:9px;background:var(--surface2);display:inline-flex;align-items:center;justify-content:center;color:var(--ink2);flex:none}
+.setrow .sb{flex:1;min-width:0}
+.setrow .sb b{display:block;font-size:13.5px}
+.setrow .sb span{font-size:11.5px;color:var(--ink3);display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.spane{flex:1;overflow-y:auto;min-height:0;padding:20px 22px}
+.spane .inner{max-width:640px;margin:0 auto;display:flex;flex-direction:column;gap:12px}
+.spane h2{margin:0;font-size:18px;font-weight:800}
+.spane .desc{font-size:12.5px;color:var(--ink3);margin-top:-6px}
+.connrow{display:flex;align-items:center;gap:12px;padding:11px 0;border-top:1px solid var(--line)}
+.connrow:first-of-type{border-top:0}
+.connrow .cb{flex:1;min-width:0}
+.connrow .cb b{display:flex;align-items:center;gap:8px;font-size:13.5px}
+.connrow .cb span{font-size:11.5px;color:var(--ink3)}
+.catrow{display:flex;align-items:center;gap:10px;padding:10px 0;border-top:1px solid var(--line)}
+.catrow:first-of-type{border-top:0}
+.catrow .grip{color:var(--ink3);cursor:grab;flex:none}
+.catrow .prio{font-size:11px;font-weight:700;color:var(--ink3);width:16px;text-align:right;flex:none}
+.catrow .cb{flex:1;min-width:0}
+.catrow .cb b{font-size:13.5px;display:flex;align-items:center;gap:7px}
+.catrow .cchips{display:flex;gap:5px;margin-top:3px;flex-wrap:wrap}
+.catrow.def{opacity:.85}
+.field{display:flex;flex-direction:column;gap:5px}
+.field label{font-size:11.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--ink3)}
+.field select,.field input[type=text]{font:inherit;font-size:13.5px;color:var(--ink);background:var(--surface);border:1px solid var(--line2);border-radius:9px;padding:7px 10px;max-width:320px}
+.tgrow{display:flex;align-items:center;gap:12px;padding:9px 0;border-top:1px solid var(--line);font-size:13.5px}
+.tgrow:first-of-type{border-top:0}
+.tgrow .tl{flex:1;min-width:0}
+.tgrow .tl span{display:block;font-size:11.5px;color:var(--ink3)}
+.sw{width:36px;height:21px;border-radius:99px;background:var(--line2);position:relative;flex:none;transition:background .15s}
+.sw::after{content:"";position:absolute;top:2.5px;left:2.5px;width:16px;height:16px;border-radius:99px;background:#fff;transition:left .15s;box-shadow:0 1px 2px rgba(0,0,0,.25)}
+.sw.on{background:var(--accent)}
+.sw.on::after{left:17.5px}
+.kbrow{display:flex;align-items:center;gap:11px;padding:9px 0;border-top:1px solid var(--line);font-size:13.5px}
+.kbrow:first-of-type{border-top:0}
+.kbrow .kn{flex:1;min-width:0;font-weight:600;font-family:ui-monospace,Consolas,monospace;font-size:12.5px}
+.kbrow .kd{font-size:11.5px;color:var(--ink3);flex:none}
+.budget{margin-top:4px}
+.budget .bbar{height:6px;border-radius:99px;background:var(--surface2);overflow:hidden;margin-top:5px}
+.budget .bbar i{display:block;height:100%;width:75%;background:var(--accent);border-radius:99px}
+.budget span{font-size:11.5px;color:var(--ink3)}
+.radiorow{display:flex;align-items:center;gap:10px;padding:8px 0;font-size:13.5px}
+.rd{width:17px;height:17px;border-radius:99px;border:2px solid var(--line2);flex:none;position:relative}
+.rd.on{border-color:var(--accent)}
+.rd.on::after{content:"";position:absolute;inset:2.5px;border-radius:99px;background:var(--accent)}
+
+/* ---------- tabbar / mobile ---------- */
+.tabbar{background:var(--surface);border-top:1px solid var(--line);flex:none;padding-bottom:env(safe-area-inset-bottom)}
+.tbtn{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;padding:7px 0 6px;color:var(--ink3);font-size:10px;font-weight:600;position:relative}
+.tbtn.on{color:var(--accent)}
+.tbtn .tcnt{position:absolute;top:3px;left:calc(50% + 6px);font-size:9.5px;font-weight:700;background:var(--badge);color:#fff;border-radius:99px;min-width:15px;height:15px;display:inline-flex;align-items:center;justify-content:center;padding:0 4px}
+
+.toast{position:fixed;left:50%;bottom:76px;transform:translateX(-50%) translateY(8px);background:var(--ink);color:var(--bg);font-size:12.5px;font-weight:600;border-radius:99px;padding:8px 16px;opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;z-index:50;max-width:88vw;text-align:center}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+@media (max-width:899px){
+  .app{flex-direction:column}
+  .sidebar{display:none}
+  .main{flex:1;min-height:0}
+  .pane-list{width:100%;border-right:0}
+  .pane-detail{display:none}
+  .app.detail .pane-list{display:none}
+  .app.detail .pane-detail{display:flex}
+  .app.detail .tabbar{display:none}
+  .tabbar{display:flex}
+  .filters{display:flex}
+  .backbtn{display:inline-flex}
+  .bub{max-width:84%}
+  .single{padding:16px 14px 24px}
+  .spane,.ccard{padding:16px 14px}
+  .dcap{display:none}
+}
+@media (min-width:900px){
+  .app.detail .pane-list{display:flex}
+  .pane-detail{display:flex}
+  /* на десктопе список разделов настроек дублирует расхлопнутое меню — прячем */
+  .pane-list.setlist,.app.detail .pane-list.setlist{display:none}
+}
+</style>
+</head>
+<body>
+<div class="app" id="app">
+  <aside class="sidebar" id="sidebar"></aside>
+  <div class="main" id="main"></div>
+  <nav class="tabbar" id="tabbar"></nav>
+</div>
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+/* ============ иконки ============ */
+var I = {
+  dash:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.5"/></svg>',
+  msg:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M4 5.5h16v11H9l-5 4v-15z"/></svg>',
+  cmt:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"><path d="M4 5.5h16v11H9l-5 4v-15z"/><path d="M8 9.5h8M8 12.5h5"/></svg>',
+  usr:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="8" r="3.6"/><path d="M4.5 20c1.4-3.2 4.2-4.8 7.5-4.8s6.1 1.6 7.5 4.8"/></svg>',
+  set:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2.2"/><circle cx="10" cy="17" r="2.2"/></svg>',
+  chev:'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>',
+  back:'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>',
+  spark:'<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.3 7.7L22 12l-7.7 2.3L12 22l-2.3-7.7L2 12l7.7-2.3z"/></svg>',
+  send:'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 3L10.5 13.5M21 3l-6.8 18-3.7-8.3L2 9z"/></svg>',
+  rgn:'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-2.2-5.5M18.5 3v4h-4"/></svg>',
+  ext:'<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5H5v14h14v-4M14 4h6v6M20 4l-9 9"/></svg>',
+  pic:'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="14" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="M4 17l5-4 3 2.5L16 12l4.5 5"/></svg>',
+  grip:'<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.4"/><circle cx="15" cy="6" r="1.4"/><circle cx="9" cy="12" r="1.4"/><circle cx="15" cy="12" r="1.4"/><circle cx="9" cy="18" r="1.4"/><circle cx="15" cy="18" r="1.4"/></svg>',
+  lock:'<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="5.5" y="10.5" width="13" height="9" rx="2"/><path d="M8.5 10.5V8a3.5 3.5 0 0 1 7 0v2.5"/></svg>',
+  clock:'<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg>'
+};
+
+/* ============ mock-данные ============ */
+var CH = {
+  ch_ig:{ id:'ch_ig', platform:'instagram', label:'Instagram Магазин' },
+  ch_fb:{ id:'ch_fb', platform:'facebook', label:'Facebook Страница' }
+};
+var CAT = {
+  price:{ name:'Вопрос о цене', v:'--c-price' },
+  order:{ name:'Заказ и доставка', v:'--c-order' },
+  complaint:{ name:'Жалоба', v:'--c-complaint' },
+  spam:{ name:'Спам', v:'--c-spam', noDraft:true },
+  def:{ name:'По умолчанию', v:'--c-default' }
+};
+var CONTACTS = [
+  { id:'c1', name:'Anna Weber', hue:338, tags:['постоянный клиент'],
+    notes:'Покупала набор «Дюны» в мае. Любит матовую глазурь, спрашивала про новые коллекции.',
+    ids:[{p:'instagram',h:'@anna.weber.k',via:'Instagram Магазин'},{p:'facebook',h:'Anna Weber',via:'Facebook Страница'}],
+    hist:[{l:'Переписка · Instagram Магазин',t:'сегодня 12:41',go:"App.openDm('d1')"},
+          {l:'Переписка · Facebook Страница',t:'сегодня 11:05',go:"App.openDm('d6')"}] },
+  { id:'c2', name:'Максим Литвинов', hue:215, tags:['заказ #1042'],
+    notes:'Заказ #1042: набор из 6 чашек, отправлен 14.07. Одна чашка пришла со сколом — ждёт замену.',
+    ids:[{p:'instagram',h:'@maxlitvinov',via:'Instagram Магазин'}],
+    hist:[{l:'Переписка · Instagram Магазин',t:'сегодня 11:52',go:"App.openDm('d2')"}] },
+  { id:'c3', name:'Sofia Marchetti', hue:32, tags:['мастер-классы'],
+    notes:'Была на мастер-классе в июне, хочет прийти ещё раз с подругой.',
+    ids:[{p:'instagram',h:'@sofia.marchetti',via:'Instagram Магазин'}],
+    hist:[{l:'Переписка · Instagram Магазин',t:'сегодня 10:24',go:"App.openDm('d3')"}] },
+  { id:'c4', name:'Lena Hoffmann', hue:265, tags:[],
+    notes:'Заказывает вазу «Море» (среднюю) с самовывозом.',
+    ids:[{p:'facebook',h:'Lena Hoffmann',via:'Facebook Страница'}],
+    hist:[{l:'Переписка · Facebook Страница',t:'вчера 18:40',go:"App.openDm('d4')"}] },
+  { id:'c5', name:'Jonas Becker', hue:150, tags:[],
+    notes:'',
+    ids:[{p:'facebook',h:'Jonas Becker',via:'Facebook Страница'}],
+    hist:[{l:'Переписка · Facebook Страница',t:'вчера 15:12',go:"App.openDm('d5')"}] },
+  { id:'c6', name:'Дарья Ковальчук', hue:198, tags:['блогер'],
+    notes:'Активно комментирует посты, спрашивала про сотрудничество.',
+    ids:[{p:'instagram',h:'@dashkov.art',via:'Instagram Магазин'}],
+    hist:[{l:'Комментарий к посту «Коллекция „Море“»',t:'сегодня 10:12',go:"App.openPost('p1')"}] }
+];
+function contact(id){ for(var i=0;i<CONTACTS.length;i++) if(CONTACTS[i].id===id) return CONTACTS[i]; }
+
+var DMS = [
+  { id:'d1', ch:'ch_ig', c:'c1', unread:3, time:'12:41', cat:'price', win:'Окно ответа: 22 ч',
+    msgs:[
+      {dir:'in', text:'Привет!', time:'12:38'},
+      {dir:'in', text:'Подскажите, набор из 4 чашек «Дюны» ещё есть в наличии?', time:'12:39'},
+      {dir:'in', text:'И сколько будет доставка в Гамбург?', time:'12:41'}
+    ],
+    sys:'Пауза 60 сек — дебаунс: один черновик на пачку из 3 сообщений',
+    draft:{ status:'ready', kb:['прайс.md','доставка.md'], model:'mistral-large',
+      text:'Здравствуйте! Да, набор «Дюны» из 4 чашек есть в наличии — 68 €. Доставка в Гамбург через DHL — 5,90 €, обычно 2–3 рабочих дня. Могу зарезервировать набор за вами — просто напишите «беру» 🙂',
+      alt:'Добрый день! Набор «Дюны» (4 чашки) в наличии, 68 €. Отправляем DHL, до Гамбурга — 5,90 €, 2–3 рабочих дня. Оформить заказ можно прямо в переписке.' } },
+  { id:'d2', ch:'ch_ig', c:'c2', unread:1, time:'11:52', cat:'complaint',
+    msgs:[
+      {dir:'out', text:'Ваш заказ #1042 передан в DHL, номер отслеживания отправили на email 📦', time:'вчера', meta:'Прочитано'},
+      {dir:'in', text:'Добрый день. Заказ получил, но одна чашка со сколом на ручке 😞', time:'11:50'},
+      {dir:'in', att:'фото · IMG_2214.jpg', text:'Вот фото', time:'11:52'}
+    ],
+    draft:{ status:'ready', kb:['регламенты.md'], model:'mistral-large',
+      text:'Здравствуйте! Очень жаль, что чашка доехала со сколом — это наша ответственность. Отправим замену за наш счёт на этой неделе, ничего возвращать не нужно. Подтвердите, пожалуйста, адрес доставки — тот же, что в заказе #1042?',
+      alt:'Добрый день! Простите за скол — такое не должно доезжать до вас. Бесплатно отправим новую чашку на этой неделе. Адрес из заказа #1042 актуален?' } },
+  { id:'d3', ch:'ch_ig', c:'c3', unread:2, time:'10:24', cat:'def',
+    msgs:[
+      {dir:'in', text:'Здравствуйте! А на августовские мастер-классы ещё можно записаться?', time:'10:22'},
+      {dir:'in', text:'Нас двое, хотим на гончарный круг 🙌', time:'10:24'}
+    ],
+    sys:'Пауза 60 сек — дебаунс: один черновик на пачку из 2 сообщений',
+    draft:{ status:'generating', kb:['мастер-классы.md'], model:'mistral-large',
+      text:'', alt:'Здравствуйте! Да, на август ещё есть места: гончарный круг — 9, 16 и 23 августа в 18:00. Для двоих — 90 € за пару. Какая дата удобнее?' } },
+  { id:'d4', ch:'ch_fb', c:'c4', unread:0, time:'вчера', cat:'order',
+    msgs:[
+      {dir:'in', text:'Hallo! Хочу заказать среднюю вазу «Море». Можно забрать самовывозом в субботу?', time:'вчера 18:40'}
+    ],
+    draft:{ status:'edited', kb:['прайс.md'], model:'mistral-large',
+      text:'Здравствуйте! Конечно — средняя ваза «Море» (54 €) будет ждать вас в мастерской в субботу с 11:00 до 17:00. Weserstraße 12, вход со двора. До встречи!\n— Команда Tonwerk',
+      alt:'Здравствуйте! Да, отложим для вас среднюю вазу «Море» (54 €). Самовывоз в субботу 11:00–17:00, Weserstraße 12. До встречи!' } },
+  { id:'d5', ch:'ch_fb', c:'c5', unread:1, time:'вчера', cat:'price',
+    msgs:[
+      {dir:'in', text:'Добрый день! А у вас есть подарочные сертификаты? Нужен подарок коллеге на 50 €', time:'вчера 15:12'}
+    ],
+    draft:{ status:'ready', kb:['прайс.md','FAQ.md'], model:'mistral-large',
+      text:'Здравствуйте! Да, есть подарочные сертификаты на любую сумму от 25 € — и на посуду, и на мастер-классы. Сертификат на 50 € можем оформить электронным (пришлём PDF сегодня) или бумажным — заберёте в мастерской. Как удобнее?',
+      alt:'Добрый день! Сертификаты есть: электронный (PDF в тот же день) или бумажный в мастерской. Номинал любой от 25 €, на 50 € — без проблем. Какой формат подойдёт?' } },
+  { id:'d6', ch:'ch_fb', c:'c1', unread:1, time:'11:05', cat:'order',
+    msgs:[
+      {dir:'in', text:'Добрый день! Это Анна, писала вам в Instagram про набор «Дюны» 🙂 Муж предложил взять к нему ещё вазу — какие есть в той же гамме?', time:'11:05'}
+    ],
+    draft:{ status:'ready', kb:['прайс.md'], model:'mistral-large',
+      text:'Здравствуйте! Как приятно, что «Дюны» приглянулись 🙂 В той же песочной гамме есть две вазы: малая (38 €) и высокая (62 €). Могу прислать фото обеих рядом с набором — так проще выбрать. Прислать?',
+      alt:'Добрый день! К набору «Дюны» отлично подходят вазы из той же коллекции: малая — 38 €, высокая — 62 €. Пришлю фото в интерьере, чтобы было проще выбрать?' } }
+];
+function dm(id){ for(var i=0;i<DMS.length;i++) if(DMS[i].id===id) return DMS[i]; }
+
+var POSTS = [
+  { id:'p1', ch:'ch_ig', neu:3, time:'10:12',
+    text:'Новая коллекция ваз «Море» — уже в мастерской 🌊 Три формы, глазурь с градиентом от пены к глубине. Количество очень ограничено.',
+    meta:'вчера · 124 отметки «Нравится» · 18 комментариев',
+    cmts:[
+      { id:'k1', an:'Дарья Ковальчук', ah:'@dashkov.art', hue:198, text:'Какая красота! Сколько стоит самая маленькая?', time:'10:12', cat:'price', neu:true, target:true },
+      { id:'k2', an:'Miriam S.', ah:'@miriam.sonne', hue:280, text:'Была у вас в субботу, вживую они ещё лучше 😍', time:'10:30', cat:'def', neu:true },
+      { id:'k3', ours:true, an:'Tonwerk Keramik', text:'Спасибо, что заглянули! Приходите на новую коллекцию 💙', time:'10:41', parent:'k2' },
+      { id:'k4', an:'best_promo_24', ah:'@best_promo_24', hue:0, grey:true, text:'Раскрутка профиля, дёшево!! Пиши в директ 💰💰', time:'11:02', cat:'spam', neu:true, spam:true }
+    ],
+    draft:{ status:'ready', forTxt:'Ответ на комментарий @dashkov.art: «Какая красота! Сколько стоит…»', kb:['прайс.md'], model:'mistral-small', cap:'Instagram · публичный ответ · коротко',
+      text:'Спасибо! 🌊 Малая ваза «Море» — 42 €. Осталось четыре штуки, детали — в директе.',
+      alt:'Благодарим! Малая — 42 €, в наличии четыре. Напишите в директ — отложим 🌊' } },
+  { id:'p2', ch:'ch_ig', neu:1, time:'вчера',
+    text:'Расписание мастер-классов на август опубликовано! Гончарный круг, лепка, глазуровка. Запись — в директ 🏺',
+    meta:'2 дня назад · 89 отметок «Нравится» · 11 комментариев',
+    cmts:[
+      { id:'k5', an:'Sofia Marchetti', ah:'@sofia.marchetti', hue:32, text:'Уже записались с подругой, ждём! 🙌', time:'вчера', cat:'def' },
+      { id:'k6', an:'Timur K.', ah:'@timur_krd', hue:120, text:'А детские мастер-классы бывают? Сыну 9 лет', time:'вчера', cat:'def', neu:true, target:true }
+    ],
+    draft:{ status:'ready', forTxt:'Ответ на комментарий @timur_krd: «А детские мастер-классы бывают?…»', kb:['мастер-классы.md'], model:'mistral-small', cap:'Instagram · публичный ответ · коротко',
+      text:'Бывают! Детская лепка по воскресеньям, с 7 лет. Ближайшая — 10 августа, детали в директе 🏺',
+      alt:'Да! Детские занятия по воскресеньям (7+). Ближайшее — 10 августа. Напишите в директ — расскажем подробнее.' } },
+  { id:'p3', ch:'ch_fb', neu:2, time:'14:05',
+    text:'Мы переехали! Теперь мастерская и магазин Tonwerk — на Weserstraße 12, Berlin-Neukölln. Вход со двора, зелёная дверь. Ждём в гости!',
+    meta:'сегодня · 56 отметок «Нравится» · 9 комментариев',
+    cmts:[
+      { id:'k7', an:'Petra Lange', hue:255, text:'Поздравляю с новосельем! Помещение чудесное 💐', time:'13:20', cat:'def' },
+      { id:'k8', an:'Jonas Becker', hue:150, text:'А часы работы на новом месте те же? И есть ли рядом парковка?', time:'14:05', cat:'def', neu:true, target:true },
+      { id:'k9', an:'Elif Aydın', hue:20, text:'Наконец-то ближе ко мне! 🎉', time:'14:22', cat:'def', neu:true }
+    ],
+    draft:{ status:'ready', forTxt:'Ответ на комментарий Jonas Becker: «А часы работы на новом месте…»', kb:['описание.md'], model:'mistral-small', cap:'Facebook · публичный ответ',
+      text:'Часы те же: вт–сб 11:00–19:00. Парковка — вдоль Weserstraße и на Wildenbruchplatz в двух минутах. До встречи!',
+      alt:'Работаем как раньше: вт–сб 11:00–19:00. Припарковаться можно на Wildenbruchplatz (2 мин пешком). Заходите!' } },
+  { id:'p4', ch:'ch_fb', neu:1, time:'вчера',
+    text:'Розыгрыш набора «Дюны»! Условия: подписка на страницу + комментарий «участвую». Итоги — 1 августа.',
+    meta:'3 дня назад · 210 отметок «Нравится» · 74 комментария',
+    cmts:[
+      { id:'k10', an:'Nina Roth', hue:300, text:'Участвую! 🤞', time:'вчера', cat:'def' },
+      { id:'k11', an:'Olga Fischer', hue:60, text:'Участвую! Заказывала у вас тарелки — до сих пор радуют', time:'вчера', cat:'def' },
+      { id:'k12', an:'Marta Nowak', hue:180, text:'А я вам в мессенджер писала неделю назад про опт и так и не получила ответа…', time:'вчера', cat:'complaint', neu:true, target:true }
+    ],
+    draft:{ status:'ready', forTxt:'Ответ на комментарий Marta Nowak: «А я вам в мессенджер писала…»', kb:['регламенты.md'], model:'mistral-small', cap:'Facebook · публичный ответ',
+      text:'Простите, что письмо потерялось — это наша вина. Уже нашли ваш запрос и ответили в мессенджере. Спасибо, что напомнили!',
+      alt:'Извините за тишину — ваш запрос нашли, подробный ответ уже в мессенджере. Спасибо за терпение!' } }
+];
+function post(id){ for(var i=0;i<POSTS.length;i++) if(POSTS[i].id===id) return POSTS[i]; }
+
+/* ============ состояние ============ */
+var S = { screen:'dashboard', filter:null, catFilter:null, cFilter:null, dm:'d1', post:'p1', contact:'c1', set:'channels', detail:false, exp:{messages:true, comments:false, contacts:false, settings:false} };
+
+/* ============ helpers ============ */
+function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function ava(name,hue,cls){ var p=name.trim().split(/\s+/); var ini=(p[0][0]+(p[1]?p[1][0]:'')).toUpperCase();
+  return '<span class="ava '+cls+'" style="background:hsl('+hue+' 42% 52%)">'+esc(ini)+'</span>'; }
+function chChip(chId){ var c=CH[chId]; return '<span class="chip"><span class="pdot '+c.platform+'"></span>'+esc(c.label)+'</span>'; }
+function catChip(k){ var c=CAT[k]; return '<span class="chip cat"><span class="cdot" style="background:var('+c.v+')"></span>'+esc(c.name)+'</span>'; }
+function msgsUnread(chId){ var n=0; DMS.forEach(function(d){ if(!chId||d.ch===chId) n+=d.unread; }); return n; }
+function cmtsNew(chId){ var n=0; POSTS.forEach(function(p){ if(!chId||p.ch===chId) n+=p.neu; }); return n; }
+function contactsCount(chId){ var n=0; CONTACTS.forEach(function(c){
+  if(!chId || c.ids.some(function(i){ return i.via===CH[chId].label; })) n++; }); return n; }
+function draftsPending(){ var n=0; DMS.forEach(function(d){ if(d.draft&&(d.draft.status==='ready'||d.draft.status==='edited')) n++; });
+  POSTS.forEach(function(p){ if(p.draft&&(p.draft.status==='ready'||p.draft.status==='edited')) n++; }); return n; }
+function toast(t){ var el=document.getElementById('toast'); el.textContent=t; el.classList.add('show');
+  clearTimeout(toast._t); toast._t=setTimeout(function(){ el.classList.remove('show'); },2200); }
+
+/* ============ sidebar ============ */
+function renderSidebar(){
+  var mu=msgsUnread(), cn=cmtsNew();
+  var h='<div class="logo">'
+    +'<div><b>draf<i>ta</i></b><div class="ws">Tonwerk Keramik · workspace</div></div></div>'
+    +'<nav class="nav">'
+    +navItem('dashboard','dash','Дашборд',0,false)
+    +navItem('messages','msg','Сообщения',mu,true)
+    +(S.exp.messages? subChannels('messages',msgsUnread,S.filter) : '')
+    +navItem('comments','cmt','Комментарии',cn,true)
+    +(S.exp.comments? subChannels('comments',cmtsNew,S.filter) : '')
+    +navItem('contacts','usr','Контакты',0,true)
+    +(S.exp.contacts? subChannels('contacts',contactsCount,S.cFilter) : '')
+    +navItem('settings','set','Настройки',0,true)
+    +(S.exp.settings? subSettings() : '')
+    +'</nav>'
+    +'<div class="sfoot"><div class="user">'+ava('Алексей Н',170,'sm')
+    +'<div class="who"><b>Алексей</b><span>owner</span></div></div>'
+    +'<div class="mocknote">Макет UI · mock-данные</div></div>';
+  document.getElementById('sidebar').innerHTML=h;
+}
+function navItem(scr,icon,label,cnt,expandable){
+  var on = S.screen===scr;
+  var h='<button class="nitem'+(on?' on':'')+'" onclick="App.go(\''+scr+'\')">'+I[icon]
+    +'<span class="lbl">'+label+'</span>'
+    +(cnt?'<span class="cnt num">'+cnt+'</span>':'');
+  if(expandable) h+='<span class="chev'+(S.exp[scr]?' open':'')+'" onclick="event.stopPropagation();App.toggle(\''+scr+'\')">'+I.chev+'</span>';
+  return h+'</button>';
+}
+function subChannels(scr,cntFn,cur){
+  var h='<div class="sub">';
+  h+='<button class="sitem'+(S.screen===scr&&!cur?' on':'')+'" onclick="App.go(\''+scr+'\',null)"><span class="pdot all"></span><span class="lbl">Все каналы</span></button>';
+  ['ch_ig','ch_fb'].forEach(function(id){ var c=CH[id]; var n=cntFn(id);
+    h+='<button class="sitem'+(S.screen===scr&&cur===id?' on':'')+'" onclick="App.go(\''+scr+'\',\''+id+'\')">'
+      +'<span class="pdot '+c.platform+'"></span><span class="lbl">'+esc(c.label)+'</span>'
+      +(n?'<span class="cnt num">'+n+'</span>':'')+'</button>'; });
+  return h+'</div>';
+}
+function catSelect(){
+  var h='<select class="catsel" aria-label="Фильтр по категории" onchange="App.setCat(this.value)">'
+    +'<option value="">Все категории</option>';
+  Object.keys(CAT).forEach(function(k){
+    h+='<option value="'+k+'"'+(S.catFilter===k?' selected':'')+'>'+esc(CAT[k].name)+'</option>'; });
+  return h+'</select>';
+}
+var SETS=[['channels','Каналы'],['categories','Категории'],['ai','AI'],['kb','База знаний'],['team','Команда'],['notif','Уведомления'],['privacy','Приватность']];
+function subSettings(){
+  var h='<div class="sub">';
+  SETS.forEach(function(s){ h+='<button class="sitem'+(S.screen==='settings'&&S.set===s[0]?' on':'')
+    +'" onclick="App.goSet(\''+s[0]+'\')"><span class="lbl">'+s[1]+'</span></button>'; });
+  return h+'</div>';
+}
+
+/* ============ tabbar ============ */
+function renderTabbar(){
+  var mu=msgsUnread(), cn=cmtsNew();
+  var items=[['dashboard','dash','Дашборд',0],['messages','msg','Сообщения',mu],['comments','cmt','Комментарии',cn],['contacts','usr','Контакты',0],['settings','set','Настройки',0]];
+  var h='';
+  items.forEach(function(it){ h+='<button class="tbtn'+(S.screen===it[0]?' on':'')+'" onclick="App.go(\''+it[0]+'\')">'
+    +I[it[1]].replace('width="18" height="18"','width="22" height="22"')
+    +'<span>'+it[2]+'</span>'+(it[3]?'<span class="tcnt num">'+it[3]+'</span>':'')+'</button>'; });
+  document.getElementById('tabbar').innerHTML=h;
+}
+
+/* ============ фильтры (мобайл) ============ */
+function filterChips(scr,cntFn,cur){
+  var h='<div class="filters">';
+  h+='<button class="fchip'+(!cur?' on':'')+'" onclick="App.go(\''+scr+'\',null)">Все каналы</button>';
+  ['ch_ig','ch_fb'].forEach(function(id){ var c=CH[id]; var n=cntFn(id);
+    h+='<button class="fchip'+(cur===id?' on':'')+'" onclick="App.go(\''+scr+'\',\''+id+'\')">'
+      +'<span class="pdot '+c.platform+'"></span>'+esc(c.label)+(n?' <span class="num">'+n+'</span>':'')+'</button>'; });
+  return h+'</div>';
+}
+
+/* ============ панель черновика ============ */
+function draftPanel(d, kind, acceptFn, ctx){
+  if(!d || d.status==='sent') return '';
+  if(d.status==='discarded')
+    return '<div class="ddone">'+I.spark+' Черновик отклонён'
+      +'<button class="btn sm sec" style="margin-left:auto" onclick="App.regen(\''+kind+'\',\''+ctx+'\')">'+I.rgn+' Сгенерировать заново</button></div>';
+  var h='<div class="draft">';
+  h+='<div class="dtop"><span class="ai">'+I.spark+' AI-черновик</span>';
+  if(d.status==='generating') h+='<span class="dstat">Генерируется…</span>';
+  else if(d.status==='edited') h+='<span class="dstat edited">Отредактирован</span>';
+  else h+='<span class="dstat">Готов</span>';
+  h+='<span class="dcap">'+(d.cap? esc(d.cap) : 'Модель: '+esc(d.model||'mistral-large'))+'</span></div>';
+  if(d.forTxt) h+='<div class="dref">'+esc(d.forTxt)+'</div>';
+  if(d.status==='generating'){
+    h+='<div class="skel" style="width:92%"></div><div class="skel" style="width:78%"></div><div class="skel" style="width:60%"></div>';
+  } else if(d.editing){
+    h+='<textarea class="dta" id="dta">'+esc(d.text)+'</textarea>'
+      +'<div class="dacts"><button class="btn pri" onclick="App.saveEdit(\''+kind+'\',\''+ctx+'\')">Сохранить</button>'
+      +'<button class="btn sec" onclick="App.cancelEdit(\''+kind+'\',\''+ctx+'\')">Отмена</button></div>';
+  } else {
+    h+='<div class="dtext">'+esc(d.text)+'</div>';
+    if(d.kb&&d.kb.length){ h+='<div class="dkb">База знаний:'; d.kb.forEach(function(f){ h+=' <span class="kbf">'+esc(f)+'</span>'; }); h+='</div>'; }
+    h+='<div class="dacts">'
+      +'<button class="btn pri" onclick="'+acceptFn+'">Принять и отправить</button>'
+      +'<button class="btn sec" onclick="App.editDraft(\''+kind+'\',\''+ctx+'\')">Править</button>'
+      +'<button class="btn sec" onclick="App.discard(\''+kind+'\',\''+ctx+'\')">Отклонить</button>'
+      +'<button class="btn ghost" onclick="App.regen(\''+kind+'\',\''+ctx+'\')">'+I.rgn+' Заново</button></div>';
+  }
+  return h+'</div>';
+}
+
+/* ============ экран: сообщения ============ */
+function isDesktop(){ return window.matchMedia('(min-width:900px)').matches; }
+function renderMessages(){
+  if(isDesktop() && dm(S.dm)) dm(S.dm).unread=0; /* тред виден рядом со списком — считается прочитанным */
+  var list = DMS.filter(function(d){ return (!S.filter || d.ch===S.filter) && (!S.catFilter || d.cat===S.catFilter); });
+  var title = S.filter? CH[S.filter].label : 'Сообщения';
+  var h='<section class="pane-list"><div class="phead"><div class="phrow"><h2>'+esc(title)+'</h2>'+catSelect()+'</div>'
+    +'<span class="sub">'+(S.filter?'канал':'все каналы')
+    +(S.catFilter?' · '+esc(CAT[S.catFilter].name):'')+' · '+list.length+' диалогов</span></div>'
+    +filterChips('messages',msgsUnread,S.filter)
+    +'<div class="list">'
+    +(list.length?'':'<div class="empty">Нет диалогов — измените фильтры</div>');
+  list.forEach(function(d){
+    var c=contact(d.c); var last=d.msgs[d.msgs.length-1];
+    var prev=(last.dir==='out'?'Вы: ':'')+(last.att? '📷 '+last.text : last.text);
+    h+='<button class="litem'+(d.id===S.dm?' on':'')+(d.unread?' unrd':'')+'" onclick="App.openDm(\''+d.id+'\')">'
+      +ava(c.name,c.hue,'md')
+      +'<div class="body"><div class="lrow1"><b>'+esc(c.name)+'</b><time class="num">'+esc(d.time)+'</time></div>'
+      +'<div class="lprev">'+esc(prev)+'</div>'
+      +'<div class="lchips">'+chChip(d.ch)+catChip(d.cat)+'<span class="sp"></span>'
+      +(d.unread?'<span class="unread num">'+d.unread+'</span>':'')+'</div></div></button>';
+  });
+  h+='</div></section>';
+  h+='<section class="pane-detail">'+threadView(dm(S.dm))+'</section>';
+  return h;
+}
+function threadView(d){
+  if(!d) return '';
+  var c=contact(d.c);
+  var h='<div class="thead"><button class="backbtn" onclick="App.back()" aria-label="Назад">'+I.back+'</button>'
+    +ava(c.name,c.hue,'md')
+    +'<div class="who"><b>'+esc(c.name)+'</b><div class="chips">'+chChip(d.ch)+catChip(d.cat)
+    +(d.win?'<span class="chip st">'+I.clock+' '+esc(d.win)+'</span>':'')+'</div></div>'
+    +'<button class="btn sm sec" onclick="App.openContactFromDm(\''+d.c+'\')">Контакт</button></div>';
+  h+='<div class="tmsgs">';
+  d.msgs.forEach(function(m){
+    h+='<div class="bub '+m.dir+'">'+(m.att?'<span class="att">'+I.pic+' '+esc(m.att)+'</span><br>':'')
+      +esc(m.text)+'<time class="bmeta num">'+esc(m.time)+(m.meta?' · '+esc(m.meta):'')+'</time></div>';
+  });
+  if(d.sys && d.draft && d.draft.status!=='sent') h+='<div class="sysline">'+I.spark+' '+esc(d.sys)+'</div>';
+  h+='</div>';
+  h+='<div class="dwrap">'+draftPanel(d.draft,'dm','App.accept(\'dm\',\''+d.id+'\')',d.id)
+    +'<div class="composer"><input type="text" placeholder="Написать ответ вручную…" aria-label="Ответ">'
+    +'<button class="sendbtn" onclick="App.stub()" aria-label="Отправить">'+I.send+'</button></div></div>';
+  return h;
+}
+
+/* ============ экран: комментарии ============ */
+function renderComments(){
+  if(isDesktop() && post(S.post)){ var pp=post(S.post); pp.neu=0; pp.cmts.forEach(function(k){k.neu=false;}); }
+  var list = POSTS.filter(function(p){ return (!S.filter || p.ch===S.filter)
+    && (!S.catFilter || p.cmts.some(function(k){ return !k.ours && k.cat===S.catFilter; })); });
+  var title = S.filter? CH[S.filter].label : 'Комментарии';
+  var h='<section class="pane-list"><div class="phead"><div class="phrow"><h2>'+esc(title)+'</h2>'+catSelect()+'</div>'
+    +'<span class="sub">сгруппировано по постам'
+    +(S.catFilter?' · '+esc(CAT[S.catFilter].name):'')+' · '+list.length+' поста</span></div>'
+    +filterChips('comments',cmtsNew,S.filter)
+    +'<div class="list">'
+    +(list.length?'':'<div class="empty">Нет постов с комментариями этой категории</div>');
+  list.forEach(function(p){
+    var lastC=p.cmts[p.cmts.length-1];
+    h+='<button class="litem'+(p.id===S.post?' on':'')+(p.neu?' unrd':'')+'" onclick="App.openPost(\''+p.id+'\')">'
+      +'<span class="ava md" style="background:var(--surface2);color:var(--ink2)">'+I.cmt.replace('width="18" height="18"','width="17" height="17"')+'</span>'
+      +'<div class="body"><div class="lrow1"><b>'+esc(p.text)+'</b><time class="num">'+esc(p.time)+'</time></div>'
+      +'<div class="lprev">'+esc(lastC.an)+': '+esc(lastC.text)+'</div>'
+      +'<div class="lchips">'+chChip(p.ch)+'<span class="sp"></span>'
+      +(p.neu?'<span class="unread num">'+p.neu+'</span>':'')+'</div></div></button>';
+  });
+  h+='</div></section>';
+  h+='<section class="pane-detail">'+postView(post(S.post))+'</section>';
+  return h;
+}
+function postView(p){
+  if(!p) return '';
+  var h='<div class="thead"><button class="backbtn" onclick="App.back()" aria-label="Назад">'+I.back+'</button>'
+    +'<div class="who"><b>Комментарии к посту</b><div class="chips">'+chChip(p.ch)+'</div></div></div>';
+  h+='<div class="postcard"><div class="pr1">'+chChip(p.ch)+'<span class="plink">пост '+I.ext+'</span></div>'
+    +'<div class="ptext">'+esc(p.text)+'</div><div class="pmeta">'+esc(p.meta)+'</div></div>';
+  h+='<div class="tmsgs" style="gap:12px">';
+  p.cmts.forEach(function(k){
+    var cls='cmt'+(k.parent?' reply':'')+(k.target&&p.draft&&p.draft.status!=='sent'&&p.draft.status!=='discarded'?' target':'')+(k.spam?' spam':'')+(k.ours?' ours':'');
+    h+='<div class="'+cls+'">'+(k.ours? '<span class="ava sm" style="background:var(--accent)">T</span>' : ava(k.an,k.hue||0,'sm'));
+    h+='<div class="cbody"><div class="ch"><b>'+esc(k.an)+'</b>'
+      +(k.ah?'<span class="hnd">'+esc(k.ah)+'</span>':'')
+      +(k.ours?'<span class="hnd">Вы · '+esc(CH[p.ch].label)+'</span>':'')
+      +'<span class="hnd num">'+esc(k.time)+'</span></div>'
+      +'<div class="ctext">'+esc(k.text)+'</div>';
+    if(!k.ours){ h+='<div class="cchips">'+catChip(k.cat)
+      +(k.spam?'<span class="nospam">черновик не создаётся</span>':'')+'</div>'; }
+    h+='</div></div>';
+  });
+  h+='</div>';
+  h+='<div class="dwrap">'+draftPanel(p.draft,'post','App.accept(\'post\',\''+p.id+'\')',p.id)
+    +'<div class="composer"><input type="text" placeholder="Ответить на комментарий вручную…" aria-label="Ответ">'
+    +'<button class="sendbtn" onclick="App.stub()" aria-label="Отправить">'+I.send+'</button></div></div>';
+  return h;
+}
+
+/* ============ экран: дашборд ============ */
+function renderDashboard(){
+  var mu=msgsUnread(), cn=cmtsNew(), dp=draftsPending();
+  var h='<div class="single"><div class="inner">';
+  h+='<div class="h1row"><h1>Дашборд</h1><span class="date">суббота, 19 июля</span></div>';
+  h+='<div class="statgrid">'
+    +'<div class="stat"><div class="v num">'+(mu+cn)+'</div><div class="k">новых входящих</div></div>'
+    +'<div class="stat hot"><div class="v num">'+dp+'</div><div class="k">черновиков ждут проверки</div></div>'
+    +'<div class="stat"><div class="v num">6</div><div class="k">открытых диалогов</div></div>'
+    +'<div class="stat"><div class="v num">14 мин</div><div class="k">медиана времени ответа</div></div>'
+    +'</div>';
+  h+='<div class="twocol">';
+  h+='<div class="card"><h3>По каналам</h3>';
+  ['ch_ig','ch_fb'].forEach(function(id){
+    var c=CH[id]; var m=msgsUnread(id), k=cmtsNew(id); var tot=m+k; var max=Math.max(1,msgsUnread()+cmtsNew());
+    h+='<div class="chrow"><span class="pdot '+c.platform+'"></span><span style="flex:0 0 148px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(c.label)+'</span>'
+      +'<span class="bar"><i style="width:'+Math.round(tot/max*100)+'%;background:var(--'+(c.platform==='instagram'?'ig':'fb')+')"></i></span>'
+      +'<span class="n num">'+tot+'</span></div>';
+  });
+  h+='<div class="chrow" style="color:var(--ink3);font-size:12px">сообщения: '+mu+' · комментарии: '+cn+'</div></div>';
+  h+='<div class="card"><h3>Последние входящие</h3><div class="feed">';
+  var feed=[
+    {a:'Anna Weber',hue:338,t:'И сколько будет доставка в Гамбург?',ch:'ch_ig',cat:'price',tm:'12:41',go:"App.openDm('d1')"},
+    {a:'Максим Литвинов',hue:215,t:'Одна чашка со сколом на ручке 😞',ch:'ch_ig',cat:'complaint',tm:'11:52',go:"App.openDm('d2')"},
+    {a:'Anna Weber',hue:338,t:'Муж предложил взять к нему ещё вазу…',ch:'ch_fb',cat:'order',tm:'11:05',go:"App.openDm('d6')"},
+    {a:'Дарья Ковальчук',hue:198,t:'Комментарий: «Какая красота! Сколько стоит…»',ch:'ch_ig',cat:'price',tm:'10:12',go:"App.openPost('p1')"},
+    {a:'Jonas Becker',hue:150,t:'Комментарий: «А часы работы на новом месте…»',ch:'ch_fb',cat:'def',tm:'14:05',go:"App.openPost('p3')"}
+  ];
+  feed.forEach(function(f){
+    h+='<button class="frow" onclick="'+f.go+'">'+ava(f.a,f.hue,'sm')
+      +'<div class="fb1"><div class="ft">'+esc(f.t)+'</div><div class="fm">'+chChip(f.ch)+catChip(f.cat)+'</div></div>'
+      +'<time class="num">'+f.tm+'</time></button>';
+  });
+  h+='</div></div></div>';
+  h+='<p class="footnote">Состав дашборда — иллюстративный; уточняется при детализации (см. docs/architecture/10-ui.md).</p>';
+  return h+'</div></div>';
+}
+
+/* ============ экран: контакты ============ */
+function renderContacts(){
+  var list = CONTACTS.filter(function(c){ return !S.cFilter || c.ids.some(function(i){ return i.via===CH[S.cFilter].label; }); });
+  var title = S.cFilter? CH[S.cFilter].label : 'Контакты';
+  var h='<section class="pane-list"><div class="phead"><h2>'+esc(title)+'</h2>'
+    +'<span class="sub">'+(S.cFilter?'контакты канала':'все каналы')+' · '+list.length+' контактов</span></div>'
+    +filterChips('contacts',contactsCount,S.cFilter)
+    +'<div class="list">';
+  list.forEach(function(c){
+    var plats=c.ids.map(function(i){ return '<span class="pdot '+i.p+'"></span>'; }).join(' ');
+    h+='<button class="litem'+(c.id===S.contact?' on':'')+'" onclick="App.openContact(\''+c.id+'\')">'
+      +ava(c.name,c.hue,'md')
+      +'<div class="body"><div class="lrow1"><b>'+esc(c.name)+'</b></div>'
+      +'<div class="lprev">'+c.ids.map(function(i){return esc(i.h);}).join(' · ')+'</div>'
+      +'<div class="lchips">'+plats+(c.tags[0]?'<span class="chip">'+esc(c.tags[0])+'</span>':'')+'</div></div></button>';
+  });
+  h+='</div></section>';
+  h+='<section class="pane-detail">'+contactCard(contact(S.contact))+'</section>';
+  return h;
+}
+function contactCard(c){
+  if(!c) return '';
+  var h='<div class="thead"><button class="backbtn" onclick="App.back()" aria-label="Назад">'+I.back+'</button>'
+    +'<div class="who"><b>Карточка контакта</b></div></div>';
+  h+='<div class="ccard"><div class="inner">';
+  h+='<div class="chead">'+ava(c.name,c.hue,'lg')+'<div class="cn"><h2>'+esc(c.name)+'</h2>'
+    +'<div class="tags">'+c.tags.map(function(t){return '<span class="chip">'+esc(t)+'</span>';}).join('')+'</div></div>'
+    +'<button class="btn sm sec" onclick="App.stub()">Склеить с другим…</button></div>';
+  h+='<div class="card"><h3>Identities по каналам</h3>';
+  c.ids.forEach(function(i){
+    h+='<div class="idrow"><span class="plat"><span class="pdot '+i.p+'"></span>'+(i.p==='instagram'?'Instagram':'Facebook')+'</span>'
+      +'<span class="hnd">'+esc(i.h)+'</span><span class="via">'+esc(i.via)+'</span></div>';
+  });
+  h+='</div>';
+  h+='<div class="card"><h3>Заметки</h3><div class="notes">'+(c.notes?esc(c.notes):'<span style="color:var(--ink3)">Пока пусто</span>')+'</div></div>';
+  h+='<div class="card"><h3>Кросс-канальная история</h3>';
+  c.hist.forEach(function(x){
+    h+='<button class="hrow" onclick="'+x.go+'"><span class="hl">'+esc(x.l)+'</span><time class="num">'+esc(x.t)+'</time></button>';
+  });
+  h+='</div>';
+  return h+'</div></div>';
+}
+
+/* ============ экран: настройки ============ */
+var SETMETA={
+  channels:['Каналы','Подключения и их имена'],
+  categories:['Категории','Правила классификации входящих'],
+  ai:['AI','Тон, язык, дебаунс, авто-генерация'],
+  kb:['База знаний','Markdown-файлы для промпта'],
+  team:['Команда','Участники и приглашения'],
+  notif:['Уведомления','Частота push'],
+  privacy:['Приватность','Экспорт и удаление данных']
+};
+function renderSettings(){
+  var h='<section class="pane-list setlist"><div class="phead"><h2>Настройки</h2>'
+    +'<span class="sub">workspace Tonwerk Keramik</span></div><div class="list">';
+  SETS.forEach(function(s){
+    var m=SETMETA[s[0]];
+    h+='<button class="setrow'+(S.set===s[0]?' on':'')+'" onclick="App.goSet(\''+s[0]+'\')">'
+      +'<span class="si">'+I.set+'</span><span class="sb"><b>'+m[0]+'</b><span>'+m[1]+'</span></span></button>';
+  });
+  h+='</div></section>';
+  h+='<section class="pane-detail">'+setDetail()+'</section>';
+  return h;
+}
+function setDetail(){
+  var m=SETMETA[S.set];
+  var h='<div class="thead"><button class="backbtn" onclick="App.back()" aria-label="Назад">'+I.back+'</button>'
+    +'<div class="who"><b>'+m[0]+'</b></div></div><div class="spane"><div class="inner">';
+  if(S.set==='channels'){
+    h+='<p class="desc">Каналов одной платформы может быть несколько — каждому подключению задаётся своё имя. Имя видно в списках, тредах и меню.</p>';
+    h+='<div class="card">';
+    [['ch_ig','подключён · через Zernio'],['ch_fb','подключён · через Zernio']].forEach(function(x){
+      var c=CH[x[0]];
+      h+='<div class="connrow"><span class="pdot '+c.platform+'" style="width:10px;height:10px"></span>'
+        +'<div class="cb"><b>'+esc(c.label)+'</b><span>'+(c.platform==='instagram'?'Instagram':'Facebook')+' · '+x[1]+'</span></div>'
+        +'<button class="btn sm sec" onclick="App.stub()">Переименовать</button>'
+        +'<button class="btn sm ghost" onclick="App.stub()">Отключить</button></div>';
+    });
+    h+='</div><button class="btn pri" style="align-self:flex-start" onclick="App.stub()">+ Подключить канал</button>';
+  } else if(S.set==='categories'){
+    h+='<p class="desc">Проверка идёт сверху вниз, первая подходящая категория побеждает. «По умолчанию» всегда последняя и не удаляется.</p>';
+    h+='<div class="card">';
+    var rows=[
+      ['price','1','каналы: все · тип: оба',''],
+      ['complaint','2','каналы: все · тип: оба','действие: предложить замену'],
+      ['order','3','Instagram Магазин · тип: сообщения',''],
+      ['spam','4','каналы: все · тип: оба','без черновиков']
+    ];
+    rows.forEach(function(r){
+      var c=CAT[r[0]];
+      h+='<div class="catrow"><span class="grip">'+I.grip+'</span><span class="prio num">'+r[1]+'</span>'
+        +'<div class="cb"><b><span class="cdot" style="background:var('+c.v+')"></span>'+esc(c.name)+'</b>'
+        +'<div class="cchips"><span class="chip">'+r[2]+'</span>'+(r[3]?'<span class="chip">'+r[3]+'</span>':'')+'</div></div>'
+        +'<button class="btn sm ghost" onclick="App.stub()">Изменить</button></div>';
+    });
+    h+='<div class="catrow def"><span class="grip" style="visibility:hidden">'+I.grip+'</span><span class="prio">'+I.lock+'</span>'
+      +'<div class="cb"><b><span class="cdot" style="background:var(--c-default)"></span>По умолчанию</b>'
+      +'<div class="cchips"><span class="chip">каналы: все · тип: оба</span><span class="chip">системная</span></div></div>'
+      +'<button class="btn sm ghost" onclick="App.stub()">Изменить</button></div>';
+    h+='</div><button class="btn pri" style="align-self:flex-start" onclick="App.stub()">+ Новая категория</button>';
+  } else if(S.set==='ai'){
+    h+='<div class="card" style="display:flex;flex-direction:column;gap:14px">'
+      +'<div class="field"><label>Тон ответов</label><select onchange="App.stub()"><option>Дружелюбный, на «вы»</option><option>Нейтральный</option><option>Формальный</option></select></div>'
+      +'<div class="field"><label>Язык ответов</label><select onchange="App.stub()"><option>Как у клиента</option><option>Русский</option><option>Немецкий</option></select></div>'
+      +'<div class="field"><label>Подпись</label><input type="text" value="— Команда Tonwerk" onchange="App.stub()"></div>'
+      +'<div class="field"><label>Модель</label><select onchange="App.stub()"><option>Mistral Large (EU)</option><option>Mistral Small (EU)</option></select></div>'
+      +'<div class="field"><label>Дебаунс для мессенджеров</label><div>60 секунд паузы перед генерацией</div></div>'
+      +'</div>';
+    h+='<div class="card"><h3>Авто-генерация черновиков</h3>'
+      +'<div class="tgrow"><div class="tl">Для сообщений<span>черновик на каждую пачку после дебаунса</span></div><button class="sw on" role="switch" aria-checked="true" aria-label="Авто-генерация для сообщений" onclick="App.stub()"></button></div>'
+      +'<div class="tgrow"><div class="tl">Для комментариев<span>черновик на каждый комментарий</span></div><button class="sw on" role="switch" aria-checked="true" aria-label="Авто-генерация для комментариев" onclick="App.stub()"></button></div>'
+      +'</div>';
+  } else if(S.set==='kb'){
+    h+='<p class="desc">Файлы конкатенируются в системный промпт в заданном порядке. При превышении бюджета токенов — предупреждение.</p>';
+    h+='<div class="card">';
+    [['01-описание.md','обновлён 12 июля',true],['02-прайс.md','обновлён вчера',true],['03-FAQ.md','обновлён 8 июля',true],['04-доставка.md','обновлён 8 июля',true],['05-мастер-классы.md','обновлён 1 июля',false]].forEach(function(f){
+      h+='<div class="kbrow"><span class="kn">'+f[0]+'</span><span class="kd">'+f[1]+'</span>'
+        +'<button class="sw'+(f[2]?' on':'')+'" role="switch" aria-checked="'+f[2]+'" aria-label="'+f[0]+'" onclick="App.stub()"></button></div>';
+    });
+    h+='<div class="budget"><span>Бюджет токенов: 18 000 / 24 000</span><div class="bbar"><i></i></div></div></div>'
+      +'<button class="btn pri" style="align-self:flex-start" onclick="App.stub()">+ Новый файл</button>';
+  } else if(S.set==='team'){
+    h+='<div class="card">'
+      +'<div class="connrow">'+ava('Алексей Н',170,'sm')+'<div class="cb"><b>Алексей</b><span>owner · вы</span></div></div>'
+      +'<div class="connrow">'+ava('Marina K',290,'sm')+'<div class="cb"><b>Marina K.</b><span>member · в сети</span></div>'
+      +'<button class="btn sm ghost" onclick="App.stub()">Убрать</button></div>'
+      +'<div class="connrow"><span class="ava sm" style="background:var(--surface2);color:var(--ink3)">?</span>'
+      +'<div class="cb"><b>tobias@tonwerk.de</b><span>приглашение отправлено · истекает через 6 дней</span></div>'
+      +'<button class="btn sm ghost" onclick="App.stub()">Отозвать</button></div>'
+      +'</div><button class="btn pri" style="align-self:flex-start" onclick="App.stub()">+ Пригласить</button>';
+  } else if(S.set==='notif'){
+    h+='<div class="card"><h3>Частота push-уведомлений</h3>'
+      +'<div class="radiorow"><span class="rd" ></span>На каждое входящее</div>'
+      +'<div class="radiorow"><span class="rd on"></span>Дайджест — раз в 30 минут</div>'
+      +'</div>';
+  } else if(S.set==='privacy'){
+    h+='<p class="desc">GDPR: экспорт и удаление данных workspace. Удаление стирает всё каскадно.</p>'
+      +'<div class="card" style="display:flex;gap:10px;flex-wrap:wrap">'
+      +'<button class="btn sec" onclick="App.stub()">Экспортировать данные</button>'
+      +'<button class="btn sec" style="color:var(--c-complaint)" onclick="App.stub()">Удалить workspace…</button></div>';
+  }
+  return h+'</div></div>';
+}
+
+/* ============ рендер и действия ============ */
+function render(){
+  renderSidebar(); renderTabbar();
+  var m=document.getElementById('main');
+  if(S.screen==='dashboard') m.innerHTML=renderDashboard();
+  else if(S.screen==='messages') m.innerHTML=renderMessages();
+  else if(S.screen==='comments') m.innerHTML=renderComments();
+  else if(S.screen==='contacts') m.innerHTML=renderContacts();
+  else m.innerHTML=renderSettings();
+  document.getElementById('app').classList.toggle('detail', S.detail && S.screen!=='dashboard');
+}
+function getDraft(kind,id){ return kind==='dm'? dm(id).draft : post(id).draft; }
+
+var App={
+  go:function(scr,filter){
+    if(scr==='messages'||scr==='comments'){ S.filter=(filter===undefined? (S.screen===scr? S.filter : null) : filter); }
+    if(scr==='contacts'){ S.cFilter=(filter===undefined? (S.screen===scr? S.cFilter : null) : filter); }
+    if(scr!==S.screen){ S.detail=false; S.catFilter=null; }
+    S.screen=scr;
+    if(scr==='messages') S.exp.messages=true;
+    if(scr==='comments') S.exp.comments=true;
+    if(scr==='contacts') S.exp.contacts=true;
+    if(scr==='settings') S.exp.settings=true;
+    render();
+  },
+  setCat:function(v){ S.catFilter=v||null; render(); },
+  toggle:function(k){ S.exp[k]=!S.exp[k]; renderSidebar(); },
+  goSet:function(s){ S.screen='settings'; S.set=s; S.detail=true; S.exp.settings=true; render(); },
+  openDm:function(id){ S.screen='messages'; S.dm=id; S.detail=true; var d=dm(id);
+    if(d.ch!==S.filter) S.filter=null; d.unread=0; render(); },
+  openPost:function(id){ S.screen='comments'; S.post=id; S.detail=true; var p=post(id);
+    if(p.ch!==S.filter) S.filter=null; p.neu=0; p.cmts.forEach(function(k){k.neu=false;}); render(); },
+  openContact:function(id){ S.screen='contacts'; S.contact=id; S.detail=true; render(); },
+  openContactFromDm:function(id){ S.screen='contacts'; S.contact=id; S.detail=true; render(); },
+  back:function(){ S.detail=false; render(); },
+  accept:function(kind,id){
+    var d=getDraft(kind,id);
+    if(kind==='dm'){ dm(id).msgs.push({dir:'out', text:d.text, time:'сейчас', meta:'Отправлено · '+CH[dm(id).ch].label}); }
+    else{ var p=post(id); var tgt=null; p.cmts.forEach(function(k){ if(k.target) tgt=k; });
+      p.cmts.push({id:'r'+Date.now(), ours:true, an:'Tonwerk Keramik', text:d.text, time:'сейчас', parent:tgt?tgt.id:null});
+      if(tgt) tgt.target=false; }
+    d.status='sent'; render(); toast('Ответ отправлен через '+CH[(kind==='dm'?dm(id):post(id)).ch].label);
+  },
+  discard:function(kind,id){ getDraft(kind,id).status='discarded'; render(); },
+  editDraft:function(kind,id){ var d=getDraft(kind,id); d.editing=true; render();
+    var ta=document.getElementById('dta'); if(ta){ ta.focus(); ta.selectionStart=ta.value.length; } },
+  saveEdit:function(kind,id){ var d=getDraft(kind,id); var ta=document.getElementById('dta');
+    if(ta&&ta.value.trim()){ d.text=ta.value.trim(); d.status='edited'; } d.editing=false; render(); },
+  cancelEdit:function(kind,id){ getDraft(kind,id).editing=false; render(); },
+  regen:function(kind,id){ var d=getDraft(kind,id); d.editing=false; d.status='generating'; render();
+    setTimeout(function(){ var old=d.text; d.text=d.alt||old; if(old) d.alt=old; d.status='ready'; render(); },1400); },
+  stub:function(){ toast('Это макет — действие показано условно'); }
+};
+
+render();
+</script>
+</body>
+</html>
