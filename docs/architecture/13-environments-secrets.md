@@ -61,13 +61,21 @@ npx inngest-cli dev
 | `SUPABASE_SECRET_KEY` | серверный, `sb_secret_…` — **обходит RLS**, никогда не попадает в клиентский бандл; гейтвей Supabase дополнительно отклоняет его из браузера |
 | `ZERNIO_API_KEY` | доступ к Zernio API ([5. Каналы](05-channels.md)) |
 | `ZERNIO_WEBHOOK_SECRET` | проверка подписи вебхуков ([7.1](07-data-flows.md#61-входящее-dm-или-комментарий)) |
-| `MISTRAL_API_KEY` | LLM ([8. AI-подсистема](08-ai-subsystem.md)) |
+| `MISTRAL_API_KEY` | LLM, основной провайдер; если задан — используется Mistral ([8. AI-подсистема](08-ai-subsystem.md#клиент-и-выбор-провайдера)) |
+| `OPENROUTER_API_KEY` | LLM, резервный провайдер OpenRouter — используется, только когда `MISTRAL_API_KEY` не задан ([8. AI-подсистема](08-ai-subsystem.md#резервный-провайдер--openrouter)) |
+| `OPENROUTER_MODEL` | модель OpenRouter по умолчанию, формат `vendor/model` — обязательна вместе с `OPENROUTER_API_KEY` |
 | `INNGEST_EVENT_KEY` | отправка событий |
 | `INNGEST_SIGNING_KEY` | подпись вызовов функций |
 | `VAPID_PUBLIC_KEY` | Web Push ([11. PWA](11-realtime-pwa.md#web-push)) |
 | `VAPID_PRIVATE_KEY` | Web Push |
 | `POSTMARK_TOKEN` | API-токен — для будущих `notify-existing-user` и email-канала. **SMTP-креды живут в дашборде Supabase, не в env приложения** |
 | `CREDENTIALS_ENCRYPTION_KEY` | шифрование токенов каналов — на будущее для Meta ([`channel_connections`](06-data-model.md#channel_connections)) |
+
+> [!note] LLM-провайдер выбирается окружением
+> В `.env` заполняется ровно один вариант: либо `MISTRAL_API_KEY` (Mistral),
+> либо `OPENROUTER_API_KEY` + `OPENROUTER_MODEL` (OpenRouter, когда ключ Mistral
+> не задан). Логика выбора —
+> [8. AI-подсистема](08-ai-subsystem.md#резервный-провайдер--openrouter).
 
 > [!danger] `SUPABASE_SECRET_KEY` обходит RLS
 > Только серверный код. Правило зафиксировано в

@@ -31,7 +31,7 @@ cssclass: architecture-doc
 |---|---|---|
 | 1 | [Что мы строим](01-overview.md) | Продукт, два ящика, дебаунс, масштаб, условия разработки |
 | 2 | [Глоссарий](02-glossary.md) | Жёстко зафиксированные термины: workspace, user, channel_connection, category |
-| 3 | [Стек](03-stack.md) | Next.js, Supabase (Frankfurt), Inngest, Vercel, Serwist, Zernio, Postmark, Mistral |
+| 3 | [Стек](03-stack.md) | Next.js, Supabase (Frankfurt), Inngest, Vercel, Serwist, Zernio, Postmark, Mistral (резерв — OpenRouter) |
 
 ### Часть II. Ядро системы
 
@@ -41,7 +41,7 @@ cssclass: architecture-doc
 | 5 | [Слой абстракции каналов](05-channels.md) | Адаптеры, несколько именованных каналов, нормализованное событие, capabilities, дисциплина импортов |
 | 6 | [Модель данных](06-data-model.md) | Все таблицы по сущностям, `workspace_id` + RLS, каскады |
 | 7 | [Потоки данных](07-data-flows.md) | Входящее, дебаунс, классификация и генерация, отправка, email, список Inngest-функций |
-| 8 | [AI-подсистема](08-ai-subsystem.md) | Mistral, маскирование идентификаторов, классификация, база знаний в промпте, структура промпта |
+| 8 | [AI-подсистема](08-ai-subsystem.md) | Mistral (резерв — OpenRouter), маскирование идентификаторов, классификация, база знаний в промпте, структура промпта |
 | 9 | [Категории входящих](09-categories.md) | Пользовательские правила классификации, приоритеты, действия, категория «по умолчанию» |
 | 10 | [UI и навигация](10-ui.md) | Десктопное меню и мобильная панель, счётчики новых, каналы-источники, разделы настроек |
 | 11 | [Realtime, Web Push, PWA](11-realtime-pwa.md) | Realtime-подписки, режимы push (мгновенно/дайджест), ограничения iOS |

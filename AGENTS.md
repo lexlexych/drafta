@@ -8,7 +8,8 @@ Claude Code подключает его через `CLAUDE.md` (импорт `@A
 SaaS AI-инбокс (PWA) для малого бизнеса: переписки и комментарии из мессенджеров и
 соцсетей в одном месте + автоматические AI-черновики ответов. Рынок запуска —
 Германия/ЕС, GDPR заложен в архитектуру с первого дня. Стек: Next.js, Supabase
-(Frankfurt), Inngest, Vercel, Serwist, Zernio, Postmark, Mistral.
+(Frankfurt), Inngest, Vercel, Serwist, Zernio, Postmark, Mistral
+(резервный LLM-провайдер — OpenRouter).
 
 Вся архитектура — в `docs/architecture/` (оглавление: `docs/architecture/_index.md`).
 Перед любой работой с кодом обязательны:

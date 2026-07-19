@@ -1,7 +1,7 @@
 ---
 title: "8. AI-подсистема"
 aliases: ["AI", "LLM", "Маскирование", "Промпт", "База знаний", "§7"]
-tags: [architecture, ai, llm, mistral, prompt, masking, gdpr, knowledge-base, rag]
+tags: [architecture, ai, llm, mistral, openrouter, prompt, masking, gdpr, knowledge-base, rag]
 chapter: 8
 source_section: "7"
 type: chapter
@@ -39,6 +39,29 @@ updated: 2026-07-19
 **Условия:** DPA + режим без обучения на данных клиентов (проверить актуальные условия
 La Plateforme при подключении) — см.
 [15. Субпроцессоры](15-compliance-gdpr.md#122-субпроцессоры-и-данные).
+
+### Резервный провайдер — OpenRouter
+
+Второй поддерживаемый провайдер — **OpenRouter** (fallback). API тоже
+OpenAI-совместимый, поэтому это тот же клиент `lib/ai` с другим `baseURL`
+(`https://openrouter.ai/api/v1`) и ключом.
+
+**Логика выбора** — по переменным окружения, без изменений кода:
+
+- задан `MISTRAL_API_KEY` → работаем через Mistral;
+- иначе → работаем через OpenRouter: ключ `OPENROUTER_API_KEY`,
+  модель по умолчанию — переменная `OPENROUTER_MODEL` (формат `vendor/model`).
+
+Активен всегда ровно один провайдер; провайдеры не смешиваются в рамках одного
+окружения. Все переменные — [13. Секреты](13-environments-secrets.md#секреты-vercel-env).
+
+> [!warning] GDPR-оговорка для OpenRouter
+> OpenRouter — американская компания и маршрутизирует запросы к сторонним
+> провайдерам моделей, поэтому аргумент «обработка в ЕС» на него автоматически
+> не распространяется. Для прода с данными клиентов основной вариант — Mistral;
+> включение OpenRouter в проде требует выполнения действий из его строки в
+> [15. Субпроцессорах](15-compliance-gdpr.md#122-субпроцессоры-и-данные)
+> (DPA, no-training, фиксация нижестоящих провайдеров и регионов).
 
 Абстракция сохраняется: модель и `baseURL` — конфигурация, поэтому
 Azure OpenAI EU Data Zone (регионы Sweden Central / Germany West Central — документированная
