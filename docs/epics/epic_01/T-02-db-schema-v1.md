@@ -3,7 +3,7 @@ id: T-02
 epic: E-001
 title: "Схема БД v1 миграциями: все таблицы §6"
 type: dev
-status: in_progress
+status: rework
 depends_on: [T-01]
 created: 2026-07-19
 updated: 2026-07-20
@@ -148,5 +148,42 @@ npm test
 
 ## 🔍 Ревью
 
-_Заполняется агентом-ревьюером: вердикт APPROVED / CHANGES_REQUESTED,
-замечания, что прогнано и с каким результатом._
+**Вердикт: CHANGES_REQUESTED**
+
+1. В миграции отсутствует проверка, что связанные тенантные строки принадлежат
+   одному `workspace`. Например, `contact_identities.contact_id`, поля связей
+   `conversations`, `messages` и `drafts` ссылаются только на глобальный `id`
+   родительской таблицы ([миграция](../../../supabase/migrations/20260720103000_create_schema_v1.sql),
+   строки 94–184). Поэтому возможно создать строку с `workspace_id = A` и FK
+   на родителя из workspace B; после удаления B каскад может удалить или изменить
+   строку, формально принадлежащую A. Это нарушает изоляцию workspace и требование
+   безопасного каскадного удаления. Добавить составные tenant-aware FK (либо
+   эквивалентные проверки на уровне БД) для `contact_identities → contacts`,
+   `conversations → channel_connections/contacts`, `messages → conversations/
+   contact_identities/categories`, `drafts → conversations/messages`. Для
+   `drafts.first_message_id` и `last_message_id` проверка также должна гарантировать
+   принадлежность сообщений указанному `conversation_id`.
+
+Перепроверено независимо:
+
+- статическая проверка миграции — PASS: ровно 15 таблиц §6, 14 прямых
+  `workspace_id → workspaces(id) on delete cascade`, `created_at`/`updated_at`
+  и RLS на всех 15; обязательные уникальности и требуемые индексы присутствуют;
+- сверка каждой таблицы с §6: состав сущностей, поля, enum-подобные `check`,
+  обязательные уникальности и индексы соответствуют тикету, кроме указанной выше
+  неполной целостности межтабличных тенантных связей;
+- `rg -n -i "\baccount\b" supabase/migrations` — совпадений нет;
+- `git diff --check HEAD~1 HEAD` и `git diff --check` — exit code 0, ошибок
+  пробельного форматирования нет (Git вывел только предупреждения о CRLF в уже
+  изменённых служебных файлах);
+- `npm.cmd run lint` — exit code 0;
+- `npm.cmd run build` — exit code 0, Next.js собран и TypeScript-проверка прошла;
+- `npm.cmd test` — exit code 0, 1 test file / 1 test passed.
+
+`supabase db reset` не запускался: человек явно запретил Docker, а связанного
+облачного dev-проекта и учётных данных в репозитории нет. Это ограничение прозрачно
+зафиксировано в отчёте разработчика; дальнейший корректный путь по §13 —
+`supabase link` + `supabase db push` в dev-проект, уже описанный в T-08, шаге 2.
+Создавать проект или применять миграцию во внешний сервис в рамках ревью не было
+разрешено. Runtime-проверка синтаксиса, RLS и каскадов остаётся обязательной после
+появления такого окружения.
