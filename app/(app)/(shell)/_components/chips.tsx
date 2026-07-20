@@ -1,14 +1,22 @@
-import type { CategoryBadgeView, ChannelBadgeView, Platform } from "@/lib/mock";
+import type { ChannelPlatform } from "@/lib/channels/types";
+import type { CategoryBadgeView, ChannelBadgeView } from "@/lib/mock";
 
 import styles from "./ui.module.css";
 
-const PLATFORM_DOT_CLASSES: Record<Platform | "all", string> = {
+// `ChannelPlatform` (lib/channels/types.ts) is the real, full platform union
+// (telegram/whatsapp/instagram/facebook — T-01); the UI-каркас mock data
+// (lib/mock) only ever uses instagram/facebook, a subset of it, so this
+// component accepts the wider type and every existing mock-driven caller
+// stays valid.
+const PLATFORM_DOT_CLASSES: Record<ChannelPlatform | "all", string> = {
+  telegram: styles.platformDotTelegram,
+  whatsapp: styles.platformDotWhatsapp,
   instagram: styles.platformDotInstagram,
   facebook: styles.platformDotFacebook,
   all: styles.platformDotAll,
 };
 
-export function PlatformDot({ platform }: { platform: Platform | "all" }) {
+export function PlatformDot({ platform }: { platform: ChannelPlatform | "all" }) {
   return (
     <span
       className={`${styles.platformDot} ${PLATFORM_DOT_CLASSES[platform]}`}

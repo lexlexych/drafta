@@ -1,5 +1,28 @@
 /** Маршруты защищённой зоны и сборка ссылок с фильтрами. */
 
+import type { ChannelPlatform } from "@/lib/channels/types";
+
+/**
+ * Real per-channel unread counts for the "Сообщения" nav item (T-05,
+ * docs/epics/epic_02/T-05-inbox-messages.md) — `lib/db/inbox.ts` (server-only)
+ * returns this shape, `Sidebar`/`Tabbar` (client components) declare it here
+ * instead of importing the server module's type directly, same convention
+ * `channels-panel.tsx` uses for `lib/db/channel-connections.ts` (T-04): a
+ * small parallel client-side type, not a cross-boundary import of a
+ * `"server-only"`-marked module.
+ */
+export type InboxNavChannelCounter = {
+  id: string;
+  name: string;
+  platform: ChannelPlatform;
+  unreadCount: number;
+};
+
+export type InboxNavCounters = {
+  totalUnread: number;
+  channels: InboxNavChannelCounter[];
+};
+
 export type SectionId =
   | "dashboard"
   | "inbox"

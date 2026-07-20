@@ -179,6 +179,92 @@ describe("workspace RLS isolation", () => {
     }
   });
 
+  it("denies renaming or disabling another workspace's channel_connection (T-04)", async () => {
+    const renameAttempt = await ownerAClient
+      .from("channel_connections")
+      .update({ name: "Hijacked by Workspace A" })
+      .eq("id", rlsSeedFixtures.channelConnectionBId)
+      .select("id");
+
+    // Unlike the WITH CHECK violation above (moving a *visible* own row into
+    // a foreign workspace, which errors), this row is foreign to begin with:
+    // RLS's USING clause filters it out before the UPDATE can match it — 0
+    // rows affected, no error. Either way, Workspace B's channel_connection
+    // must come out unchanged (docs/epics/epic_02/T-04-channels-settings.md
+    // acceptance criteria: "Доступ только у участников workspace").
+    expect(
+      renameAttempt.error,
+      "rename attempt on a foreign channel_connection",
+    ).toBeNull();
+    expectEmpty(
+      renameAttempt,
+      "rename attempt on a foreign channel_connection must affect 0 rows",
+    );
+
+    const statusAttempt = await ownerAClient
+      .from("channel_connections")
+      .update({ status: "disconnected" })
+      .eq("id", rlsSeedFixtures.channelConnectionBId)
+      .select("id");
+
+    expect(
+      statusAttempt.error,
+      "status change attempt on a foreign channel_connection",
+    ).toBeNull();
+    expectEmpty(
+      statusAttempt,
+      "status change attempt on a foreign channel_connection must affect 0 rows",
+    );
+
+    const stillIntact = await ownerBClient
+      .from("channel_connections")
+      .select("name, status")
+      .eq("id", rlsSeedFixtures.channelConnectionBId)
+      .single();
+
+    expect(
+      stillIntact.error,
+      "owner B re-reading their own channel_connection",
+    ).toBeNull();
+    expect(stillIntact.data?.name).toBe("Telegram Shop B");
+    expect(stillIntact.data?.status).toBe("active");
+  });
+
+  it("denies marking another workspace's conversation as read (T-05)", async () => {
+    const readAttempt = await ownerAClient
+      .from("conversations")
+      .update({ unread_count: 0 })
+      .eq("id", rlsSeedFixtures.conversationBId)
+      .select("id");
+
+    // Same shape as the channel_connection probe above: the row is foreign
+    // to begin with, so RLS's USING clause filters it out before the UPDATE
+    // can match anything — 0 rows affected, no error. Either way, Workspace
+    // B's unread counter must come out unchanged (docs/epics/epic_02/T-05-inbox-messages.md
+    // acceptance criteria: opening a thread only resets *its own workspace's*
+    // conversation).
+    expect(
+      readAttempt.error,
+      "mark-as-read attempt on a foreign conversation",
+    ).toBeNull();
+    expectEmpty(
+      readAttempt,
+      "mark-as-read attempt on a foreign conversation must affect 0 rows",
+    );
+
+    const stillIntact = await ownerBClient
+      .from("conversations")
+      .select("unread_count")
+      .eq("id", rlsSeedFixtures.conversationBId)
+      .single();
+
+    expect(
+      stillIntact.error,
+      "owner B re-reading their own conversation",
+    ).toBeNull();
+    expect(stillIntact.data?.unread_count).toBe(1);
+  });
+
   it("denies webhook_events even to a member of its own workspace", async () => {
     const result = await ownerAClient
       .from("webhook_events")

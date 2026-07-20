@@ -1,9 +1,12 @@
 import { Suspense, type ReactNode } from "react";
 import { redirect } from "next/navigation";
 
+import { getInboxNavigationCounters, listChannelConnections } from "@/lib/db/inbox";
+import { createServerSupabaseClient } from "@/lib/db/server";
 import { getAuthenticatedUser, getCurrentWorkspace } from "@/lib/db/workspace";
 import { SETTINGS_SECTIONS, getNavigationCounters } from "@/lib/mock";
 
+import { InboxRealtimeSync } from "./_components/inbox-realtime-sync";
 import { Sidebar } from "./_components/sidebar";
 import { Tabbar } from "./_components/tabbar";
 import { Toast } from "./_components/stub";
@@ -13,8 +16,12 @@ import styles from "./_components/shell.module.css";
  * Оболочка защищённой зоны: левое меню (десктоп) + нижний таббар (мобайл).
  *
  * Гейты: аутентификацию проверяет `app/(app)/layout.tsx`, наличие workspace —
- * этот layout (нет workspace → онбординг). Workspace и пользователь — реальные
- * (T-05); счётчики и содержимое разделов — mock-данные T-07.
+ * этот layout (нет workspace → онбординг). Workspace и пользователь — реальные;
+ * пункт «Сообщения» (счётчик + расхлоп по каналам) — реальные данные
+ * `lib/db/inbox.ts` (T-05); остальные счётчики и содержимое разделов —
+ * mock-данные T-07 (Комментарии, Контакты, Дашборд — вне скоупа эпика).
+ * `InboxRealtimeSync` (T-06) держит те же счётчики и открытый инбокс живыми —
+ * см. его собственный докстринг.
  */
 export default async function ShellLayout({
   children,
@@ -32,6 +39,13 @@ export default async function ShellLayout({
   }
 
   const counters = getNavigationCounters();
+  const supabase = await createServerSupabaseClient();
+  const channels = await listChannelConnections(supabase, workspace.id);
+  const messagesCounters = await getInboxNavigationCounters(
+    supabase,
+    workspace.id,
+    channels,
+  );
   const userName = user.email?.split("@")[0] ?? "Пользователь";
 
   return (
@@ -42,13 +56,15 @@ export default async function ShellLayout({
           userName={userName}
           userRole={workspace.role}
           counters={counters}
+          messagesCounters={messagesCounters}
           settingsSections={SETTINGS_SECTIONS}
         />
       </Suspense>
       <div className={styles.main}>{children}</div>
       <Suspense>
-        <Tabbar counters={counters} />
+        <Tabbar counters={counters} messagesCounters={messagesCounters} />
       </Suspense>
+      <InboxRealtimeSync workspaceId={workspace.id} />
       <Toast />
     </div>
   );

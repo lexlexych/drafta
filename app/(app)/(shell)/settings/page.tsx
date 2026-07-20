@@ -6,18 +6,26 @@ import {
   getAiSettings,
   getNotificationSettings,
   getSettingsCategories,
-  getSettingsChannels,
   getSettingsTeam,
   getWorkspace,
   isSettingsSectionId,
   type SettingsSectionId,
 } from "@/lib/mock";
+import {
+  SUPPORTED_CHANNEL_PLATFORMS,
+  listChannelConnections,
+} from "@/lib/db/channel-connections";
+import { createServerSupabaseClient } from "@/lib/db/server";
+import { getAuthenticatedUser, getCurrentWorkspace } from "@/lib/db/workspace";
 
 import { Avatar } from "../_components/avatar";
-import { PlatformDot } from "../_components/chips";
 import { BackIcon, GripIcon, LockIcon, SettingsIcon } from "../_components/icons";
 import { QUERY_KEYS, buildHref, firstParam } from "../_components/navigation";
 import { StubButton } from "../_components/stub";
+import {
+  ChannelsPanel,
+  type ChannelConnectionListItem,
+} from "./channels/channels-panel";
 import setStyles from "./settings.module.css";
 import styles from "../_components/panes.module.css";
 import uiStyles from "../_components/ui.module.css";
@@ -25,6 +33,39 @@ import uiStyles from "../_components/ui.module.css";
 const PATHNAME = "/settings";
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
+
+/**
+ * Loads the current workspace's `channel_connections` for the Channels
+ * section (T-04) — real data, unlike the rest of this page (still mock,
+ * T-07 UI-каркас, replaced section by section in later epics). Only called
+ * when the Channels section is actually being rendered, so the other
+ * sections (categories, ai, team…) stay Supabase-free, same as before this
+ * ticket.
+ */
+async function loadChannelsSectionData(): Promise<ChannelConnectionListItem[]> {
+  const user = await getAuthenticatedUser();
+
+  if (!user) {
+    return [];
+  }
+
+  const workspace = await getCurrentWorkspace(user.id);
+
+  if (!workspace) {
+    return [];
+  }
+
+  const supabase = await createServerSupabaseClient();
+  const rows = await listChannelConnections(supabase, workspace.id);
+
+  return rows.map((row) => ({
+    id: row.id,
+    name: row.name,
+    platform: row.platform,
+    externalId: row.external_id,
+    status: row.status,
+  }));
+}
 
 export default async function SettingsPage({
   searchParams,
@@ -37,6 +78,8 @@ export default async function SettingsPage({
     sectionParam && isSettingsSectionId(sectionParam) ? sectionParam : "channels";
   const isDetail = sectionParam !== null;
   const section = SETTINGS_SECTIONS.find((entry) => entry.id === sectionId);
+  const channels =
+    sectionId === "channels" ? await loadChannelsSectionData() : null;
 
   return (
     <div className={styles.panes} data-detail={isDetail}>
@@ -79,7 +122,7 @@ export default async function SettingsPage({
         </div>
         <div className={setStyles.pane}>
           <div className={setStyles.inner}>
-            <SectionDetail sectionId={sectionId} />
+            <SectionDetail sectionId={sectionId} channels={channels} />
           </div>
         </div>
       </section>
@@ -87,10 +130,16 @@ export default async function SettingsPage({
   );
 }
 
-function SectionDetail({ sectionId }: { sectionId: SettingsSectionId }) {
+function SectionDetail({
+  sectionId,
+  channels,
+}: {
+  sectionId: SettingsSectionId;
+  channels: ChannelConnectionListItem[] | null;
+}) {
   switch (sectionId) {
     case "channels":
-      return <ChannelsSection />;
+      return <ChannelsSection channels={channels ?? []} />;
     case "categories":
       return <CategoriesSection />;
     case "ai":
@@ -104,41 +153,17 @@ function SectionDetail({ sectionId }: { sectionId: SettingsSectionId }) {
   }
 }
 
-function ChannelsSection() {
-  const channels = getSettingsChannels();
-
+function ChannelsSection({ channels }: { channels: ChannelConnectionListItem[] }) {
   return (
     <>
       <p className={setStyles.description}>
         Каналов одной платформы может быть несколько — каждому подключению
         задаётся своё имя. Имя видно в списках, тредах и меню.
       </p>
-      <div className={uiStyles.card}>
-        {channels.map((channel) => (
-          <div key={channel.id} className={setStyles.connectionRow}>
-            <PlatformDot platform={channel.platform} />
-            <div className={setStyles.connectionBody}>
-              <b>{channel.name}</b>
-              <span>{channel.statusLine}</span>
-            </div>
-            <StubButton
-              className={`${uiStyles.button} ${uiStyles.buttonSmall} ${uiStyles.buttonSecondary}`}
-            >
-              Переименовать
-            </StubButton>
-            <StubButton
-              className={`${uiStyles.button} ${uiStyles.buttonSmall} ${uiStyles.buttonGhost}`}
-            >
-              Отключить
-            </StubButton>
-          </div>
-        ))}
-      </div>
-      <StubButton
-        className={`${uiStyles.button} ${uiStyles.buttonPrimary} ${uiStyles.buttonSelfStart}`}
-      >
-        + Подключить канал
-      </StubButton>
+      <ChannelsPanel
+        channels={channels}
+        supportedPlatforms={SUPPORTED_CHANNEL_PLATFORMS}
+      />
     </>
   );
 }

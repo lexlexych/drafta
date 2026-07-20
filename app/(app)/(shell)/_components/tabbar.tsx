@@ -14,7 +14,12 @@ import {
   MessagesIcon,
   SettingsIcon,
 } from "./icons";
-import { SECTIONS, sectionIdForPathname, type SectionId } from "./navigation";
+import {
+  SECTIONS,
+  sectionIdForPathname,
+  type InboxNavCounters,
+  type SectionId,
+} from "./navigation";
 import styles from "./shell.module.css";
 import uiStyles from "./ui.module.css";
 
@@ -26,13 +31,20 @@ const SECTION_ICONS: Record<SectionId, typeof DashboardIcon> = {
   settings: SettingsIcon,
 };
 
-export function Tabbar({ counters }: { counters: NavigationCountersView }) {
+export function Tabbar({
+  counters,
+  messagesCounters,
+}: {
+  counters: NavigationCountersView;
+  /** Real total DM unread (T-05) — see `SidebarProps.messagesCounters`. */
+  messagesCounters: InboxNavCounters;
+}) {
   const pathname = usePathname();
   const activeSection = sectionIdForPathname(pathname);
 
   const sectionCounts: Record<SectionId, number> = {
     dashboard: 0,
-    inbox: counters.dmUnread,
+    inbox: messagesCounters.totalUnread,
     comments: counters.commentsUnread,
     contacts: 0,
     settings: 0,

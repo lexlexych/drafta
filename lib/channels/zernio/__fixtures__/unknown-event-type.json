@@ -1,0 +1,24 @@
+{
+  "id": "wh_evt_01HZXREACTION0004",
+  "event": "reaction.received",
+  "timestamp": "2026-07-20T09:30:00.000Z",
+  "account": {
+    "id": "acct_tg_98213",
+    "platform": "telegram"
+  },
+  "conversation": {
+    "id": "tg_chat_77120",
+    "platformConversationId": "77120",
+    "status": "active"
+  },
+  "reaction": {
+    "emoji": "👍",
+    "action": "added",
+    "platformMessageId": "tg_msg_55211",
+    "sender": {
+      "id": "tg_user_44310",
+      "name": "Anna Keller"
+    },
+    "reactedAt": "2026-07-20T09:30:00.000Z"
+  }
+}

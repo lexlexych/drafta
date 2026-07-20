@@ -1,0 +1,85 @@
+[
+  {
+    "id": "wh_evt_01HZXTELEGRAM0001",
+    "event": "message.received",
+    "timestamp": "2026-07-20T09:14:32.118Z",
+    "account": {
+      "id": "acct_tg_98213",
+      "platform": "telegram"
+    },
+    "conversation": {
+      "id": "tg_chat_77120",
+      "platformConversationId": "77120",
+      "status": "active"
+    },
+    "message": {
+      "id": "tg_msg_55210",
+      "conversationId": "tg_chat_77120",
+      "platform": "telegram",
+      "platformMessageId": "55210",
+      "direction": "incoming",
+      "text": "Здравствуйте! Подскажите, пожалуйста, режим работы сегодня?",
+      "attachments": [],
+      "sender": {
+        "id": "tg_user_44310",
+        "name": "Anna Keller"
+      },
+      "sentAt": "2026-07-20T09:14:32.000Z",
+      "isRead": false
+    }
+  },
+  {
+    "id": "wh_evt_01HZXREACTION0004",
+    "event": "reaction.received",
+    "timestamp": "2026-07-20T09:30:00.000Z",
+    "account": {
+      "id": "acct_tg_98213",
+      "platform": "telegram"
+    },
+    "conversation": {
+      "id": "tg_chat_77120",
+      "platformConversationId": "77120",
+      "status": "active"
+    },
+    "reaction": {
+      "emoji": "👍",
+      "action": "added",
+      "platformMessageId": "tg_msg_55211",
+      "sender": {
+        "id": "tg_user_44310",
+        "name": "Anna Keller"
+      },
+      "reactedAt": "2026-07-20T09:30:00.000Z"
+    }
+  },
+  {
+    "id": "wh_evt_01HZXWHATSAPP0002",
+    "event": "message.received",
+    "timestamp": "2026-07-20T09:20:05.402Z",
+    "account": {
+      "id": "acct_wa_31207",
+      "platform": "whatsapp"
+    },
+    "conversation": {
+      "id": "wa_chat_12938",
+      "platformConversationId": "491512345678",
+      "status": "active"
+    },
+    "message": {
+      "id": "wa_msg_88421",
+      "conversationId": "wa_chat_12938",
+      "platform": "whatsapp",
+      "platformMessageId": "wamid.HBgLNDkxNTEyMzQ1Njc4FQIAEhg",
+      "direction": "incoming",
+      "text": "Добрый день! Можно узнать статус заказа №4521?",
+      "attachments": [],
+      "sender": {
+        "id": "wa_user_60214",
+        "name": "+49 151 2345678",
+        "phoneNumber": "+49 151 2345678"
+      },
+      "sentAt": "2026-07-20T09:20:05.000Z",
+      "isRead": false
+    }
+  }
+]
