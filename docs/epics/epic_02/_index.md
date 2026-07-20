@@ -79,7 +79,7 @@ Realtime-инбокс «Сообщения» показывает диалоги
 | T-03 | [Вебхук-роут с идемпотентностью: пайплайн входящего](T-03-webhook-inbound.md) | dev | T-02 | done |
 | T-04 | [Настройки → Каналы: подключения с именами](T-04-channels-settings.md) | dev | T-02 | done |
 | T-05 | [Инбокс «Сообщения»: список диалогов и тред](T-05-inbox-messages.md) | dev | T-03, T-04 | done |
-| T-06 | [Realtime-обновления инбокса](T-06-realtime-inbox.md) | dev | T-05 | in_progress |
+| T-06 | [Realtime-обновления инбокса](T-06-realtime-inbox.md) | dev | T-05 | review |
 | T-07 | [Executive summary — ручные шаги](T-07-executive-summary.md) | manual | T-01–T-06 | todo |
 
 ## Критерий готовности эпика

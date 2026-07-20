@@ -3,7 +3,7 @@ id: T-06
 epic: E-002
 title: "Realtime-обновления инбокса"
 type: dev
-status: in_progress
+status: review
 depends_on: [T-05]
 created: 2026-07-19
 updated: 2026-07-20
