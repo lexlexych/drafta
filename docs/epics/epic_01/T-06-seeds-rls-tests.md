@@ -3,7 +3,7 @@ id: T-06
 epic: E-001
 title: "Сиды локальной разработки и автотесты RLS-изоляции"
 type: dev
-status: in_progress
+status: rework
 depends_on: [T-05]
 created: 2026-07-19
 updated: 2026-07-20
@@ -200,3 +200,36 @@ UPSERT-конфликт. Изменения не добавляют таблиц
 запрещён, выделенный Cloud dev-проект не предоставлен. Это неподтверждённое
 runtime-доказательство остаётся ручным шагом T-08, а не отдельным замечанием
 данного ревью.
+
+### Повторное ревью после Доработки 1 — CHANGES_REQUESTED
+
+Предыдущее замечание о ключе закрыто: `lib/rls-test-config.ts` допускает только
+современный формат `sb_publishable_<22-char>_<8-char>`; отдельно воспроизведён
+отказ для произвольной строки, legacy service-role JWT и `sb_secret_` до
+создания клиента. URL/ref mismatch и отвязанное confirmation также отклоняются.
+
+1. Защита Cloud-цели всё ещё не доказывает, что цель — dev. В
+   `lib/rls-test-config.ts:66-102` `RLS_TEST_DEV_PROJECT_REF` целиком задаётся
+   тем же пользователем, что URL и confirmation; единственный признак production
+   — подстрока `prod`. Конфиг без сети принял валидный ref
+   `qwertyuiopasdfghjklz` вместе с
+   `https://qwertyuiopasdfghjklz.supabase.co` и
+   `cloud-dev:qwertyuiopasdfghjklz`. Поэтому любой production ref без `prod`,
+   подставленный в эти три переменные, неотличим от dev и допускает последующие
+   INSERT/UPDATE сьюта. Нужен fail-closed доверенный идентификатор именно
+   выделенного dev-проекта (например, неизменяемый allowlist после его создания
+   либо dev-only sentinel, проверяемый до мутаций) и негативный тест для
+   production-ref без слова `prod`; эвристики имени недостаточно.
+
+Прогнано независимо после `fd0674b`:
+
+- `git diff --check fd0674b^ fd0674b` — успешно.
+- `npm.cmd test` — успешно: 9 файлов, 31 тест.
+- `npm.cmd run lint` и `npm.cmd run build` — успешно.
+- `npm.cmd run test:rls` с очищенными `RLS_TEST_*` — ожидаемо остановился до
+  сети на `Missing required RLS test environment variable: RLS_TEST_TARGET`.
+- Seed, миграции, RLS-интеграционный сьют, fixtures, Vitest-конфиг и npm-скрипты
+  в `fd0674b` не менялись; их статический контракт прошёл в `npm test`.
+
+Docker, `supabase db reset` и Cloud runtime не запускались по ограничению среды;
+runtime-проверка остаётся ручным шагом T-08.

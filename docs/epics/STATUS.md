@@ -26,7 +26,7 @@
 | T-03 | [RLS-политики изоляции workspace](epic_01/T-03-rls-policies.md) | dev | done |
 | T-04 | [Supabase Auth: регистрация, вход, сброс пароля](epic_01/T-04-supabase-auth.md) | dev | done |
 | T-05 | [Создание workspace при онбординге и защищённая зона](epic_01/T-05-workspace-bootstrap.md) | dev | done |
-| T-06 | [Сиды локальной разработки и автотесты RLS-изоляции](epic_01/T-06-seeds-rls-tests.md) | dev | in_progress |
+| T-06 | [Сиды локальной разработки и автотесты RLS-изоляции](epic_01/T-06-seeds-rls-tests.md) | dev | rework |
 | T-07 | [UI-каркас приложения по макету ui-mockup.html на mock-данных](epic_01/T-07-ui-shell-mockup.md) | dev | todo |
 | T-08 | [Executive summary — ручные шаги](epic_01/T-08-executive-summary.md) | manual | todo |
 
