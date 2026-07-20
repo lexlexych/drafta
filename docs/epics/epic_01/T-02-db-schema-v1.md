@@ -3,7 +3,7 @@ id: T-02
 epic: E-001
 title: "Схема БД v1 миграциями: все таблицы §6"
 type: dev
-status: rework
+status: in_progress
 depends_on: [T-01]
 created: 2026-07-19
 updated: 2026-07-20

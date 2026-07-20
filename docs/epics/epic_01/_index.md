@@ -64,7 +64,7 @@ DPA у Zernio.
 | # | Тикет | Тип | Зависит от | Статус |
 |---|---|---|---|---|
 | T-01 | [Каркас Next.js-приложения и структура репозитория](T-01-nextjs-scaffold.md) | dev | — | done |
-| T-02 | [Схема БД v1 миграциями: все таблицы §6](T-02-db-schema-v1.md) | dev | T-01 | rework |
+| T-02 | [Схема БД v1 миграциями: все таблицы §6](T-02-db-schema-v1.md) | dev | T-01 | in_progress |
 | T-03 | [RLS-политики изоляции workspace](T-03-rls-policies.md) | dev | T-02 | todo |
 | T-04 | [Supabase Auth: регистрация, вход, сброс пароля](T-04-supabase-auth.md) | dev | T-01, T-02 | todo |
 | T-05 | [Создание workspace при онбординге и защищённая зона](T-05-workspace-bootstrap.md) | dev | T-03, T-04 | todo |
