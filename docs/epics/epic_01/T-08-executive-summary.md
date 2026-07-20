@@ -6,7 +6,7 @@ type: manual
 status: todo
 depends_on: [T-01, T-02, T-03, T-04, T-05, T-06, T-07]
 created: 2026-07-19
-updated: 2026-07-19
+updated: 2026-07-20
 ---
 
 # T-08. Executive summary — ручные шаги
@@ -36,10 +36,71 @@ updated: 2026-07-19
 
 - **Зачем:** схема v1 из репозитория должна попасть в облачные проекты — только через
   миграции, не через дашборд (правило 2).
-- **Что сделать:** локально `supabase link --project-ref <ref>` и `supabase db push` —
+- **Что сделать:** локально `npx supabase link --project-ref <ref>` и `npx supabase db push` —
   сначала на dev, затем на prod. В Authentication → Sign In / Providers включить Email
   и убедиться, что «Confirm email» включён.
 - **Проверка:** в Table Editor обоих проектов видны все 15 таблиц; в каждой включён RLS.
+
+### 2a. Подтвердить RLS-изоляцию в Supabase Cloud dev
+
+- **Зачем:** локальная runtime-проверка не выполнялась, потому что на машине запрещено
+  использовать Docker. После `supabase db push` нужно проверить, что PostgreSQL принял
+  миграции T-03 и реально применяет политики к запросам с publishable-ключом.
+- **Что сделать:** только на тестовых пользователях и тестовых данных выполнить SQL-сценарий
+  в dev-проекте. Подготовить два независимых workspace (A и B) и отдельного пользователя с
+  ролью `member` в одном из них. В транзакции эмулировать JWT сессии через `set local role
+  authenticated` и `set_config('request.jwt.claim.sub', '<user-id>', true)` (при необходимости
+  также заполнить `request.jwt.claims` с `sub` и `role: authenticated`). Проверить: пользователь
+  A не получает строки workspace B; INSERT/UPDATE/DELETE строки с `workspace_id` B получают
+  RLS-ошибку; SELECT `workspace_members` своего workspace возвращает участников без ошибки
+  рекурсии; пользователь с ролью `member` не может менять workspace, участников или invitations;
+  `webhook_events` не читается клиентской ролью; роль `anon` получает ноль строк либо отказ в
+  доступе. Откатить транзакцию либо удалить тестовые данные после проверки.
+- **Проверка:** все отрицательные запросы завершились нулём строк или ожидаемой RLS/permission
+  ошибкой, разрешённые запросы участника видят только его workspace. Результат сценария
+  зафиксирован в отчёте T-03 и повторён ревьюером.
+
+### 2b. Запустить T-06 RLS-сьют только против точно привязанного dev-проекта
+
+- **Зачем:** T-06 создаёт временные тестовые контакты для проверки `WITH CHECK`.
+  Конфигурация не должна случайно направить эти записи в production-проект.
+- **Что сделать:** связать CLI только с ref dev-проекта из шага 1 и выполнить
+  `npx supabase db push --include-seed` исключительно в нём. Добавить exact ref
+  dev-проекта в `lib/rls-test-targets.ts` отдельным reviewed-коммитом; до этого
+  пустой allowlist намеренно блокирует Cloud-сьют. Затем задать
+  `RLS_TEST_TARGET=cloud-dev`,
+  `RLS_TEST_SUPABASE_URL=https://<dev-ref>.supabase.co`,
+  `RLS_TEST_REMOTE_CONFIRMATION=cloud-dev:<dev-ref>`, текущий
+  `sb_publishable_…` ключ dev-проекта и пароли сидов из README; выполнить
+  `npm run test:rls`. Не использовать legacy `anon`/`service_role` JWT или
+  `sb_secret_…` ключ. Production связывается и получает миграции отдельной
+  командой `npx supabase db push` без `--include-seed` и без этого сьюта.
+- **Проверка:** сьют принимает только exact URL/ref из checked-in allowlist и
+  confirmation `cloud-dev:<тот же ref>`; любая переменная окружения с ref вне
+  allowlist (в том числе production без слова `prod`) останавливает его до
+  сетевого запроса.
+- **Проверка чувствительности теста:** только после успешного прогона и только
+  в disposable Cloud dev через SQL Editor временно ослабить одну policy:
+
+  ```sql
+  alter policy contacts_member_access on public.contacts
+    using (true)
+    with check (true);
+  ```
+
+  Повторный `npm run test:rls` обязан упасть на видимости/записи чужого
+  workspace. Сразу восстановить policy **точно** как в миграции
+  `20260720120000_add_workspace_rls_policies.sql` и запустить сьют повторно:
+
+  ```sql
+  alter policy contacts_member_access on public.contacts
+    using ((select private.is_workspace_member(workspace_id)))
+    with check ((select private.is_workspace_member(workspace_id)));
+  ```
+
+  Этот краткий SQL-эксперимент не является способом менять схему: его нельзя
+  выполнять в production и нельзя оставлять как постоянное расхождение с
+  миграциями.
 
 ### 3. Создать удалённый git-репозиторий и подключить Vercel (регион fra1)
 
@@ -88,9 +149,29 @@ updated: 2026-07-19
 
 - **Зачем:** ссылки в письмах должны вести на прод-домен, а не на localhost.
 - **Что сделать:** prod-проект → Authentication → URL Configuration: Site URL —
-  прод-URL Vercel; в Redirect URLs добавить пути подтверждения/сброса из T-04
-  (и preview-домены Vercel при необходимости).
-- **Проверка:** ссылка из письма подтверждения открывает прод-домен и завершает вход.
+  прод-URL Vercel; в Redirect URLs добавить два **точных** пути:
+  `<prod-url>/auth/confirm` для подтверждения email и `<prod-url>/auth/recovery`
+  для сброса пароля (и те же два точных пути для preview-доменов Vercel при
+  необходимости). T-04 намеренно не передаёт query-параметры в `redirectTo`, поэтому
+  wildcard в production не требуется.
+- **Проверка:** ссылка подтверждения проходит через `/auth/confirm` и завершает вход;
+  ссылка сброса проходит через `/auth/recovery` и открывает `/update-password` без
+  ошибки redirect allow-list.
+
+### 7a. Проверить полный cloud Auth flow
+
+- **Зачем:** Docker запрещён в среде разработки, поэтому отправка auth-писем и
+  сквозная работа cookie-сессии с реальным Supabase не проверялись локально. После
+  `supabase db push`, включения Confirm email и настройки Postmark это обязательная
+  ручная проверка T-04.
+- **Что сделать:** после шагов 2, 4, 5 и 7 на тестовом реальном email: зарегистрировать
+  нового пользователя → открыть письмо → подтвердить email → убедиться в переходе на
+  `/dashboard`; выйти → войти с исходным паролем; запросить сброс → открыть письмо →
+  задать новый пароль на `/update-password` → убедиться, что старый пароль отклонён, а
+  новый позволяет войти. Проверять, что письма отправляет Supabase Auth через настроенный
+  SMTP, без кода отправки в приложении.
+- **Проверка:** оба письма видны в ящике и Postmark Activity; callback URLs не дают
+  ошибок redirect allow-list; после каждой навигации SSR видит актуальную сессию.
 
 ### 8. Запросить DPA у Zernio (параллельно, вход в этап 1)
 
@@ -117,11 +198,14 @@ updated: 2026-07-19
 
 - [ ] Шаг 1 — проекты Supabase prod/dev (Frankfurt)
 - [ ] Шаг 2 — миграции применены, email-провайдер включён
+- [ ] Шаг 2a — RLS-изоляция проверена в dev-проекте под тестовыми JWT
+- [ ] Шаг 2b — `test:rls` выполнен против точно привязанного dev-проекта
 - [ ] Шаг 3 — git-репозиторий + Vercel (fra1) + env-переменные
 - [ ] Шаг 4 — Postmark: домен, DKIM/SPF верифицированы
 - [ ] Шаг 5 — custom SMTP в Supabase Auth (prod)
 - [ ] Шаг 6 — Rate Limits подняты
 - [ ] Шаг 7 — Auth URLs настроены
+- [ ] Шаг 7a — полный cloud Auth flow T-04 проверен
 - [ ] Шаг 8 — DPA у Zernio запрошен, вопросы §15.2 заданы
 - [ ] Финальная проверка пройдена
 

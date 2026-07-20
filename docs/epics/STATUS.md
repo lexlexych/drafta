@@ -11,7 +11,7 @@
 
 | Эпик | Название | Статус | Тикеты (done/всего) | Создан | Завершён |
 |---|---|---|---|---|---|
-| [E-001](epic_01/_index.md) | Фундамент: Next.js + Supabase Auth, схема БД v1, RLS | todo | 0/8 | 2026-07-19 | — |
+| [E-001](epic_01/_index.md) | Фундамент: Next.js + Supabase Auth, схема БД v1, RLS | done | 7/8 | 2026-07-19 | 2026-07-20 |
 | [E-002](epic_02/_index.md) | Zernio-контур: адаптер, вебхук, Realtime-инбокс «Сообщения» | todo | 0/7 | 2026-07-19 | — |
 | [E-003](epic_03/_index.md) | AI-черновики с дебаунсом: Inngest + Mistral, generate-draft, панель черновика | todo | 0/8 | 2026-07-19 | — |
 
@@ -21,13 +21,13 @@
 
 | # | Тикет | Тип | Статус |
 |---|---|---|---|
-| T-01 | [Каркас Next.js-приложения и структура репозитория](epic_01/T-01-nextjs-scaffold.md) | dev | todo |
-| T-02 | [Схема БД v1 миграциями: все таблицы §6](epic_01/T-02-db-schema-v1.md) | dev | todo |
-| T-03 | [RLS-политики изоляции workspace](epic_01/T-03-rls-policies.md) | dev | todo |
-| T-04 | [Supabase Auth: регистрация, вход, сброс пароля](epic_01/T-04-supabase-auth.md) | dev | todo |
-| T-05 | [Создание workspace при онбординге и защищённая зона](epic_01/T-05-workspace-bootstrap.md) | dev | todo |
-| T-06 | [Сиды локальной разработки и автотесты RLS-изоляции](epic_01/T-06-seeds-rls-tests.md) | dev | todo |
-| T-07 | [UI-каркас приложения по макету ui-mockup.html на mock-данных](epic_01/T-07-ui-shell-mockup.md) | dev | todo |
+| T-01 | [Каркас Next.js-приложения и структура репозитория](epic_01/T-01-nextjs-scaffold.md) | dev | done |
+| T-02 | [Схема БД v1 миграциями: все таблицы §6](epic_01/T-02-db-schema-v1.md) | dev | done |
+| T-03 | [RLS-политики изоляции workspace](epic_01/T-03-rls-policies.md) | dev | done |
+| T-04 | [Supabase Auth: регистрация, вход, сброс пароля](epic_01/T-04-supabase-auth.md) | dev | done |
+| T-05 | [Создание workspace при онбординге и защищённая зона](epic_01/T-05-workspace-bootstrap.md) | dev | done |
+| T-06 | [Сиды локальной разработки и автотесты RLS-изоляции](epic_01/T-06-seeds-rls-tests.md) | dev | done |
+| T-07 | [UI-каркас приложения по макету ui-mockup.html на mock-данных](epic_01/T-07-ui-shell-mockup.md) | dev | done |
 | T-08 | [Executive summary — ручные шаги](epic_01/T-08-executive-summary.md) | manual | todo |
 
 ## E-002. Zernio-контур: адаптер, вебхук, Realtime-инбокс «Сообщения»

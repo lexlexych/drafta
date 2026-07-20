@@ -1,10 +1,10 @@
 ---
 id: E-001
 title: "Фундамент: Next.js + Supabase Auth, схема БД v1, RLS"
-status: todo
+status: done
 source: "этап 0 плана внедрения (docs/architecture/16-rollout-plan.md)"
 created: 2026-07-19
-updated: 2026-07-19
+updated: 2026-07-20
 ---
 
 # E-001. Фундамент: Next.js + Supabase Auth, схема БД v1, RLS
@@ -63,13 +63,13 @@ DPA у Zernio.
 
 | # | Тикет | Тип | Зависит от | Статус |
 |---|---|---|---|---|
-| T-01 | [Каркас Next.js-приложения и структура репозитория](T-01-nextjs-scaffold.md) | dev | — | todo |
-| T-02 | [Схема БД v1 миграциями: все таблицы §6](T-02-db-schema-v1.md) | dev | T-01 | todo |
-| T-03 | [RLS-политики изоляции workspace](T-03-rls-policies.md) | dev | T-02 | todo |
-| T-04 | [Supabase Auth: регистрация, вход, сброс пароля](T-04-supabase-auth.md) | dev | T-01, T-02 | todo |
-| T-05 | [Создание workspace при онбординге и защищённая зона](T-05-workspace-bootstrap.md) | dev | T-03, T-04 | todo |
-| T-06 | [Сиды локальной разработки и автотесты RLS-изоляции](T-06-seeds-rls-tests.md) | dev | T-05 | todo |
-| T-07 | [UI-каркас приложения по макету ui-mockup.html на mock-данных](T-07-ui-shell-mockup.md) | dev | T-01, T-05 | todo |
+| T-01 | [Каркас Next.js-приложения и структура репозитория](T-01-nextjs-scaffold.md) | dev | — | done |
+| T-02 | [Схема БД v1 миграциями: все таблицы §6](T-02-db-schema-v1.md) | dev | T-01 | done |
+| T-03 | [RLS-политики изоляции workspace](T-03-rls-policies.md) | dev | T-02 | done |
+| T-04 | [Supabase Auth: регистрация, вход, сброс пароля](T-04-supabase-auth.md) | dev | T-01, T-02 | done |
+| T-05 | [Создание workspace при онбординге и защищённая зона](T-05-workspace-bootstrap.md) | dev | T-03, T-04 | done |
+| T-06 | [Сиды локальной разработки и автотесты RLS-изоляции](T-06-seeds-rls-tests.md) | dev | T-05 | done |
+| T-07 | [UI-каркас приложения по макету ui-mockup.html на mock-данных](T-07-ui-shell-mockup.md) | dev | T-01, T-05 | done |
 | T-08 | [Executive summary — ручные шаги](T-08-executive-summary.md) | manual | T-01–T-07 | todo |
 
 ## Критерий готовности эпика

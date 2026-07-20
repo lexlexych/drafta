@@ -1,0 +1,206 @@
+/* Настройки: список разделов (мобайл) + детальная панель с формами-заглушками. */
+
+/* На десктопе список разделов дублирует расхлопнутое меню — прячем. */
+@media (min-width: 900px) {
+  .sectionList {
+    display: none;
+  }
+}
+
+.sectionRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  text-align: left;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.sectionRow:hover {
+  background: var(--hover);
+}
+
+.sectionRow[data-active="true"] {
+  background: var(--accent-soft);
+}
+
+.sectionIcon {
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  background: var(--surface2);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ink2);
+  flex: none;
+}
+
+.sectionBody {
+  flex: 1;
+  min-width: 0;
+}
+
+.sectionBody b {
+  display: block;
+  font-size: 13.5px;
+}
+
+.sectionBody span {
+  font-size: 11.5px;
+  color: var(--ink3);
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pane {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+  padding: 20px 22px;
+}
+
+.inner {
+  max-width: 640px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.description {
+  font-size: 12.5px;
+  color: var(--ink3);
+  margin-top: -6px;
+}
+
+/* Строки подключений и участников. */
+.connectionRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 0;
+  border-top: 1px solid var(--line);
+}
+
+.connectionRow:first-of-type {
+  border-top: 0;
+}
+
+.connectionBody {
+  flex: 1;
+  min-width: 0;
+}
+
+.connectionBody b {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13.5px;
+}
+
+.connectionBody span {
+  font-size: 11.5px;
+  color: var(--ink3);
+}
+
+.connectionDot {
+  width: 10px;
+  height: 10px;
+}
+
+.pendingAvatar {
+  background: var(--surface2);
+  color: var(--ink3);
+}
+
+/* Строки категорий. */
+.categoryRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 0;
+  border-top: 1px solid var(--line);
+}
+
+.categoryRow:first-of-type {
+  border-top: 0;
+}
+
+.grip {
+  color: var(--ink3);
+  cursor: grab;
+  flex: none;
+}
+
+.gripHidden {
+  visibility: hidden;
+}
+
+.priority {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--ink3);
+  width: 16px;
+  text-align: right;
+  flex: none;
+  display: inline-flex;
+  justify-content: flex-end;
+}
+
+.categoryBody {
+  flex: 1;
+  min-width: 0;
+}
+
+.categoryBody b {
+  font-size: 13.5px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.categoryChips {
+  display: flex;
+  gap: 5px;
+  margin-top: 3px;
+  flex-wrap: wrap;
+}
+
+.categoryDefault {
+  opacity: 0.85;
+}
+
+/* Строки-переключатели. */
+.toggleRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 0;
+  border-top: 1px solid var(--line);
+  font-size: 13.5px;
+}
+
+.toggleRow:first-of-type {
+  border-top: 0;
+}
+
+.toggleLabel {
+  flex: 1;
+  min-width: 0;
+}
+
+.toggleLabel span {
+  display: block;
+  font-size: 11.5px;
+  color: var(--ink3);
+}
+
+@media (max-width: 899px) {
+  .pane {
+    padding: 16px 14px;
+  }
+}

@@ -3,10 +3,10 @@ id: T-04
 epic: E-001
 title: "Supabase Auth: регистрация, вход, сброс пароля"
 type: dev
-status: todo
+status: done
 depends_on: [T-01, T-02]
 created: 2026-07-19
-updated: 2026-07-19
+updated: 2026-07-20
 ---
 
 # T-04. Supabase Auth: регистрация, вход, сброс пароля
@@ -77,10 +77,112 @@ npm test
 
 ## 🔧 Отчёт разработчика
 
-_Заполняется агентом-разработчиком: что сделано (файлы), как проверено
-(команды и результат), отклонения, «вне скоупа», вопросы._
+### Что сделано
+
+- Добавлены зависимости `@supabase/ssr`, `@supabase/supabase-js` и `server-only`
+  в `package.json` / `package-lock.json`.
+- В `lib/db/` добавлены три изолированных клиента Supabase:
+  - `browser.ts` — singleton browser-клиент только с publishable-ключом;
+  - `server.ts` — SSR-клиент для Server Components, Server Actions и Route Handlers
+    с адаптером cookie `getAll` / `setAll`;
+  - `admin.ts` — admin-клиент с `import "server-only"`, единственное runtime-место
+    обращения к `SUPABASE_SECRET_KEY`, с отключёнными session persistence и refresh.
+  В `env.ts` вынесена валидация двух публичных env-переменных. Общий barrel-файл не
+  создан, чтобы admin-клиент нельзя было случайно импортировать в client bundle.
+- Реализован session refresh и маршрутизация в `lib/db/proxy.ts` + корневом `proxy.ts`:
+  verified `auth.getClaims()`, перенос обновлённых cookie и cache headers в response,
+  редирект неавторизованного пользователя на `/login`, а авторизованного с login/
+  registration/reset-request страниц — на `/dashboard`. `/auth/confirm` и
+  `/update-password` намеренно оставлены доступными для PKCE callback/recovery flow.
+- Добавлены минимальные формы в `app/(auth)/`: `/login`, `/sign-up`,
+  `/forgot-password`, `/update-password`; все проверяют обязательные поля, совпадение
+  и минимальную длину нового пароля, выводят ошибки Supabase. Формы вызывают только
+  Supabase Auth (`signUp`, `signInWithPassword`, `resetPasswordForEmail`, `updateUser`),
+  собственного кода отправки email нет.
+- Добавлены route handlers: `/auth/confirm` обменивает PKCE code на cookie-сессию с
+  защитой от open redirect, `/auth/sign-out` принимает только POST и завершает сессию.
+  Корневой маршрут перенаправляет на `/login`.
+- В `supabase/config.toml` включён `auth.email.enable_confirmations`, а allow-list
+  дополнен локальными callback URL `/auth/confirm` для `127.0.0.1` и `localhost`.
+- В `T-08-executive-summary.md` уточнён продовый callback и добавлен ручной шаг 7a:
+  полный cloud-цикл registration → confirmation → login → password reset после
+  `supabase db push` и настройки Postmark.
+- Добавлены проверки `lib/auth/redirects.test.ts`, `lib/db/env.test.ts`,
+  `lib/db/auth-boundaries.test.ts`, `lib/db/proxy.test.ts`; Vitest получил alias `@`
+  из `tsconfig.json` в `vitest.config.ts`.
+
+### Как проверено
+
+- `npx.cmd tsc --noEmit` — exit code 0.
+- `npm.cmd run lint` — exit code 0, замечаний ESLint нет.
+- `npm.cmd run build` — exit code 0; Next.js 16.2.10 собрал все auth routes и Proxy.
+- `npm.cmd test` — exit code 0: 5 test files, 11 tests passed. В том числе проверены
+  безопасные relative redirects, public env, server-only boundary и Proxy: refresh
+  cookie/cache headers, redirect protected route и recovery-исключение.
+- `rg` по `.next/static` — `SUPABASE_SECRET_KEY` отсутствует в client bundle.
+- `git diff --check` — без ошибок whitespace.
+
+### Отклонения от плана
+
+- Вместо буквально указанного `middleware.ts` создан `proxy.ts` с экспортом `proxy`.
+  Это актуальная file convention Next.js 16.2.10 (Middleware переименован в Proxy);
+  production build подтвердил его как `ƒ Proxy (Middleware)`. Функция выполняет
+  требуемое middleware-обновление сессии без использования deprecated convention.
+
+### Вне скоупа и открытые вопросы
+
+- Не создавалась страница `/dashboard`, onboarding и protected zone: ими владеет T-05.
+  До T-05 успешный вход/подтверждение корректно ведёт на подготовленный, но ещё не
+  реализованный маршрут `/dashboard`.
+- Docker, `supabase start` / `stop`, локальный Supabase и любые cloud-проекты, секреты,
+  SMTP и Vercel не использовались по ограничению среды. Поэтому реальная отправка
+  писем, клик по ссылке и runtime SSR-сессия не проверены; обязательный ручной cloud
+  прогон честно добавлен в T-08, шаг 7a.
+- `npm install` по-прежнему сообщает о двух moderate vulnerabilities, известных со
+  времён T-01; `npm audit fix --force` не запускался, так как это ломающая и вне
+  скоупа T-04 операция.
+
+### Доработка 1
+
+- Исправлено замечание ревью о несовпадении `redirectTo` и allow-list. Регистрация
+  теперь передаёт строго `…/auth/confirm`, а сброс пароля — строго
+  `…/auth/recovery`: query-параметры в URL, передаваемых Supabase, не формируются.
+  `app/(auth)/auth/recovery/route.ts` обменивает PKCE code и статически направляет
+  пользователя на `/update-password`; `/auth/confirm` статически направляет на
+  `/dashboard`. Это сохраняет PKCE, не требует wildcard и исключает open redirect
+  в email-flow.
+- Добавлен `lib/auth/callback-paths.ts`; формы используют его для построения exact
+  callbacks. В `lib/db/proxy.ts` `/auth/recovery` разрешён до появления сессии.
+- `supabase/config.toml` содержит все четыре точных локальных URL (confirm и
+  recovery для `127.0.0.1` и `localhost`); T-08, шаг 7, синхронизирован с двумя
+  точными production/preview URL.
+- Добавлены `lib/auth/callback-paths.test.ts` (exact URL без query + allow-list)
+  и проверка обоих callback routes в `lib/db/proxy.test.ts`.
+- Повторно проверено: `npx.cmd tsc --noEmit`, `npm.cmd run lint`,
+  `npm.cmd run build`, `npm.cmd test` — exit code 0; 6 test files, 14 tests passed.
 
 ## 🔍 Ревью
 
-_Заполняется агентом-ревьюером: вердикт APPROVED / CHANGES_REQUESTED,
-замечания, что прогнано и с каким результатом._
+**APPROVED**
+
+Доработка устранила замечание: регистрация передаёт точный callback
+`/auth/confirm`, сброс пароля — точный `/auth/recovery`, без управляемых query
+параметров. Оба пути внесены в локальный allow-list для `127.0.0.1` и `localhost`
+и синхронизированы с инструкцией T-08. `/auth/recovery` обменивает PKCE code на
+сессию и статически направляет на `/update-password`; Proxy пропускает оба callback
+маршрута до появления сессии. Open redirect в email-flow не появился.
+
+Самостоятельно проверено:
+
+- `npm.cmd run lint` — успешно.
+- `npm.cmd run build` — успешно; Next.js 16.2.10 собрал оба callback route и Proxy.
+- `npm.cmd test` — успешно: 6 test files, 14 tests passed.
+- `npx.cmd tsc --noEmit` — успешно.
+- `git diff --check f8b1352 HEAD` — успешно; ошибок whitespace нет.
+- В `.next/static` нет `SUPABASE_SECRET_KEY`; secret используется только в
+  `lib/db/admin.ts` с `server-only`. Собственного отправителя auth-писем нет;
+  sign-out остаётся только POST, а login redirect отклоняет внешние URL.
+
+Docker, `supabase start`, локальный Supabase и cloud-ресурсы не запускались по
+явному ограничению задачи. Ручной cloud-прогон в T-08, шаг 7a, описан корректно
+и включает оба callback URL.

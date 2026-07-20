@@ -1,0 +1,531 @@
+/* Две панели: список слева, тред/карточка справа. Мобайл — по одной панели. */
+
+.panes {
+  flex: 1;
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+}
+
+.paneList {
+  width: 340px;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--surface);
+  border-right: 1px solid var(--line);
+}
+
+.paneDetail {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  background: var(--bg);
+}
+
+/* ---------- шапка списка ---------- */
+
+.paneHead {
+  padding: 14px 16px 10px;
+  border-bottom: 1px solid var(--line);
+  flex: none;
+}
+
+.paneHeadRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  justify-content: space-between;
+}
+
+.paneHead h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.paneSubtitle {
+  font-size: 12px;
+  color: var(--ink3);
+  margin-top: 2px;
+  display: block;
+}
+
+.categorySelect {
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink2);
+  background: var(--surface);
+  border: 1px solid var(--line2);
+  border-radius: 8px;
+  padding: 4px 8px;
+  max-width: 180px;
+  flex: none;
+}
+
+/* Фильтры по каналам дублируют расхлоп меню — нужны только на мобайле. */
+.filters {
+  display: none;
+  gap: 6px;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--line);
+  overflow-x: auto;
+  flex: none;
+  scrollbar-width: none;
+}
+
+.filters::-webkit-scrollbar {
+  display: none;
+}
+
+.filterChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink2);
+  border: 1px solid var(--line2);
+  border-radius: 99px;
+  padding: 4px 11px;
+  white-space: nowrap;
+}
+
+.filterChip[data-active="true"] {
+  background: var(--accent-soft);
+  color: var(--accent-soft-ink);
+  border-color: transparent;
+}
+
+/* ---------- список ---------- */
+
+.list {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.empty {
+  padding: 34px 16px;
+  color: var(--ink3);
+  font-size: 13px;
+  text-align: center;
+}
+
+.listItem {
+  display: flex;
+  gap: 11px;
+  width: 100%;
+  text-align: left;
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--line);
+  align-items: flex-start;
+}
+
+.listItem:hover {
+  background: var(--hover);
+}
+
+.listItem[data-active="true"] {
+  background: var(--accent-soft);
+}
+
+.listBody {
+  flex: 1;
+  min-width: 0;
+}
+
+.listTitleRow {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.listTitleRow b {
+  flex: 1;
+  min-width: 0;
+  font-size: 13.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.listTitleRow time {
+  font-size: 11px;
+  color: var(--ink3);
+}
+
+.listPreview {
+  font-size: 12.5px;
+  color: var(--ink2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin: 1px 0 5px;
+}
+
+.listItem[data-unread="true"] .listPreview {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.listChips {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+
+.listSpacer {
+  flex: 1;
+}
+
+.postIcon {
+  background: var(--surface2);
+  color: var(--ink2);
+}
+
+/* ---------- шапка треда ---------- */
+
+.backButton {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  color: var(--ink2);
+  margin-left: -6px;
+}
+
+.backButton:hover {
+  background: var(--hover);
+}
+
+.threadHead {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+  flex: none;
+  min-width: 0;
+}
+
+.threadWho {
+  min-width: 0;
+  flex: 1;
+}
+
+.threadWho b {
+  display: block;
+  font-size: 14.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.threadChips {
+  display: flex;
+  gap: 5px;
+  margin-top: 3px;
+  flex-wrap: wrap;
+}
+
+/* ---------- сообщения ---------- */
+
+.messages {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+  padding: 18px 18px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.commentsList {
+  gap: 12px;
+}
+
+.bubble {
+  max-width: min(72%, 520px);
+  padding: 8px 12px;
+  border-radius: 14px;
+  font-size: 13.5px;
+  position: relative;
+}
+
+.bubbleIn {
+  align-self: flex-start;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-bottom-left-radius: 4px;
+}
+
+.bubbleOut {
+  align-self: flex-end;
+  background: var(--out-bg);
+  color: var(--out-ink);
+  border-bottom-right-radius: 4px;
+}
+
+.bubbleMeta {
+  display: block;
+  font-size: 10.5px;
+  margin-top: 3px;
+  opacity: 0.65;
+  text-align: right;
+}
+
+.bubbleIn .bubbleMeta {
+  color: var(--ink3);
+  opacity: 1;
+}
+
+.attachment {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  background: var(--surface2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 5px 9px;
+  margin-bottom: 5px;
+  color: var(--ink2);
+}
+
+.bubbleOut .attachment {
+  background: rgba(255, 255, 255, 0.14);
+  border-color: transparent;
+  color: var(--out-ink);
+}
+
+.systemLine {
+  align-self: center;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 11px;
+  color: var(--ink3);
+  padding: 2px 0;
+  text-align: center;
+}
+
+.systemLine svg {
+  color: var(--draft-ink);
+}
+
+/* ---------- пост и комментарии ---------- */
+
+.postCard {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 12px 14px;
+  margin: 14px 16px 4px;
+  flex: none;
+}
+
+.postCardTop {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.postText {
+  font-size: 13.5px;
+  margin-top: 7px;
+}
+
+.postMeta {
+  font-size: 11.5px;
+  color: var(--ink3);
+  margin-top: 6px;
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.postLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--accent);
+  font-weight: 600;
+  font-size: 11.5px;
+}
+
+.comment {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 2px 0;
+}
+
+.commentReply {
+  margin-left: 40px;
+}
+
+.commentBody {
+  min-width: 0;
+  flex: 1;
+}
+
+.commentHead {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+
+.commentHead b {
+  font-size: 13px;
+}
+
+.commentHandle {
+  font-size: 11.5px;
+  color: var(--ink3);
+}
+
+.commentText {
+  font-size: 13.5px;
+  margin-top: 1px;
+}
+
+.commentChips {
+  display: flex;
+  gap: 5px;
+  margin-top: 4px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.commentTarget .commentBody {
+  border-left: 3px solid var(--draft-ink);
+  padding-left: 9px;
+  margin-left: -12px;
+}
+
+.commentMuted .commentText,
+.commentMuted .commentHead b {
+  color: var(--ink3);
+}
+
+.commentOurs .commentBody {
+  background: var(--accent-soft);
+  border-radius: 10px;
+  padding: 7px 10px;
+}
+
+.commentOurs .commentHead b {
+  color: var(--accent-soft-ink);
+}
+
+.ourAvatar {
+  background: var(--accent);
+}
+
+.noDraftNote {
+  font-size: 10.5px;
+  color: var(--ink3);
+  font-style: italic;
+}
+
+/* ---------- нижняя зона: черновик и ручной ответ ---------- */
+
+.draftWrap {
+  flex: none;
+  padding: 10px 14px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.composer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--surface);
+  border: 1px solid var(--line2);
+  border-radius: 12px;
+  padding: 6px 6px 6px 14px;
+}
+
+.composer input {
+  flex: 1;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 13.5px;
+  color: var(--ink);
+  min-width: 0;
+}
+
+.composer input:focus {
+  outline: none;
+}
+
+.composer input::placeholder {
+  color: var(--ink3);
+}
+
+.sendButton {
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sendButton:hover {
+  background: var(--accent-hov);
+}
+
+/* ---------- мобильная компоновка ---------- */
+
+@media (max-width: 899px) {
+  .paneList {
+    width: 100%;
+    border-right: 0;
+  }
+
+  .paneDetail {
+    display: none;
+  }
+
+  .panes[data-detail="true"] .paneList {
+    display: none;
+  }
+
+  .panes[data-detail="true"] .paneDetail {
+    display: flex;
+  }
+
+  .filters {
+    display: flex;
+  }
+
+  .backButton {
+    display: inline-flex;
+  }
+
+  .bubble {
+    max-width: 84%;
+  }
+}

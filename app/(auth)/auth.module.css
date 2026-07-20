@@ -1,0 +1,89 @@
+.page {
+  display: grid;
+  flex: 1;
+  place-items: center;
+  padding: 2rem;
+}
+
+.card {
+  width: min(100%, 28rem);
+  padding: 2rem;
+  border: 1px solid color-mix(in srgb, var(--foreground) 18%, transparent);
+  border-radius: 0.75rem;
+  background: color-mix(in srgb, var(--background) 94%, var(--foreground));
+}
+
+.heading {
+  margin-bottom: 0.5rem;
+  font-size: 1.5rem;
+}
+
+.description {
+  margin-bottom: 1.5rem;
+  color: color-mix(in srgb, var(--foreground) 70%, transparent);
+  line-height: 1.5;
+}
+
+.form {
+  display: grid;
+  gap: 1rem;
+}
+
+.field {
+  display: grid;
+  gap: 0.4rem;
+  font-weight: 600;
+}
+
+.input {
+  width: 100%;
+  padding: 0.7rem 0.75rem;
+  border: 1px solid color-mix(in srgb, var(--foreground) 30%, transparent);
+  border-radius: 0.4rem;
+  color: inherit;
+  background: var(--background);
+  font: inherit;
+}
+
+.hint,
+.message,
+.links {
+  color: color-mix(in srgb, var(--foreground) 70%, transparent);
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+.button {
+  padding: 0.75rem 1rem;
+  border: 0;
+  border-radius: 0.4rem;
+  color: var(--background);
+  background: var(--foreground);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+}
+
+.button:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+.error {
+  color: #b42318;
+}
+
+.success {
+  color: #067647;
+}
+
+.links {
+  display: grid;
+  gap: 0.6rem;
+  margin-top: 1.5rem;
+}
+
+.links a {
+  color: inherit;
+  text-decoration: underline;
+}

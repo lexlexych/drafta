@@ -1,0 +1,221 @@
+"use client";
+
+/** Десктопное левое меню: разделы, счётчики, расхлопы по каналам и настройкам. */
+
+import Link from "next/link";
+import { usePathname, useSearchParams } from "next/navigation";
+import { useState } from "react";
+
+import type { NavigationCountersView, SettingsSectionView } from "@/lib/mock";
+
+import { Avatar } from "./avatar";
+import { PlatformDot } from "./chips";
+import {
+  ChevronIcon,
+  CommentsIcon,
+  ContactsIcon,
+  DashboardIcon,
+  MessagesIcon,
+  SettingsIcon,
+} from "./icons";
+import {
+  QUERY_KEYS,
+  SECTIONS,
+  buildHref,
+  sectionIdForPathname,
+  type SectionId,
+} from "./navigation";
+import styles from "./shell.module.css";
+import uiStyles from "./ui.module.css";
+
+const SECTION_ICONS: Record<SectionId, typeof DashboardIcon> = {
+  dashboard: DashboardIcon,
+  inbox: MessagesIcon,
+  comments: CommentsIcon,
+  contacts: ContactsIcon,
+  settings: SettingsIcon,
+};
+
+export type SidebarProps = {
+  workspaceName: string;
+  userName: string;
+  userRole: string;
+  counters: NavigationCountersView;
+  settingsSections: SettingsSectionView[];
+};
+
+export function Sidebar({
+  workspaceName,
+  userName,
+  userRole,
+  counters,
+  settingsSections,
+}: SidebarProps) {
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const activeSection = sectionIdForPathname(pathname);
+
+  const [expanded, setExpanded] = useState<Record<SectionId, boolean>>({
+    dashboard: false,
+    inbox: true,
+    comments: false,
+    contacts: false,
+    settings: false,
+    [activeSection]: true,
+  });
+
+  const activeChannelId = searchParams.get(QUERY_KEYS.channel);
+  const activeSettingsSection =
+    searchParams.get(QUERY_KEYS.section) ?? settingsSections[0]?.id;
+
+  const sectionCounts: Record<SectionId, number> = {
+    dashboard: 0,
+    inbox: counters.dmUnread,
+    comments: counters.commentsUnread,
+    contacts: 0,
+    settings: 0,
+  };
+
+  function channelCount(sectionId: SectionId, channelId: string): number {
+    const channel = counters.channels.find((entry) => entry.id === channelId);
+
+    if (!channel) {
+      return 0;
+    }
+
+    if (sectionId === "inbox") {
+      return channel.dmUnread;
+    }
+
+    if (sectionId === "comments") {
+      return channel.commentsUnread;
+    }
+
+    return channel.contactCount;
+  }
+
+  return (
+    <aside className={styles.sidebar}>
+      <div className={styles.logo}>
+        <div>
+          <b>
+            draf<i>ta</i>
+          </b>
+          <div className={styles.workspace}>{workspaceName} · workspace</div>
+        </div>
+      </div>
+
+      <nav className={styles.nav}>
+        {SECTIONS.map((section) => {
+          const Icon = SECTION_ICONS[section.id];
+          const isActive = activeSection === section.id;
+          const isOpen = expanded[section.id];
+          const count = sectionCounts[section.id];
+
+          return (
+            <div key={section.id}>
+              <div className={styles.navItem} data-active={isActive}>
+                <Link className={styles.navLink} href={section.pathname}>
+                  <Icon />
+                  <span className={styles.navLabel}>{section.label}</span>
+                  {count > 0 ? (
+                    <span className={`${styles.navCount} ${uiStyles.num}`}>
+                      {count}
+                    </span>
+                  ) : null}
+                </Link>
+                {section.expandable ? (
+                  <button
+                    type="button"
+                    className={styles.chevron}
+                    data-open={isOpen}
+                    aria-expanded={isOpen}
+                    aria-label={`Развернуть «${section.label}»`}
+                    onClick={() =>
+                      setExpanded((state) => ({
+                        ...state,
+                        [section.id]: !state[section.id],
+                      }))
+                    }
+                  >
+                    <ChevronIcon />
+                  </button>
+                ) : null}
+              </div>
+
+              {section.expandable && isOpen && section.id !== "settings" ? (
+                <div className={styles.subList}>
+                  <Link
+                    className={styles.subItem}
+                    data-active={isActive && !activeChannelId}
+                    href={section.pathname}
+                  >
+                    <PlatformDot platform="all" />
+                    <span className={styles.subLabel}>Все каналы</span>
+                  </Link>
+                  {counters.channels.map((channel) => {
+                    const count = channelCount(section.id, channel.id);
+
+                    return (
+                      <Link
+                        key={channel.id}
+                        className={styles.subItem}
+                        data-active={isActive && activeChannelId === channel.id}
+                        href={buildHref(section.pathname, {
+                          [QUERY_KEYS.channel]: channel.id,
+                        })}
+                      >
+                        <PlatformDot platform={channel.platform} />
+                        <span className={styles.subLabel}>{channel.name}</span>
+                        {count > 0 ? (
+                          <span className={`${styles.subCount} ${uiStyles.num}`}>
+                            {count}
+                          </span>
+                        ) : null}
+                      </Link>
+                    );
+                  })}
+                </div>
+              ) : null}
+
+              {section.id === "settings" && isOpen ? (
+                <div className={styles.subList}>
+                  {settingsSections.map((settingsSection) => (
+                    <Link
+                      key={settingsSection.id}
+                      className={styles.subItem}
+                      data-active={
+                        isActive && activeSettingsSection === settingsSection.id
+                      }
+                      href={buildHref(section.pathname, {
+                        [QUERY_KEYS.section]: settingsSection.id,
+                      })}
+                    >
+                      <span className={styles.subLabel}>
+                        {settingsSection.title}
+                      </span>
+                    </Link>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          );
+        })}
+      </nav>
+
+      <div className={styles.sidebarFooter}>
+        <div className={styles.user}>
+          <Avatar
+            avatar={{ initials: userName.slice(0, 1).toUpperCase(), hue: 170 }}
+            size="sm"
+          />
+          <div className={styles.userInfo}>
+            <b>{userName}</b>
+            <span>{userRole}</span>
+          </div>
+        </div>
+        <div className={styles.mockNote}>UI-каркас · mock-данные</div>
+      </div>
+    </aside>
+  );
+}

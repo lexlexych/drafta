@@ -1,0 +1,290 @@
+/* Общие примитивы интерфейса: аватары, чипы, кнопки, карточки, поля. */
+
+.num {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- аватары ---------- */
+
+.avatar {
+  border-radius: 99px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  color: #fff;
+  flex: none;
+}
+
+.avatarSm {
+  width: 30px;
+  height: 30px;
+  font-size: 11px;
+}
+
+.avatarMd {
+  width: 40px;
+  height: 40px;
+  font-size: 14px;
+}
+
+.avatarLg {
+  width: 56px;
+  height: 56px;
+  font-size: 19px;
+}
+
+/* ---------- чипы и точки ---------- */
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ink2);
+  background: var(--surface2);
+  border: 1px solid var(--line);
+  border-radius: 99px;
+  padding: 1.5px 8px;
+  white-space: nowrap;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.chipPlain {
+  background: transparent;
+}
+
+.chipStatus {
+  color: var(--ok);
+  border-color: transparent;
+  background: transparent;
+  padding-left: 0;
+}
+
+.platformDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 99px;
+  flex: none;
+}
+
+.chip .platformDot {
+  width: 6px;
+  height: 6px;
+}
+
+.platformDotInstagram {
+  background: var(--instagram);
+}
+
+.platformDotFacebook {
+  background: var(--facebook);
+}
+
+.platformDotAll {
+  background: var(--ink3);
+}
+
+.categoryDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 99px;
+  flex: none;
+}
+
+.unread {
+  font-size: 11px;
+  font-weight: 700;
+  background: var(--accent);
+  color: var(--accent-ink);
+  border-radius: 99px;
+  min-width: 19px;
+  height: 19px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 5px;
+  flex: none;
+}
+
+/* ---------- кнопки ---------- */
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: 9px;
+  padding: 6.5px 14px;
+  border: 1px solid transparent;
+}
+
+.buttonPrimary {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+.buttonPrimary:hover {
+  background: var(--accent-hov);
+}
+
+.buttonSecondary {
+  border-color: var(--line2);
+  color: var(--ink2);
+  background: var(--surface);
+}
+
+.buttonSecondary:hover {
+  background: var(--hover);
+}
+
+.buttonGhost {
+  color: var(--ink3);
+  padding: 6.5px 8px;
+}
+
+.buttonGhost:hover {
+  color: var(--ink2);
+}
+
+.buttonSmall {
+  font-size: 12px;
+  padding: 4.5px 11px;
+}
+
+.buttonDanger {
+  color: var(--cat-2);
+}
+
+.buttonSelfStart {
+  align-self: flex-start;
+}
+
+/* ---------- карточки и поля ---------- */
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 14px 16px;
+}
+
+.card h3 {
+  margin: 0 0 10px;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--ink3);
+}
+
+.cardStack {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.cardRow {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.field label {
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--ink3);
+}
+
+.field select,
+.field input[type="text"] {
+  font: inherit;
+  font-size: 13.5px;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--line2);
+  border-radius: 9px;
+  padding: 7px 10px;
+  max-width: 320px;
+}
+
+/* ---------- переключатели ---------- */
+
+.switch {
+  width: 36px;
+  height: 21px;
+  border-radius: 99px;
+  background: var(--line2);
+  position: relative;
+  flex: none;
+  transition: background 0.15s;
+}
+
+.switch::after {
+  content: "";
+  position: absolute;
+  top: 2.5px;
+  left: 2.5px;
+  width: 16px;
+  height: 16px;
+  border-radius: 99px;
+  background: #fff;
+  transition: left 0.15s;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+}
+
+.switch[aria-checked="true"] {
+  background: var(--accent);
+}
+
+.switch[aria-checked="true"]::after {
+  left: 17.5px;
+}
+
+.radioRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+  font-size: 13.5px;
+}
+
+.radio {
+  width: 17px;
+  height: 17px;
+  border-radius: 99px;
+  border: 2px solid var(--line2);
+  flex: none;
+  position: relative;
+}
+
+.radio[data-checked="true"] {
+  border-color: var(--accent);
+}
+
+.radio[data-checked="true"]::after {
+  content: "";
+  position: absolute;
+  inset: 2.5px;
+  border-radius: 99px;
+  background: var(--accent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .switch,
+  .switch::after {
+    transition: none;
+  }
+}
