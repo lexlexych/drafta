@@ -3,7 +3,7 @@ id: T-06
 epic: E-001
 title: "Сиды локальной разработки и автотесты RLS-изоляции"
 type: dev
-status: in_progress
+status: done
 depends_on: [T-05]
 created: 2026-07-19
 updated: 2026-07-20
@@ -258,3 +258,18 @@ runtime-доказательство остаётся ручным шагом T-
 
 Docker, `supabase db reset` и Cloud runtime не запускались по ограничению среды;
 runtime-проверка остаётся ручным шагом T-08.
+
+### Финальное ревью после Доработки 2 — APPROVED
+
+- `lib/rls-test-targets.ts` содержит fail-closed checked-in allowlist: Cloud
+  URL не может быть разрешён переменными окружения. Unit-тест отдельно
+  отклоняет валидный ref `qwertyuiopasdfghjklz` без слова `prod`.
+- `lib/rls-test-config.ts` принимает только exact Cloud URL из allowlist,
+  привязанное confirmation и непустой `sb_publishable_` ключ; JWT и
+  `sb_secret_…` отклоняются до создания клиента.
+- Независимо пройдены `git diff --check 43bba5d^ 43bba5d`, `npm.cmd test`
+  (9 файлов, 32 теста), `npm.cmd run lint` и `npm.cmd run build`.
+- Runtime `db reset`/RLS не является выполненным фактом: по явному решению
+  пользователя он переносится в подробный ручной Cloud dev шаг 2b T-08,
+  который включает сиды, allowlist, зелёный прогон, контролируемое падение
+  policy и восстановление.
