@@ -3,7 +3,7 @@ id: T-02
 epic: E-002
 title: "Адаптер Zernio (DM): подпись, парсинг, фикстуры"
 type: dev
-status: review
+status: done
 depends_on: [T-01]
 created: 2026-07-19
 updated: 2026-07-20
@@ -525,3 +525,111 @@ Zernio DM-payload'а в нормализованное событие — не �
 практике отбросит все настоящие DM-вебхуки. Это затрагивает критерий приёмки
 №3 и №6 (допущения должны быть корректно задокументированы) и является
 блокирующим.
+
+---
+
+## 🔍 Повторное ревью (после «Доработка 1»)
+
+**Вердикт: APPROVED**
+
+### Прогнанные команды (независимо от отчёта разработчика)
+
+```
+npm run lint    # eslint . — 0 ошибок/предупреждений (совпадает с отчётом)
+npm run build   # next build — успешно, TypeScript-проверка прошла,
+                #   14/14 маршрутов сгенерированы (совпадает с отчётом)
+npm test        # vitest run — 17 файлов, 93 теста, все прошли
+                #   (совпадает с отчётом; тот же счётчик, что и до доработки)
+```
+
+`git diff main --stat` — 24 файла: заявленные файлы `lib/channels/zernio/`,
+`.env.example`, файлы тикетов/`STATUS.md` (последние — из T-01, уже
+присутствовали в ветке эпика); `lib/channels/{capabilities,registry,types}.ts`
+и их тесты — тоже T-01 (ветка эпика ещё не смержена в `main`), T-02 их не
+трогает. Скоуп-крипа нет.
+
+### Независимая проверка главного (блокирующего) замечания
+
+Не поверил ни отчёту, ни прошлому ревью на слово — сам сходил за первоисточником:
+
+- Скачал полный OpenAPI YAML (`https://docs.zernio.com/api/openapi`, ~1.7 МБ)
+  и прочитал схемы `WebhookPayloadMessage` (строки 2796-2917 в скачанном
+  файле), `WebhookPayloadMessageDeliveryStatus` (3262-3304),
+  `InboxWebhookMessage` (2592-2695), `InboxWebhookConversation` (2696-2718),
+  `WebhookPayloadReaction` (2737-2795) — целиком, не только по цитатам из
+  отчёта.
+  - Подтверждено дословно: `WebhookPayloadMessage.required: [id, event,
+    message, conversation, account, timestamp]` — `conversation` действительно
+    поле верхнего уровня, соседнее с `message`/`account`; `InboxWebhookMessage`
+    несёт только плоскую строку `conversationId`, вложенного объекта
+    `message.conversation` в схеме нет.
+    То же верно для `WebhookPayloadMessageDeliveryStatus` (`message.delivered/
+    read/failed`) — `message: $ref: InboxWebhookMessage`, `conversation` —
+    тоже отдельное верхнеуровневое поле.
+  - `InboxWebhookMessage.attachments[].required: [type, url]` + необязательный
+    непрозрачный `payload` — полей `file_name`/`mime_type` в схеме
+    действительно нет.
+  - `WebhookPayloadReaction.required: [id, event, reaction, conversation,
+    account, timestamp]` — событие `reaction.received` несёt `reaction`, а не
+    `message`; фикстура `unknown-event-type.json` теперь тоже это отражает.
+- Дополнительно проверил заявление отчёта про заголовок `X-Late-Signature`
+  (не покрыто OpenAPI-спекой, там есть только `X-Zernio-Signature`) —
+  отдельным запросом к `https://docs.zernio.com/webhooks` подтвердил дословно:
+  «`X-Late-Signature`, legacy alias of the above, kept for backward
+  compatibility» — комментарий в `verify.ts:12-14` и тест
+  `verify.test.ts:29-38` соответствуют реальной документации.
+
+Код (`lib/channels/zernio/parse.ts`) сверен построчно со схемой:
+`ZernioRawMessage` больше не содержит `conversation`; `ZernioWebhookEnvelope`
+несёт `conversation?: ZernioRawConversation` как поле верхнего уровня;
+`parseSingleEnvelope` читает `raw.conversation.id`, а не
+`raw.message.conversation.id`; `mapAttachment` читает только `type`/`url` —
+всё соответствует схеме. Фикстуры (`telegram-dm.json`, `whatsapp-dm.json`,
+`whatsapp-dm-with-attachment.json`, `batch-with-unknown-event.json`,
+`unknown-event-type.json`, `unsupported-platform.json`) перегенерированы под
+верную форму конверта — проверено построчным чтением каждого файла.
+`parse.test.ts` проверяет соответствие «поле в поле» через `toEqual`
+(`telegram-dm`, `whatsapp-dm`), в т.ч. `rawMetadata` целиком — тесты действительно
+защищают этот контракт, а не только проходят формально.
+
+Главное замечание предыдущего ревью снято полностью: реальный Zernio
+DM-payload (`message.received` и `message.delivered/read/failed`) теперь
+парсится корректно, `conversation.externalId` берётся из верного поля.
+
+### Некритичные замечания предыдущего ревью
+
+1. Название типов в докстринге (`InboxWebhookAccount`/`InboxWebhookConversation`
+   вместо выдуманных `accountInboxWebhookAccount`/
+   `conversationInboxWebhookConversation`) — исправлено, имена совпадают с
+   реальной OpenAPI-спекой.
+2. Выбор `message.id`/`conversation.id` (внутренние Zernio ID) вместо
+   `platformMessageId`/`platformConversationId` — теперь явно
+   задокументирован комментарием в `parse.ts:228-233`.
+
+### Проверка критериев приёмки (все)
+
+- [x] Zernio-специфичный код только в `lib/channels/zernio/`; наружу — только
+  нормализованные типы T-01 (перепроверено `grep -rniE "zernio" lib app` вне
+  `lib/channels/zernio/` — только независимый mock-слой E-001/T-07 и строковый
+  литерал `ChannelProvider`).
+- [x] `verifyZernioSignature` отклоняет неверную/отсутствующую подпись — 8
+  тестов, все проходят, независимо перепроверено чтением кода и тестов.
+- [x] `parseWebhook` для DM-фикстур возвращает нормализованные события со
+  всеми полями §5, включая сырые метаданные — теперь соответствует реальной
+  схеме Zernio, перепроверено сверкой с первоисточником (см. выше).
+- [x] Юнит-тесты на фикстурах проходят: Telegram, WhatsApp, вложение,
+  невалидная подпись, неизвестный тип события — все 93 теста зелёные.
+- [x] `sendMessage` — явная заглушка `ChannelOperationNotImplementedError`
+  (`adapter.ts:47-49`), тест есть.
+- [x] Допущения задокументированы в коде (докстринги `parse.ts`/`verify.ts`)
+  и в отчёте разработчика (раздел «Доработка 1»), включая честное признание
+  ошибки первого прохода.
+
+### Итог
+
+Блокирующее замечание из первого ревью устранено и независимо перепроверено
+против первоисточника (полная OpenAPI-спецификация Zernio, скачанная заново,
+а не по цитатам из отчёта), а не просто принято на слово. Оба некритичных
+замечания тоже устранены. Инфраструктурная часть (подпись, реестр,
+`adapter.ts`/`index.ts` под `server-only`, тесты, `.env.example`) остаётся без
+претензий. Тикет T-02 выполнен полностью и корректно.
