@@ -3,10 +3,10 @@ id: T-03
 epic: E-001
 title: "RLS-политики изоляции workspace"
 type: dev
-status: todo
+status: done
 depends_on: [T-02]
 created: 2026-07-19
-updated: 2026-07-19
+updated: 2026-07-20
 ---
 
 # T-03. RLS-политики изоляции workspace
@@ -179,5 +179,33 @@ rollback;
 
 ## 🔍 Ревью
 
-_Заполняется агентом-ревьюером: вердикт APPROVED / CHANGES_REQUESTED,
-замечания, что прогнано и с каким результатом._
+### APPROVED
+
+Статически миграция `20260720120000_add_workspace_rls_policies.sql` соответствует
+критериям тикета и tenant-aware схеме T-02: RLS включён на всех 15 таблицах,
+22 политики адресованы только `authenticated`, все нужные операции покрыты, а
+записывающие политики содержат `USING` и/или `WITH CHECK` по назначению. Отдельно
+проверены owner-only мутации `workspaces`, `workspace_members` и `invitations`,
+отсутствие INSERT в `workspaces`, отсутствие клиентской политики и прав у
+`authenticated` на `webhook_events`, а также отзыв прав у `anon`.
+
+`security definer`-helpers читают `workspace_members` вне рекурсии, имеют
+фиксированный пустой `search_path`, квалифицированные имена и ограниченный EXECUTE;
+схема `private` не экспонируется Data API. Политики используют `workspace_id` и не
+ослабляют составные tenant-aware связи из T-02. Лишних изменений вне новой миграции
+и документированного ручного шага T-08 нет.
+
+Прогнано независимо:
+
+- `git diff --check f5020dd^ f5020dd` — PASS;
+- статическая проверка миграции и T-02 — PASS: 15 таблиц с RLS, 22 политики,
+  полный охват таблиц/операций, owner-ограничения, `WITH CHECK`, закрытые
+  `webhook_events` и `anon`;
+- `npm.cmd run lint` — PASS;
+- `npm.cmd run build` — PASS;
+- `npm.cmd test` — PASS (1 test).
+
+`supabase db reset` и runtime SQL-сценарий намеренно не запускались: Docker
+запрещён, а cloud dev-проект не привязан. Это честно отражено в отчёте и вынесено в
+T-08, шаг 2a: после ручного/CI `supabase db push` необходимо проверить изоляцию под
+тестовыми JWT, отсутствие рекурсии, owner-операции, `webhook_events` и `anon`.
