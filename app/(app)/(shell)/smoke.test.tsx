@@ -22,7 +22,59 @@ import { Tabbar } from "./_components/tabbar";
 vi.mock("next/navigation", () => ({
   usePathname: () => "/inbox",
   useSearchParams: () => new URLSearchParams(),
-  useRouter: () => ({ push: vi.fn(), replace: vi.fn(), prefetch: vi.fn() }),
+  useRouter: () => ({
+    push: vi.fn(),
+    replace: vi.fn(),
+    prefetch: vi.fn(),
+    refresh: vi.fn(),
+  }),
+}));
+
+// Settings → Channels (T-04) is the one section on this page backed by real
+// Supabase queries — every other section here stays on `lib/mock` (T-07
+// UI-каркас). `server-only` throws outside a Next build (see route.test.ts's
+// precedent); `lib/db/workspace`/`lib/db/server`/`lib/db/channel-connections`
+// are mocked so the page renders in jsdom without a request context or a
+// live database — two fixture channels preserve this file's existing
+// "renders the channels section" assertions below.
+vi.mock("server-only", () => ({}));
+vi.mock("@/lib/db/workspace", () => ({
+  getAuthenticatedUser: async () => ({ id: "usr_alexey" }),
+  getCurrentWorkspace: async () => ({
+    id: "wsp_tonwerk",
+    name: "Tonwerk Keramik",
+    role: "owner",
+  }),
+}));
+vi.mock("@/lib/db/server", () => ({
+  createServerSupabaseClient: async () => ({}),
+}));
+vi.mock("@/lib/db/channel-connections", () => ({
+  SUPPORTED_CHANNEL_PLATFORMS: ["telegram", "whatsapp", "instagram", "facebook"],
+  listChannelConnections: async () => [
+    {
+      id: "chc_instagram_shop",
+      workspace_id: "wsp_tonwerk",
+      name: "Instagram Магазин",
+      provider: "zernio",
+      platform: "instagram",
+      external_id: "17841400000000001",
+      status: "active",
+      capabilities: {},
+      created_at: "2026-07-19T10:00:00.000Z",
+    },
+    {
+      id: "chc_facebook_page",
+      workspace_id: "wsp_tonwerk",
+      name: "Facebook Страница",
+      provider: "zernio",
+      platform: "facebook",
+      external_id: "102740000000002",
+      status: "active",
+      capabilities: {},
+      created_at: "2026-07-19T10:01:00.000Z",
+    },
+  ],
 }));
 
 afterEach(cleanup);

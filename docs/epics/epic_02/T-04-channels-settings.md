@@ -92,8 +92,225 @@ npm test
 
 ## 🔧 Отчёт разработчика
 
-_Заполняется агентом-разработчиком: что сделано (файлы), как проверено
-(команды и результат), отклонения, «вне скоупа», вопросы._
+### Что сделано
+
+Раздел «Настройки → Каналы» доработан из каркаса E-001/T-07: mock-данные
+заменены реальным CRUD `channel_connections` под RLS.
+
+- **`lib/db/channel-connections.ts`** (новый) — типизированный доступ к
+  `channel_connections`, по образцу `lib/webhooks/process-event.ts`:
+  каждая функция берёт уже готовый `SupabaseClient` параметром, а не создаёт
+  его сама — модуль остаётся чистой функцией своих аргументов и напрямую
+  тестируется без контекста Next-запроса.
+  - `listChannelConnections(supabase, workspaceId)`.
+  - `createChannelConnection(supabase, workspaceId, {platform, externalId, name})`
+    — провайдер всегда `"zernio"` (единственный зарегистрированный, T-02);
+    капабилити проставляются дефолтами платформы из
+    `lib/channels/capabilities.ts` (`DEFAULT_CHANNEL_CAPABILITIES[platform]`,
+    T-01); валидация непустых имени/внешнего ID и поддерживаемой платформы;
+    конфликт уникальности `(workspace_id, provider, external_id)` (код
+    Postgres `23505`) превращается в дружелюбную ошибку, а не падает наружу.
+  - `renameChannelConnection` / `setChannelConnectionStatus` — точечный
+    `update` с явным `.eq("workspace_id", workspaceId)` поверх RLS (defense
+    in depth: не полагаемся только на политику), `"не найдено"` при
+    несовпадении workspace/id вместо тихого 0-эффекта.
+  - `SUPPORTED_CHANNEL_PLATFORMS` — список платформ формы «добавить канал»,
+    выведен из ключей `DEFAULT_CHANNEL_CAPABILITIES` (единый источник истины
+    с T-01, а не задублированный список).
+  - Статус `disconnected`/`active` — отключение это смена статуса, строка не
+    удаляется (каскад стёр бы диалоги/сообщения — вне скоупа эпика).
+- **`app/(app)/(shell)/settings/channels/actions.ts`** (новый, `"use server"`)
+  — тонкие обёртки `createChannelConnectionAction` /
+  `renameChannelConnectionAction` / `setChannelConnectionStatusAction`:
+  сами резолвят workspace текущего пользователя из сессии
+  (`getAuthenticatedUser` + `getCurrentWorkspace`) — **никогда** не берут
+  `workspaceId` от клиента, чтобы клиент не мог подставить чужой workspace;
+  берут RLS-клиент через `createServerSupabaseClient()` (правило «пользовательские
+  запросы — через publishable-клиент под RLS», не через
+  `SUPABASE_SECRET_KEY`); делегируют в `lib/db/channel-connections.ts`;
+  `revalidatePath("/settings")` при успехе.
+- **`app/(app)/(shell)/settings/channels/channels-panel.tsx`** (новый,
+  `"use client"`) — интерактив: карточка списка подключений (имя, платформа
+  через `PlatformDot`, статус, внешний ID), инлайн-переименование
+  (форма на месте строки), отключение/включение с `window.confirm(...)` на
+  отключение, форма «+ Подключить канал» (платформа/внешний ID/имя).
+  Открытый вопрос №1 эпика: т.к. Zernio-адаптер (T-01/T-02) не реализует
+  опциональную `getConnectUrl`, поле внешнего ID — всегда обычный инпут с
+  текстовой подсказкой «взять в дашборде Zernio», без кнопки-ссылки
+  «Подключить в Zernio» (ветка для будущего адаптера с `getConnectUrl` не
+  зашита — см. «Отклонения» ниже).
+- **`app/(app)/(shell)/settings/page.tsx`** — `ChannelsSection` теперь
+  получает реальные строки; данные грузятся один раз в `SettingsPage` **до**
+  возврата JSX (как в `InboxPage`/`CommentsPage`) и только когда
+  `sectionId === "channels"` — остальные разделы (`categories`, `ai`,
+  `team`…) как были, на mock, без обращений к Supabase.
+- **`app/(app)/(shell)/_components/chips.tsx`**, **`ui.module.css`**,
+  **`app/globals.css`** — `PlatformDot` расширен с `Platform` (mock:
+  только instagram/facebook) до `ChannelPlatform` (telegram/whatsapp/
+  instagram/facebook, T-01) — реальные подключения используют все четыре;
+  добавлены `--telegram`/`--whatsapp` токены и классы точек.
+- **`app/(app)/(shell)/settings/settings.module.css`** — стили отключённого
+  подключения (`opacity` по `data-disconnected`), инлайн-формы
+  переименования, текста ошибки.
+- Миграция **не потребовалась**: `channel_connections` (E-001,
+  `20260720103000_create_schema_v1.sql`) уже содержит `name`, `provider`,
+  `platform`, `external_id`, `capabilities` (jsonb), `status`, уникальность
+  `(workspace_id, provider, external_id)` и RLS-политику `for all` любому
+  участнику workspace (`20260720120000_add_workspace_rls_policies.sql`) —
+  ровно то, что нужно тикету.
+
+### Тесты
+
+- **`lib/db/channel-connections.test.ts`** (новый, 8 тестов) — реальный
+  локальный Supabase, по образцу `route.test.ts` (T-03): `describe.skipIf`
+  без `NEXT_PUBLIC_SUPABASE_URL`/`..._PUBLISHABLE_KEY`/`SUPABASE_SECRET_KEY`,
+  admin-клиент. Покрывает шаг 4 тикета: два подключения одной платформы с
+  разными внешними ID — оба видны; капабилити = дефолты платформы;
+  дубль `(workspace, provider, external_id)` — дружелюбная ошибка, исходная
+  строка не тронута; пустые имя/внешний ID/неподдерживаемая платформа
+  отклоняются; переименование меняет `name`; пустое новое имя отклоняется;
+  смена статуса не удаляет строку; чужой (несовпадающий) `workspaceId` не
+  может переименовать/отключить строку — `"не найдено"`, данные не тронуты
+  (то, что явный фильтр `workspace_id` — вторая линия обороны поверх RLS).
+- **`app/(app)/(shell)/settings/channels/channels-panel.test.tsx`** (новый,
+  6 тестов, jsdom) — клиентское поведение с замоканным `./actions`: успешное
+  добавление → `router.refresh()`, дружелюбная ошибка дубля остаётся в форме
+  для исправления, инлайн-переименование, отключение с подтверждением
+  (`window.confirm`) и без него (отказ — action не вызывается), визуальная
+  метка отключённого канала (`data-disconnected`).
+- **`app/(app)/(shell)/smoke.test.tsx`** — раздел «Каналы» страницы теперь
+  реальный (не mock), поэтому добавлены моки `server-only`,
+  `@/lib/db/workspace`, `@/lib/db/server`, `@/lib/db/channel-connections`
+  (2 фикстурных канала) — старые assertions («2 кнопки “Переименовать”»,
+  «+ Подключить канал») по-прежнему проходят; секции `categories`/`ai` не
+  трогали и не мокали (эти пути `sectionId === "channels"` не задевают).
+- **`tests/rls/fixtures.ts`** — добавлен `channelConnectionBId` (seed-ID
+  «Telegram Shop B» workspace B).
+- **`tests/rls/isolation.integration.ts`** — новый тест «denies renaming or
+  disabling another workspace's channel_connection (T-04)»: owner A пытается
+  переименовать/отключить известный по ID `channel_connection` workspace B
+  (0 строк задето, без ошибки — RLS `USING` отфильтровал строку раньше, чем
+  `UPDATE` мог её найти), затем owner B подтверждает свою строку не тронута.
+  SELECT-изоляция `channel_connections` для этого же тикета уже была
+  покрыта общим `workspaceSeededTables`-тестом с epic_01/T-06 (таблица там
+  уже числилась) — не дублировал, только добавил недостающую часть
+  («не меняет») для критерия приёмки «Доступ только у участников workspace».
+
+### Как проверено
+
+Локальный Supabase (уже поднятый в песочнице, `docker`/`dockerd` пришлось
+запустить вручную — контейнеры Supabase сохранялись с прошлой сессии
+T-03) сброшен и пересоздан:
+
+```
+supabase db reset   # применяет все 5 существующих миграций + supabase/seed.sql, без ошибок
+```
+
+```
+npm run lint    # eslint . — 0 ошибок/предупреждений
+npm run build   # next build — TypeScript-проверка прошла, 14/14 маршрутов,
+                #   /settings — ƒ (динамический)
+npm test        # vitest run, с NEXT_PUBLIC_SUPABASE_URL/…_PUBLISHABLE_KEY/
+                #   SUPABASE_SECRET_KEY локального Supabase:
+                #   21 файл, 119 тестов — все прошли
+                #   (было 104 после T-03; +8 channel-connections.test.ts,
+                #   +6 channels-panel.test.tsx, +1 smoke-тест не добавлялся —
+                #   существующие смоук-тесты просто продолжили проходить)
+```
+
+Контрольный прогон **без** переменных локального Supabase — DB-зависимые
+тесты (`route.test.ts` T-03, `channel-connections.test.ts` T-04) корректно
+`skip`-аются (18 skipped = 10+8), а не падают: 19/21 файлов, 101/119
+тестов, `npm test` остаётся зелёным.
+
+Отдельно — RLS-интеграционный набор (не входит в DoD-команды тикета, но
+затрагивается новым тестом):
+
+```
+npm run test:rls   # RLS_TEST_TARGET=local, локальный Supabase:
+                    # 1 файл, 28 тестов — все прошли (было 27 до нового теста)
+```
+
+Ручной прогон сценария ревьюера (п. DoD «Ревьюер вручную проходит сценарий»)
+— выполнен разработчиком заранее теми же функциями, что вызывают server
+actions, через RLS-клиент, аутентифицированный как seed-пользователь
+`owner-a@example.com` (реальная сессия `signInWithPassword`, не admin-обход):
+создан workspace, `owner-a` добавлен в его `workspace_members`, затем
+`createChannelConnection` дважды (Telegram, разные `external_id`) →
+`renameChannelConnection` на первом → `setChannelConnectionStatus` на
+втором (`disconnected`). Проверено и через возвращённые значения функций, и
+отдельным `select` через admin-клиент напрямую в Postgres: оба подключения
+видны, капабилити = дефолты Telegram
+(`{responseWindowHours: null, supportsAttachments: true, supportsReadReceipts: true,
+maxMessageLength: 4096, threadingStyle: "flat", supportsComments: false}`),
+имя первого обновлено, статус второго — `disconnected`, строка не удалена.
+Тестовые данные удалены (`delete from workspaces ...`, каскад подчистил
+`workspace_members`/`channel_connections`); временный скрипт проверки в
+репозиторий не попал (`git status` после прогона — чисто, кроме файлов из
+этого отчёта).
+
+`grep -rniE "\baccount\b"` по всем новым/изменённым файлам — пусто (правило
+1: `workspace`, не `account`; русское UI-слово «аккаунт» в лейблах вида
+«внешний ID аккаунта» — это термин ticket'а для *аккаунта соцсети*, а не
+тенанта, глоссарий явно разрешает такие UI-лейблы). `grep -rniE "zernio"` по
+новым/изменённым файлам — только строковый литерал `"zernio"` (значение
+`provider`), прозовые комментарии и текст UI — ни одного импорта из
+`lib/channels/zernio/` вне самого `lib/channels/` (правило 4).
+`SUPABASE_SECRET_KEY` в новых файлах не встречается — только
+publishable-клиент через `createServerSupabaseClient()` (правило 5).
+
+### Отклонения от плана тикета
+
+1. **Миграция не понадобилась** — схема и RLS `channel_connections` из
+   E-001 уже полностью соответствуют тому, что нужно тикету (см. «Что
+   сделано»). Не отклонение по существу, но стоит явно зафиксировать: шаг 1
+   тикета неявно предполагал возможную доработку схемы, а её не оказалось.
+2. **`getConnectUrl` не подключён динамически.** Ticket допускает два
+   состояния UI в зависимости от того, реализует ли адаптер опциональную
+   `getConnectUrl` (T-01/T-02) — сегодня zernio-адаптер её не реализует
+   (`lib/channels/zernio/adapter.ts` не объявляет это поле), поэтому
+   осознанно не стал добавлять в `page.tsx` динамическую проверку
+   `resolveChannelAdapter("zernio").getConnectUrl` — это тянуло бы
+   side-effect импорт `@/lib/channels/zernio` (а он `"server-only"` и
+   транзитивно требует мокать это в `smoke.test.tsx`) ради ветки, которая
+   сегодня никогда не активна. Вместо этого — жёстко захардкожен «else»-путь
+   (обычный инпут с подсказкой), с комментарием в `channels-panel.tsx`,
+   что при появлении `getConnectUrl` у будущего адаптера сюда нужно
+   вернуться. Если ревьюер сочтёт это неверным компромиссом — готов
+   реализовать динамическую проверку.
+3. **RLS-негативный тест частично переиспользован, а не написан с нуля.**
+   SELECT-изоляция `channel_connections` (участник чужого workspace не
+   видит подключения) уже тестировалась общей инфраструктурой
+   `tests/rls/isolation.integration.ts` из epic_01/T-06 (таблица уже была в
+   `workspaceSeededTables`) — добавил только недостающую часть про изменение
+   (rename/disable), а не продублировал существующее покрытие.
+4. **Server actions (`actions.ts`) не тестируются напрямую** — они вызывают
+   `cookies()` (через `createServerSupabaseClient`)/`getAuthenticatedUser`,
+   которым нужен контекст Next-запроса; вне рендера/запроса это падает.
+   По аналогии с `lib/webhooks/process-event.ts`/`route.ts` в T-03 (роут
+   тестируется напрямую через `NextRequest`, а бизнес-логика — отдельно),
+   вся содержательная логика вынесена в `lib/db/channel-connections.ts` и
+   протестирована там against реальный Postgres; `actions.ts` — тонкая
+   обвязка (резолв workspace из сессии + выбор клиента + `revalidatePath`),
+   её корректность проверена вручную (см. «Как проверено») тем же путём,
+   каким её вызывал бы настоящий клиентский код (RLS-клиент,
+   аутентифицированный реальной сессией).
+
+### Вне скоупа
+
+- Полное удаление подключения (только смена статуса) — прямо вне скоупа
+  эпика по тексту тикета.
+- Счётчики/список каналов в сайдбаре и инбоксе — остаются на mock-данных;
+  их подключают T-05/T-06.
+- Редактирование capabilities после создания — не запрошено тикетом
+  (только дефолты при создании).
+- Кнопка-ссылка «Подключить в Zernio» — см. «Отклонения», п. 2.
+
+### Открытые вопросы
+
+Нет новых — открытый вопрос №1 эпика (привязка аккаунта на стороне Zernio)
+обработан согласно тексту тикета (обычный инпут + подсказка, п. «Отклонения»
+2).
 
 ## 🔍 Ревью
 

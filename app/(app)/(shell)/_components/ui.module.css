@@ -84,6 +84,14 @@
   background: var(--facebook);
 }
 
+.platformDotTelegram {
+  background: var(--telegram);
+}
+
+.platformDotWhatsapp {
+  background: var(--whatsapp);
+}
+
 .platformDotAll {
   background: var(--ink3);
 }
