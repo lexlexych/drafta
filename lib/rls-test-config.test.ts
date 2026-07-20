@@ -1,10 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 
 import { getRlsTestConfig } from "./rls-test-config";
+import { approvedRlsTestCloudDevProjectRefs } from "./rls-test-targets";
 
 const cloudDevProjectRef = "abcdefghijklmnopqrst";
-const currentPublishableKey =
-  "sb_publishable_abcdefghijklmnopqrstuv_12345678";
+const currentPublishableKey = "sb_publishable_arbitrary-current-key";
 
 function createEnvironment(
   overrides: Record<string, string | undefined> = {},
@@ -20,16 +20,25 @@ function createEnvironment(
 }
 
 function createCloudDevEnvironment(
+  projectRef = cloudDevProjectRef,
   overrides: Record<string, string | undefined> = {},
 ): Record<string, string | undefined> {
   return createEnvironment({
-    RLS_TEST_DEV_PROJECT_REF: cloudDevProjectRef,
-    RLS_TEST_REMOTE_CONFIRMATION: `cloud-dev:${cloudDevProjectRef}`,
-    RLS_TEST_SUPABASE_URL: `https://${cloudDevProjectRef}.supabase.co`,
+    RLS_TEST_REMOTE_CONFIRMATION: `cloud-dev:${projectRef}`,
+    RLS_TEST_SUPABASE_URL: `https://${projectRef}.supabase.co`,
     RLS_TEST_TARGET: "cloud-dev",
     ...overrides,
   });
 }
+
+function approveCloudDevProjectRef(projectRef: string): void {
+  // The production type is readonly; a test may model the reviewed file edit.
+  (approvedRlsTestCloudDevProjectRefs as string[]).push(projectRef);
+}
+
+afterEach(() => {
+  (approvedRlsTestCloudDevProjectRefs as string[]).splice(0);
+});
 
 describe("getRlsTestConfig", () => {
   it("accepts an explicitly configured local Supabase target", () => {
@@ -62,34 +71,28 @@ describe("getRlsTestConfig", () => {
     ).toThrow("RLS_TEST_TARGET=local only permits");
   });
 
-  it("requires an explicit Cloud dev project ref before connecting", () => {
+  it("rejects a Cloud target until its ref is in the checked-in allowlist", () => {
     expect(() =>
-      getRlsTestConfig(
-        createEnvironment({
-          RLS_TEST_REMOTE_CONFIRMATION: `cloud-dev:${cloudDevProjectRef}`,
-          RLS_TEST_SUPABASE_URL: `https://${cloudDevProjectRef}.supabase.co`,
-          RLS_TEST_TARGET: "cloud-dev",
-        }),
-      ),
-    ).toThrow(
-      "Missing required RLS test environment variable: RLS_TEST_DEV_PROJECT_REF",
-    );
+      getRlsTestConfig(createCloudDevEnvironment()),
+    ).toThrow("RLS_TEST_SUPABASE_URL project ref is not an approved Cloud dev target");
   });
 
-  it("accepts only the exact confirmed Supabase Cloud dev route", () => {
-    expect(
-      getRlsTestConfig(createCloudDevEnvironment()),
-    ).toMatchObject({
+  it("accepts only the exact confirmed URL of an approved Cloud dev project", () => {
+    approveCloudDevProjectRef(cloudDevProjectRef);
+
+    expect(getRlsTestConfig(createCloudDevEnvironment())).toMatchObject({
       target: "cloud-dev",
       url: `https://${cloudDevProjectRef}.supabase.co`,
     });
   });
 
-  it("rejects a Cloud URL that does not match the declared dev project ref", () => {
+  it("rejects a Cloud URL that is not its exact project endpoint", () => {
+    approveCloudDevProjectRef(cloudDevProjectRef);
+
     expect(() =>
       getRlsTestConfig(
-        createCloudDevEnvironment({
-          RLS_TEST_SUPABASE_URL: "https://zyxwvutsrqponmlkjihg.supabase.co",
+        createCloudDevEnvironment(cloudDevProjectRef, {
+          RLS_TEST_SUPABASE_URL: `https://${cloudDevProjectRef}.supabase.co/not-allowed`,
         }),
       ),
     ).toThrow(
@@ -97,26 +100,20 @@ describe("getRlsTestConfig", () => {
     );
   });
 
-  it("rejects a production-like project ref even when URL and confirmation match", () => {
-    const productionLikeProjectRef = "prodabcdefghijklmnop";
+  it("rejects an unapproved production ref without relying on its name", () => {
+    const unapprovedProductionRef = "qwertyuiopasdfghjklz";
 
     expect(() =>
-      getRlsTestConfig(
-        createCloudDevEnvironment({
-          RLS_TEST_DEV_PROJECT_REF: productionLikeProjectRef,
-          RLS_TEST_REMOTE_CONFIRMATION: `cloud-dev:${productionLikeProjectRef}`,
-          RLS_TEST_SUPABASE_URL: `https://${productionLikeProjectRef}.supabase.co`,
-        }),
-      ),
-    ).toThrow(
-      'RLS_TEST_DEV_PROJECT_REF must not contain the production-like fragment "prod"',
-    );
+      getRlsTestConfig(createCloudDevEnvironment(unapprovedProductionRef)),
+    ).toThrow("RLS_TEST_SUPABASE_URL project ref is not an approved Cloud dev target");
   });
 
-  it("binds the remote confirmation to the declared dev project ref", () => {
+  it("binds the remote confirmation to the approved Cloud dev project ref", () => {
+    approveCloudDevProjectRef(cloudDevProjectRef);
+
     expect(() =>
       getRlsTestConfig(
-        createCloudDevEnvironment({
+        createCloudDevEnvironment(cloudDevProjectRef, {
           RLS_TEST_REMOTE_CONFIRMATION: "cloud-dev-only",
         }),
       ),
@@ -136,14 +133,15 @@ describe("getRlsTestConfig", () => {
       "eyJhbGciOiJIUzI1NiJ9.eyJyb2xlIjoic2VydmljZV9yb2xlIn0.signature",
     ],
     ["a current secret key", "sb_secret_abcdefghijklmnopqrstuv_12345678"],
-    ["a malformed publishable key", "sb_publishable_too_short"],
+    ["an empty publishable key", "sb_publishable_"],
+    ["a whitespace publishable key", "sb_publishable_contains a space"],
   ])("rejects %s as an RLS test key", (_label, key) => {
     expect(() =>
       getRlsTestConfig(
         createEnvironment({ RLS_TEST_SUPABASE_PUBLISHABLE_KEY: key }),
       ),
     ).toThrow(
-      "RLS_TEST_SUPABASE_PUBLISHABLE_KEY must be a current sb_publishable_<22-char>_<8-char> key",
+      "RLS_TEST_SUPABASE_PUBLISHABLE_KEY must be a non-empty sb_publishable_ key",
     );
   });
 });

@@ -3,7 +3,7 @@ id: T-06
 epic: E-001
 title: "Сиды локальной разработки и автотесты RLS-изоляции"
 type: dev
-status: rework
+status: in_progress
 depends_on: [T-05]
 created: 2026-07-19
 updated: 2026-07-20
@@ -141,12 +141,37 @@ npm test
   test:rls` без env ожидаемо fail-fast на `RLS_TEST_TARGET` до сетевого
   запроса; runtime RLS/seed не выполнялся.
 
+### Доработка 2
+
+- Добавлен checked-in fail-closed allowlist
+  [lib/rls-test-targets.ts](../../../lib/rls-test-targets.ts). Он пуст, пока
+  человек не создаст отдельный Supabase Cloud dev-проект и не внесёт его ref
+  по T-08 в reviewed-изменении. Переменные окружения не могут расширить этот
+  список.
+- `lib/rls-test-config.ts` теперь извлекает 20-символьный ref только из exact
+  `https://<ref>.supabase.co` URL и допускает Cloud-цель лишь при совпадении с
+  allowlist. Это отклоняет production-ref без слова `prod` до создания
+  клиентов и последующих INSERT/UPDATE. Confirmation привязан к ref из URL.
+- Проверка ключа приведена к документированному контракту: допускается
+  непустой opaque-ключ с префиксом `sb_publishable_`; JWT (`anon` и
+  `service_role`), `sb_secret_…`, пустое и пробельное значения отклоняются.
+  Внутренний формат opaque-ключа не зафиксирован регулярным выражением.
+- Обновлены [README.md](../../../README.md) и шаг 2b
+  [T-08](T-08-executive-summary.md): описаны versioned allowlist, Cloud dev
+  запуск, безопасный отказ до сети и ручная проверка чувствительности сьюта
+  через временное ослабление `contacts_member_access` с немедленным точным
+  восстановлением policy.
+- Проверено: `npm.cmd test` — успешно (9 файлов, 32 теста); `npm.cmd run
+  lint` — успешно; `npm.cmd run build` — успешно. `npm.cmd run test:rls` с
+  очищенными `RLS_TEST_*` ожидаемо останавливается на отсутствующем
+  `RLS_TEST_TARGET` до сетевого запроса.
+
 ### Отклонения и ограничение среды
 
-- `supabase db reset` не запускался: пользователь явно запретил Docker и
-  локальный Supabase-стек. По той же причине не выполнялся runtime seed/RLS
-  сценарий и намеренное временное ослабление политики. Результат работы не
-  утверждает, что сиды или RLS-политики уже исполнялись в PostgreSQL.
+- Пользователь явно запретил скачивание локальных Docker-образов. Запуск
+  `supabase start` был отменён до результата; `supabase db reset` и локальный
+  runtime seed/RLS-сценарий не выполнялись. Результат работы не утверждает,
+  что сиды или RLS-политики уже исполнялись в PostgreSQL.
 - Для runtime-проверки нужен только выделенный Supabase Cloud **dev** проект:
   `supabase link --project-ref <dev-ref>` → `supabase db push --include-seed`,
   затем явные `RLS_TEST_*` из README и `npm run test:rls`. Проверку намеренно

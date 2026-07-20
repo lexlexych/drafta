@@ -1,3 +1,5 @@
+import { approvedRlsTestCloudDevProjectRefs } from "./rls-test-targets";
+
 export type RlsTestConfig = {
   ownerAPassword: string;
   ownerBPassword: string;
@@ -17,8 +19,7 @@ const requiredVariableNames = [
 ] as const;
 
 const cloudProjectRefPattern = /^[a-z0-9]{20}$/;
-const currentPublishableKeyPattern =
-  /^sb_publishable_[A-Za-z0-9_-]{22}_[A-Za-z0-9_-]{8}$/;
+const publishableKeyPrefix = "sb_publishable_";
 
 function getRequiredVariable(name: string, environment: Environment): string {
   const value = environment[name];
@@ -38,10 +39,14 @@ function getRlsTestUrl(value: string): URL {
   }
 }
 
-function assertCurrentPublishableKey(value: string): void {
-  if (!currentPublishableKeyPattern.test(value)) {
+function assertPublishableKey(value: string): void {
+  if (
+    !value.startsWith(publishableKeyPrefix) ||
+    value.length === publishableKeyPrefix.length ||
+    /\s/.test(value)
+  ) {
     throw new Error(
-      "RLS_TEST_SUPABASE_PUBLISHABLE_KEY must be a current sb_publishable_<22-char>_<8-char> key",
+      "RLS_TEST_SUPABASE_PUBLISHABLE_KEY must be a non-empty sb_publishable_ key",
     );
   }
 }
@@ -64,20 +69,25 @@ function assertLocalTarget(url: URL): void {
 }
 
 function assertCloudDevTarget(url: URL, environment: Environment): void {
-  const devProjectRef = getRequiredVariable(
-    "RLS_TEST_DEV_PROJECT_REF",
-    environment,
-  );
+  const cloudHostSuffix = ".supabase.co";
 
-  if (!cloudProjectRefPattern.test(devProjectRef)) {
+  if (
+    url.protocol !== "https:" ||
+    url.username ||
+    url.password ||
+    url.port ||
+    !url.hostname.endsWith(cloudHostSuffix)
+  ) {
     throw new Error(
-      "RLS_TEST_DEV_PROJECT_REF must be a lowercase 20-character Supabase project ref",
+      "RLS_TEST_SUPABASE_URL must be an exact https://<project-ref>.supabase.co URL",
     );
   }
 
-  if (devProjectRef.includes("prod")) {
+  const devProjectRef = url.hostname.slice(0, -cloudHostSuffix.length);
+
+  if (!cloudProjectRefPattern.test(devProjectRef)) {
     throw new Error(
-      'RLS_TEST_DEV_PROJECT_REF must not contain the production-like fragment "prod"',
+      "RLS_TEST_SUPABASE_URL must contain a lowercase 20-character Supabase project ref",
     );
   }
 
@@ -90,6 +100,12 @@ function assertCloudDevTarget(url: URL, environment: Environment): void {
   ) {
     throw new Error(
       `RLS_TEST_SUPABASE_URL must exactly equal ${expectedUrl}`,
+    );
+  }
+
+  if (!approvedRlsTestCloudDevProjectRefs.includes(devProjectRef)) {
+    throw new Error(
+      "RLS_TEST_SUPABASE_URL project ref is not an approved Cloud dev target. Add it to lib/rls-test-targets.ts through the reviewed T-08 procedure.",
     );
   }
 
@@ -118,7 +134,7 @@ export function getRlsTestConfig(
     environment,
   );
 
-  assertCurrentPublishableKey(publishableKey);
+  assertPublishableKey(publishableKey);
 
   if (target === "local") {
     assertLocalTarget(url);

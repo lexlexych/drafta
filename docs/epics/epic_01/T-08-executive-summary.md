@@ -36,7 +36,7 @@ updated: 2026-07-20
 
 - **Зачем:** схема v1 из репозитория должна попасть в облачные проекты — только через
   миграции, не через дашборд (правило 2).
-- **Что сделать:** локально `supabase link --project-ref <ref>` и `supabase db push` —
+- **Что сделать:** локально `npx supabase link --project-ref <ref>` и `npx supabase db push` —
   сначала на dev, затем на prod. В Authentication → Sign In / Providers включить Email
   и убедиться, что «Confirm email» включён.
 - **Проверка:** в Table Editor обоих проектов видны все 15 таблиц; в каждой включён RLS.
@@ -65,17 +65,42 @@ updated: 2026-07-20
 - **Зачем:** T-06 создаёт временные тестовые контакты для проверки `WITH CHECK`.
   Конфигурация не должна случайно направить эти записи в production-проект.
 - **Что сделать:** связать CLI только с ref dev-проекта из шага 1 и выполнить
-  `supabase db push --include-seed` исключительно в нём. Затем задать
-  `RLS_TEST_TARGET=cloud-dev`, `RLS_TEST_DEV_PROJECT_REF=<dev-ref>`,
+  `npx supabase db push --include-seed` исключительно в нём. Добавить exact ref
+  dev-проекта в `lib/rls-test-targets.ts` отдельным reviewed-коммитом; до этого
+  пустой allowlist намеренно блокирует Cloud-сьют. Затем задать
+  `RLS_TEST_TARGET=cloud-dev`,
   `RLS_TEST_SUPABASE_URL=https://<dev-ref>.supabase.co`,
   `RLS_TEST_REMOTE_CONFIRMATION=cloud-dev:<dev-ref>`, текущий
   `sb_publishable_…` ключ dev-проекта и пароли сидов из README; выполнить
   `npm run test:rls`. Не использовать legacy `anon`/`service_role` JWT или
   `sb_secret_…` ключ. Production связывается и получает миграции отдельной
-  командой `supabase db push` без `--include-seed` и без этого сьюта.
-- **Проверка:** сьют принимает только URL, который в точности соответствует
-  `RLS_TEST_DEV_PROJECT_REF`, и confirmation `cloud-dev:<тот же ref>`; URL/ref
-  mismatch или production-like ref останавливает его до сетевого запроса.
+  командой `npx supabase db push` без `--include-seed` и без этого сьюта.
+- **Проверка:** сьют принимает только exact URL/ref из checked-in allowlist и
+  confirmation `cloud-dev:<тот же ref>`; любая переменная окружения с ref вне
+  allowlist (в том числе production без слова `prod`) останавливает его до
+  сетевого запроса.
+- **Проверка чувствительности теста:** только после успешного прогона и только
+  в disposable Cloud dev через SQL Editor временно ослабить одну policy:
+
+  ```sql
+  alter policy contacts_member_access on public.contacts
+    using (true)
+    with check (true);
+  ```
+
+  Повторный `npm run test:rls` обязан упасть на видимости/записи чужого
+  workspace. Сразу восстановить policy **точно** как в миграции
+  `20260720120000_add_workspace_rls_policies.sql` и запустить сьют повторно:
+
+  ```sql
+  alter policy contacts_member_access on public.contacts
+    using ((select private.is_workspace_member(workspace_id)))
+    with check ((select private.is_workspace_member(workspace_id)));
+  ```
+
+  Этот краткий SQL-эксперимент не является способом менять схему: его нельзя
+  выполнять в production и нельзя оставлять как постоянное расхождение с
+  миграциями.
 
 ### 3. Создать удалённый git-репозиторий и подключить Vercel (регион fra1)
 

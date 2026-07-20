@@ -50,29 +50,31 @@ PWA-инбокс для малого бизнеса: сообщения и ко�
 `supabase-js` только с publishable-ключом: два входят под сид-пользователями,
 третий остаётся анонимным. Перед любым сетевым запросом сьют завершается с
 ошибкой, если отсутствует обязательная конфигурация. Он принимает только
-современный opaque-ключ формата `sb_publishable_<22-char>_<8-char>`:
-произвольные строки, legacy `anon`/`service_role` JWT и `sb_secret_` ключи
-отклоняются до создания клиента.
+непустой современный opaque-ключ с префиксом `sb_publishable_`: произвольные
+строки, legacy `anon`/`service_role` JWT и `sb_secret_` ключи отклоняются до
+создания клиента. Точный внутренний формат opaque-ключа намеренно не
+дублируется в приложении.
 
-После `supabase db push --include-seed` задайте в PowerShell только значения
-выделенного dev-проекта:
+После `npx supabase db push --include-seed` внесите точный ref выделенного
+dev-проекта в versioned allowlist
+[`lib/rls-test-targets.ts`](lib/rls-test-targets.ts) отдельным проверяемым
+изменением. Пустой allowlist — безопасное состояние по умолчанию: Cloud-сьют
+завершится до сети. Затем задайте в PowerShell только значения этого проекта:
 
 ```powershell
 $env:RLS_TEST_TARGET = "cloud-dev"
-$env:RLS_TEST_DEV_PROJECT_REF = "<dev-project-ref>"
-$env:RLS_TEST_REMOTE_CONFIRMATION = "cloud-dev:$($env:RLS_TEST_DEV_PROJECT_REF)"
-$env:RLS_TEST_SUPABASE_URL = "https://<same-dev-project-ref>.supabase.co"
+$env:RLS_TEST_SUPABASE_URL = "https://<dev-project-ref>.supabase.co"
+$env:RLS_TEST_REMOTE_CONFIRMATION = "cloud-dev:<dev-project-ref>"
 $env:RLS_TEST_SUPABASE_PUBLISHABLE_KEY = "sb_publishable_<dev-key>"
 $env:RLS_TEST_USER_A_PASSWORD = "drafta-demo-password"
 $env:RLS_TEST_USER_B_PASSWORD = "drafta-demo-password"
 npm run test:rls
 ```
 
-`RLS_TEST_SUPABASE_URL` должен в точности равняться
-`https://<RLS_TEST_DEV_PROJECT_REF>.supabase.co`, а подтверждение —
-`cloud-dev:<тот же ref>`. Конфигурация отклоняет несовпадение, невалидный ref и
-ref с production-like фрагментом `prod`; это не заменяет правило запускать сьют
-только против выделенного Cloud dev-проекта.
+`RLS_TEST_SUPABASE_URL` должен в точности равняться URL ref из checked-in
+allowlist, а подтверждение — `cloud-dev:<тот же ref>`. Переменные окружения не
+могут расширить allowlist, поэтому production-ref без явного reviewed-изменения
+в проекте также отклоняется до сетевого запроса.
 
 Фикстуры сидов: `owner-a@example.com` и `owner-b@example.com`, у каждого свой
 `workspace`. Сьют проверяет видимость каждой засеянной таблицы только в своём
