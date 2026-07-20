@@ -18,9 +18,9 @@ PWA-инбокс для малого бизнеса: сообщения и ко�
 2. Свяжите CLI именно с dev-проектом и сначала проверьте план миграций:
 
    ```powershell
-   supabase link --project-ref <dev-project-ref>
-   supabase db push --dry-run
-   supabase db push --include-seed
+   npx supabase link --project-ref <dev-project-ref>
+   npx supabase db push --dry-run
+   npx supabase db push --include-seed
    ```
 
    `--include-seed` допустим только для выделенного dev-проекта: он применяет
@@ -88,8 +88,8 @@ Supabase CLI и Docker/совместимый container runtime. Этот реп
 Docker автоматически.
 
 ```powershell
-supabase start
-supabase db reset
+npx supabase start
+npx supabase db reset
 npm run dev
 ```
 
