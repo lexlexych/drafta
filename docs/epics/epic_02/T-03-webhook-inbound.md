@@ -106,8 +106,260 @@ npm test            # включая интеграционные тесты р�
 
 ## 🔧 Отчёт разработчика
 
-_Заполняется агентом-разработчиком: что сделано (файлы), как проверено
-(команды и результат), отклонения, «вне скоупа», вопросы._
+### Что сделано
+
+Реализован пайплайн §6.1 целиком: `POST /api/webhooks/[provider]` резолвит
+адаптер из реестра T-01, проверяет подпись, идемпотентно журналирует событие
+в `webhook_events`, раскладывает `message.received` (`kind = dm`) в
+contact/contact_identity/conversation/message, обновляет статусы доставки и
+fail-safe эмитит `interaction/received`.
+
+- **`supabase/migrations/20260720140000_webhook_inbound_pipeline.sql`** —
+  две точечные правки существующей схемы (обе обязательны для пайплайна
+  этого тикета, не создают новых таблиц — правило 3 не задействовано):
+  1. `webhook_events.workspace_id` стал `nullable`. Причина: пайплайн §6.1
+     пишет идемпотентную запись в `webhook_events` **до** резолва
+     `channel_connection` (шаг 1 тикета — запись журнала; шаг 2 — резолв
+     `channel_connection`, «нет или статус не активен → **пометить
+     webhook_event ошибкой**» — то есть строка уже должна существовать).
+     Для события с неизвестным внешним ID аккаунта workspace принципиально
+     не определим на момент записи — раньше `NOT NULL` это исключал.
+     Как только `channel_connection` находится, реальный `workspace_id`
+     пишется в строку сразу при вставке (без отдельного `UPDATE`) — `null`
+     остаётся только для действительно неизвестных аккаунтов.
+  2. `messages.delivery_status` check-constraint расширен значением `read` —
+     `message.read` реальный тип события Zernio (см. `parse.ts`
+     `DM_EVENT_TYPES`, T-02), шаг 4 тикета явно требует обрабатывать
+     `message.delivered/read/failed`, а исходная схема (E-001) допускала
+     только `received/pending/sent/delivered/failed`.
+  Обе миграции проверены на локальном Supabase (`supabase db reset`,
+  `\d public.webhook_events`, `pg_get_constraintdef`).
+- **`lib/inngest/client.ts`** — `export const inngest = new Inngest({ id:
+  "drafta" })`; `import "server-only"` по аналогии с `lib/db/admin.ts` и
+  `lib/channels/zernio/index.ts` (правило 5 по духу — секрет
+  `INNGEST_EVENT_KEY` сама же SDK читает из `process.env`, если не передан
+  явно, так что этот файл его вообще не трогает). Только клиент — `serve()`
+  и функции-обработчики вне скоупа (открытый вопрос №2 эпика).
+- **`lib/inngest/events.ts`** — `InteractionReceivedEvent` (`messageId`,
+  `conversationId`, `workspaceId` — и только они, правило 7) и
+  `emitInteractionReceived(payload)`: `try/await inngest.send(...) / catch`
+  с `console.error`, никогда не бросает. Юнит-тесты —
+  `lib/inngest/events.test.ts` (2): точный набор ключей payload'а (защита от
+  случайного расширения объекта сверх типа) и fail-safe при `send()`,
+  отклонённом промисом.
+- **`lib/webhooks/process-event.ts`** — `processInboundEvent(supabase,
+  event)`, ядро пайплайна на одно нормализованное событие: резолв
+  `channel_connection` → идемпотентный `insert` в `webhook_events`
+  (конфликт `23505` → тихий выход) → ветвление по типу события:
+  - неизвестный/неактивный `channel_connection` → `webhook_events`
+    помечается ошибкой, `processed_at = now()` (терминальный исход);
+  - `message.received` + `kind = dm` → upsert `contact_identity` (+новый
+    `contact` при первой личности), upsert `conversation` (`kind = dm`), insert
+    `message` (конфликт `(conversation_id, external_id)` → тихий пропуск,
+    без двойного инкремента счётчика), `unread_count += 1` +
+    `last_incoming_at = now()` только для действительно нового сообщения,
+    `webhook_events` помечается обработанным, fail-safe
+    `emitInteractionReceived`;
+  - `message.delivered/read/failed` → находит conversation/message по
+    внешним ID и обновляет `delivery_status`;
+  - любой другой нормализованный тип (например, `comment.received` — вне
+    скоупа эпика) → `webhook_events` помечается обработанным с поясняющим
+    `processing_error`, не ошибка.
+  Гонки на `insert` (два вебхука создают одну и ту же новую личность/
+  диалог одновременно) — конфликт `23505` перехватывается, победитель
+  довыбирается `select`; проигравшая orphan-строка `contact` безвредна
+  (ни на что не ссылается). Различает терминальные исходы (`markProcessed`,
+  `processed_at` проставляется) от потенциально временных сбоев
+  (`markUnprocessedWithError`, `processed_at` остаётся `null` — задел под
+  будущий `reconcile-webhooks`, `webhook_events_processing_idx` уже есть в
+  схеме). Никогда не бросает наружу — каждая ветка ловит свои ошибки.
+- **`app/api/webhooks/[provider]/route.ts`** — тонкий HTTP-адаптер:
+  `import "@/lib/channels/zernio"` (side-effect регистрация в реестре, как
+  и предполагал отчёт T-02) → `resolveChannelAdapter(provider)` (неизвестный
+  провайдер → 404) → `verifyWebhook` (невалидная подпись → 401, в БД ничего
+  не пишется) → `parseWebhook` (невалидный JSON → 400) → цикл
+  `processInboundEvent` по каждому нормализованному событию → `200`. Ни
+  вызовов LLM, ни `lib/ai`, ни внешних отправок (правила 6, 8, 9).
+- **`app/api/webhooks/[provider]/route.test.ts`** — 9 интеграционных
+  тестов, роут вызывается напрямую (`import { POST } from "./route"`) с
+  фикстурами T-02 (`lib/channels/zernio/__fixtures__/`), БД — локальный
+  Supabase:
+  1. happy path — contact/contact_identity/conversation/message созданы,
+     `last_incoming_at`/`unread_count` обновлены, `webhook_events`
+     обработан, `emitInteractionReceived` вызван с правильными ID;
+  2. идемпотентность — тот же payload дважды → одна строка
+     `webhook_events`, одно сообщение, `unread_count` не задвоен, Inngest
+     вызван один раз;
+  3. два сообщения одного отправителя (`whatsapp-dm.json` +
+     `whatsapp-dm-with-attachment.json`, общий `account`/`conversation`/
+     `sender`) → один contact, один contact_identity, одна conversation,
+     два message, `unread_count = 2`;
+  4. невалидная подпись → 401, ни `webhook_events`, ни `message` не
+     созданы, Inngest не вызван;
+  5. неизвестный внешний ID аккаунта → 200, `webhook_events` с
+     `processing_error`, `workspace_id = null`, `message` нет;
+  6. (доп.) неизвестный провайдер → 404;
+  7. (доп.) неактивный `channel_connection` (`status = 'disconnected'`) →
+     200, `webhook_events` с ошибкой, `workspace_id` при этом известен
+     (в отличие от сценария 5), `message` нет;
+  8. (доп.) `message.delivered` после предшествующего `message.received`
+     обновляет `delivery_status` существующего сообщения на `delivered`;
+  9. (доп.) fail-safe: `emitInteractionReceived` подменён на реджектящийся
+     мок → ответ всё равно 200, сообщение всё равно сохранено (вторая
+     линия защиты — собственный `try/catch` `process-event.ts` вокруг всего
+     DM-пайплайна, независимо от того, что сам `emitInteractionReceived` и
+     так не бросает по контракту).
+  Сценарии 6–9 — сверх обязательного списка шага 5 тикета, добавлены для
+  покрытия остальной логики шага 2/4, которую тикет реализовать требует, но
+  явно не тестирует.
+- **`.env.example`** — добавлены `INNGEST_EVENT_KEY`, `INNGEST_SIGNING_KEY`
+  с комментариями (по аналогии с `ZERNIO_*` из T-02).
+- **`docs/epics/epic_02/T-07-executive-summary.md`** — дописан шаг в п. 3
+  «Env-переменные в Vercel и локально»: без `INNGEST_EVENT_KEY`/
+  `INNGEST_SIGNING_KEY` эмиссия `interaction/received` в проде будет
+  постоянно fail-safe отваливаться (не блокирует эпик — обработчиков
+  события ещё нет, — но нужно на старте этапа 2).
+- **`package.json`/`package-lock.json`** — добавлена зависимость `inngest`
+  (`^4.13.0`). Установка потребовала `--legacy-peer-deps` (у `inngest`
+  оптовый `peerDependenciesMeta`-опциональный пир на `@sveltejs/kit`,
+  который конфликтует по версии `vite` с `vitest` в этом дереве —
+  Next.js-приложение этот peer не использует). После установки прогнан
+  обычный `npm install` (без флага) и затем `rm -rf node_modules && npm
+  ci` — лок-файл стабилен и проходит строгую `npm ci`-проверку.
+
+### Как проверено
+
+Локальный Supabase поднят через `supabase start --exclude edge-runtime`
+(в песочнице `edge-runtime`/`imgproxy`/`pooler`-контейнеры не стартуют —
+`runc`/rlimit и TLS к registry.npmjs.org из Deno-воркера блокированы
+прокси песочницы; ни один из этих сервисов пайплайну не нужен — Inngest,
+не Supabase Edge Functions, исполняет тяжёлую логику). Postgres/PostgREST/
+Auth/Realtime — подняты и использованы по-настоящему.
+
+```
+supabase db reset   # применяет 20260720140000_webhook_inbound_pipeline.sql
+                     # поверх схемы E-001, без ошибок
+npm run lint         # eslint . — 0 ошибок/предупреждений
+npm run build        # next build — TypeScript-проверка прошла,
+                      # 15/15 маршрутов, включая ƒ /api/webhooks/[provider]
+npm test              # vitest run — 19 файлов, 104 теста, все прошли
+                       #   (95 прежних из T-01/T-02 + 9 в route.test.ts
+                       #   + 2 в lib/inngest/events.test.ts, минус контроль:
+                       #   без NEXT_PUBLIC_SUPABASE_URL/…_PUBLISHABLE_KEY/
+                       #   SUPABASE_SECRET_KEY route.test.ts корректно
+                       #   skip'ается (7→9 тестов "skipped"), а не падает —
+                       #   проверено отдельным прогоном с `unset`)
+```
+
+Дополнительно — ровно то, что по DoD тикета должен сделать ревьюер, сделано
+и разработчиком заранее (не заменяет независимую проверку ревьюера, но
+подтверждает работоспособность до передачи): поднят `npm run dev`,
+вручную создан workspace + `channel_connection` (`zernio`/`telegram`/
+`acct_tg_98213`) прямым SQL, `lib/channels/zernio/__fixtures__/
+telegram-dm.json` отправлен **дважды** через `curl` с валидной
+HMAC-SHA256-подписью (`X-Zernio-Signature`, секрет из `ZERNIO_WEBHOOK_SECRET`)
+на `POST http://localhost:3000/api/webhooks/zernio`. Оба ответа — `200
+{"ok":true}`. Проверка БД после обоих запросов: одна строка
+`webhook_events` (`processed_at` заполнен, `processing_error` пуст), один
+`contact` («Anna Keller»), один `contact_identity`, одна `conversation`
+(`unread_count = 1`, `last_incoming_at` заполнен), один `message`. Тестовые
+данные удалены (`delete from workspaces ...` — каскад подчистил всё
+остальное), dev-сервер остановлен.
+
+`npm run build`/`npx tsc --noEmit` — отдельно перепроверено, что `tsc
+--noEmit` по всему `tsconfig.json` (в отличие от `next build`, который
+типизирует только реальный граф приложения) даёт 2 ошибки в
+`lib/channels/zernio/adapter.test.ts` — это **не мои файлы и не новая
+проблема**: та же пара ошибок присутствовала уже в T-02 (`next build` их
+не ловит, `npm test` не типочекает); не трогал.
+
+`grep -rniE "zernio" lib app` вне `lib/channels/zernio/` — только
+side-effect импорт в `route.ts`, строковые литералы `"zernio"` (значение
+типа `ChannelProvider`, не сам провайдерский тип) в роуте/тестах и прозовые
+комментарии — правило 4 не нарушено. `grep` на `lib/ai`/`fetch(`/`axios`/
+`sendMessage` в `app/api/webhooks/` и `lib/webhooks/` — пусто (правила 6,
+8, 9). `SUPABASE_SECRET_KEY` читается только в `lib/db/admin.ts` (плюс
+проверка *наличия* переменной, не значения, в `route.test.ts` для
+skip-гейта) — правило 5.
+
+### Отклонения от плана тикета
+
+1. **`webhook_events.workspace_id` сделан nullable + расширен
+   `messages.delivery_status` на `read`** (миграция выше) — в шагах тикета
+   явно не значится отдельным пунктом, но без этого шаг 2 тикета
+   («нет или статус не активен → **пометить webhook_event ошибкой**») и
+   шаг 4 («статусы доставки … `message.delivered/read/failed`») физически
+   невыполнимы при исходной схеме E-001. Оба изменения — точечные правки
+   существующих столбцов той же таблицы, которую и реализует этот тикет,
+   не новые таблицы (правило 3 не задействовано) и не правки через
+   дашборд (правило 2 соблюдено — только миграция).
+2. **`lib/webhooks/process-event.ts` как отдельный модуль**, а не вся
+   логика внутри `route.ts` — тикет явно не предписывает структуру файлов
+   за пределами самого `route.ts`; вынос ядра пайплайна в `lib/webhooks/`
+   сделан для читаемости (шаг 2 тикета — по сути 4 разных под-пайплайна) и
+   не нарушает «провайдер-специфичный код — только в `lib/channels/`»
+   (правило 4) — этот модуль провайдер-агностичен, работает с
+   `NormalizedEvent`.
+3. **Тесты `vi.mock("server-only", () => ({}))`** — тот же приём, что и
+   `zernio/index.test.ts` из T-02 избегал (там — через проверку текста
+   файла), но здесь тикет прямо требует «роут вызывается напрямую», а роут
+   транзитивно тянет `lib/channels/zernio/index.ts` и `lib/db/admin.ts` —
+   оба `import "server-only"`, что делает прямой динамический импорт
+   невозможным без нейтрализации маркер-пакета (проверено эмпирически —
+   `node -e` и голый vitest-тест до и после `vi.mock`). Нейтрализация
+   затрагивает только тестовую среду (сам пакет `server-only` — намеренно
+   no-op вне сборки Next.js в любом случае) и не меняет поведение
+   production-кода.
+4. **6 дополнительных тестов сверх обязательных 5** (см. «Что сделано»,
+   `route.test.ts`) — не отклонение от объёма работы, а расширение
+   покрытия логики, которую шаг 2/4 тикета явно требует реализовать
+   (неактивный канал, статус доставки, неизвестный провайдер, fail-safe на
+   уровне роута), но которую обязательный список шага 5 не называет по
+   имени.
+5. **Скип-гейт DB-тестов по переменным окружения, а не по отдельному
+   npm-скрипту** — DoD тикета явно требует `npm test` (без указания
+   отдельной команды) «включая интеграционные тесты роута»; в проекте уже
+   есть прецедент вынесения БД-тестов в отдельный гейт (`tests/rls/` +
+   `RLS_TEST_TARGET` + отдельный `npm run test:rls`), но там это отдельный
+   npm-скрипт. Раз DoD этого тикета явно требует именно `npm test`,
+   `route.test.ts` вместо этого использует `describe.skipIf` по наличию
+   `NEXT_PUBLIC_SUPABASE_URL`/`NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`/
+   `SUPABASE_SECRET_KEY` (те же переменные, что уже читает
+   `lib/db/admin.ts`/`lib/db/env.ts` — новых имён не вводилось): без них
+   `npm test` в свежем клоне остаётся зелёным (skip, не fail), а по
+   рецепту DoD (`supabase start` → эти три переменные → `supabase db
+   reset` → `npm test`) сценарии реально выполняются против настоящего
+   Postgres — проверено оба состояния (см. «Как проверено»).
+
+### Вне скоупа
+
+- `serve()`-роут `app/api/inngest/route.ts` и Inngest-функции
+  (`generate-draft` и другие) — этап 2 согласно тикету/эпику; здесь только
+  клиент и fail-safe эмиссия `interaction/received`, как и предписывает
+  «Открытый вопрос №2» эпика.
+- Обработка `comment.received` — этап 5; нормализованный тип объявлен
+  (T-01), но в этом роуте — «неизвестный тип, помечается и пропускается»,
+  как и для любого провайдер-агностично необработанного типа.
+- Настройки → Каналы (создание `channel_connection` через UI) — T-04;
+  здесь `channel_connection` только читается, интеграционные тесты сеют
+  тестовые строки напрямую через admin-клиент.
+- Инбокс «Сообщения» (UI, чтение диалогов) — T-05/T-06.
+- Загрузка/превью вложений — вложения только как метаданные в `messages`
+  (уже так у T-01/T-02); без изменений в этом тикете.
+- `reconcile-webhooks` cron (переобработка зависших `webhook_events`) —
+  упомянут в архитектуре как отдельная будущая Inngest-функция; в этом
+  тикете только заложена возможность через `processed_at IS NULL` для
+  временных сбоев (см. «Отклонения», п. 1 и код `process-event.ts`).
+
+### Открытые вопросы
+
+Ручной шаг дописан в `docs/epics/epic_02/T-07-executive-summary.md`
+(п. 3 доп.): нужны `INNGEST_EVENT_KEY`/`INNGEST_SIGNING_KEY` в Vercel и
+`.env.local`, иначе эмиссия `interaction/received` в проде будет постоянно
+уходить в fail-safe-ветку (не блокирует эту эпику, но нужно к началу
+этапа 2). Открытый вопрос №2 эпика («эмиссия Inngest-события на этапе 1»)
+этим тикетом закрыт так, как предполагал сам эпик: клиент и fail-safe
+эмиссия есть, `serve()`/функции-обработчики — нет.
 
 ## 🔍 Ревью
 
