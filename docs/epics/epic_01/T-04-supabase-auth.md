@@ -77,8 +77,70 @@ npm test
 
 ## 🔧 Отчёт разработчика
 
-_Заполняется агентом-разработчиком: что сделано (файлы), как проверено
-(команды и результат), отклонения, «вне скоупа», вопросы._
+### Что сделано
+
+- Добавлены зависимости `@supabase/ssr`, `@supabase/supabase-js` и `server-only`
+  в `package.json` / `package-lock.json`.
+- В `lib/db/` добавлены три изолированных клиента Supabase:
+  - `browser.ts` — singleton browser-клиент только с publishable-ключом;
+  - `server.ts` — SSR-клиент для Server Components, Server Actions и Route Handlers
+    с адаптером cookie `getAll` / `setAll`;
+  - `admin.ts` — admin-клиент с `import "server-only"`, единственное runtime-место
+    обращения к `SUPABASE_SECRET_KEY`, с отключёнными session persistence и refresh.
+  В `env.ts` вынесена валидация двух публичных env-переменных. Общий barrel-файл не
+  создан, чтобы admin-клиент нельзя было случайно импортировать в client bundle.
+- Реализован session refresh и маршрутизация в `lib/db/proxy.ts` + корневом `proxy.ts`:
+  verified `auth.getClaims()`, перенос обновлённых cookie и cache headers в response,
+  редирект неавторизованного пользователя на `/login`, а авторизованного с login/
+  registration/reset-request страниц — на `/dashboard`. `/auth/confirm` и
+  `/update-password` намеренно оставлены доступными для PKCE callback/recovery flow.
+- Добавлены минимальные формы в `app/(auth)/`: `/login`, `/sign-up`,
+  `/forgot-password`, `/update-password`; все проверяют обязательные поля, совпадение
+  и минимальную длину нового пароля, выводят ошибки Supabase. Формы вызывают только
+  Supabase Auth (`signUp`, `signInWithPassword`, `resetPasswordForEmail`, `updateUser`),
+  собственного кода отправки email нет.
+- Добавлены route handlers: `/auth/confirm` обменивает PKCE code на cookie-сессию с
+  защитой от open redirect, `/auth/sign-out` принимает только POST и завершает сессию.
+  Корневой маршрут перенаправляет на `/login`.
+- В `supabase/config.toml` включён `auth.email.enable_confirmations`, а allow-list
+  дополнен локальными callback URL `/auth/confirm` для `127.0.0.1` и `localhost`.
+- В `T-08-executive-summary.md` уточнён продовый callback и добавлен ручной шаг 7a:
+  полный cloud-цикл registration → confirmation → login → password reset после
+  `supabase db push` и настройки Postmark.
+- Добавлены проверки `lib/auth/redirects.test.ts`, `lib/db/env.test.ts`,
+  `lib/db/auth-boundaries.test.ts`, `lib/db/proxy.test.ts`; Vitest получил alias `@`
+  из `tsconfig.json` в `vitest.config.ts`.
+
+### Как проверено
+
+- `npx.cmd tsc --noEmit` — exit code 0.
+- `npm.cmd run lint` — exit code 0, замечаний ESLint нет.
+- `npm.cmd run build` — exit code 0; Next.js 16.2.10 собрал все auth routes и Proxy.
+- `npm.cmd test` — exit code 0: 5 test files, 11 tests passed. В том числе проверены
+  безопасные relative redirects, public env, server-only boundary и Proxy: refresh
+  cookie/cache headers, redirect protected route и recovery-исключение.
+- `rg` по `.next/static` — `SUPABASE_SECRET_KEY` отсутствует в client bundle.
+- `git diff --check` — без ошибок whitespace.
+
+### Отклонения от плана
+
+- Вместо буквально указанного `middleware.ts` создан `proxy.ts` с экспортом `proxy`.
+  Это актуальная file convention Next.js 16.2.10 (Middleware переименован в Proxy);
+  production build подтвердил его как `ƒ Proxy (Middleware)`. Функция выполняет
+  требуемое middleware-обновление сессии без использования deprecated convention.
+
+### Вне скоупа и открытые вопросы
+
+- Не создавалась страница `/dashboard`, onboarding и protected zone: ими владеет T-05.
+  До T-05 успешный вход/подтверждение корректно ведёт на подготовленный, но ещё не
+  реализованный маршрут `/dashboard`.
+- Docker, `supabase start` / `stop`, локальный Supabase и любые cloud-проекты, секреты,
+  SMTP и Vercel не использовались по ограничению среды. Поэтому реальная отправка
+  писем, клик по ссылке и runtime SSR-сессия не проверены; обязательный ручной cloud
+  прогон честно добавлен в T-08, шаг 7a.
+- `npm install` по-прежнему сообщает о двух moderate vulnerabilities, известных со
+  времён T-01; `npm audit fix --force` не запускался, так как это ломающая и вне
+  скоупа T-04 операция.
 
 ## 🔍 Ревью
 
