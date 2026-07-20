@@ -11,7 +11,7 @@
 
 | Эпик | Название | Статус | Тикеты (done/всего) | Создан | Завершён |
 |---|---|---|---|---|---|
-| [E-001](epic_01/_index.md) | Фундамент: Next.js + Supabase Auth, схема БД v1, RLS | in_progress | 1/8 | 2026-07-19 | — |
+| [E-001](epic_01/_index.md) | Фундамент: Next.js + Supabase Auth, схема БД v1, RLS | in_progress | 2/8 | 2026-07-19 | — |
 | [E-002](epic_02/_index.md) | Zernio-контур: адаптер, вебхук, Realtime-инбокс «Сообщения» | todo | 0/7 | 2026-07-19 | — |
 | [E-003](epic_03/_index.md) | AI-черновики с дебаунсом: Inngest + Mistral, generate-draft, панель черновика | todo | 0/8 | 2026-07-19 | — |
 
@@ -22,7 +22,7 @@
 | # | Тикет | Тип | Статус |
 |---|---|---|---|
 | T-01 | [Каркас Next.js-приложения и структура репозитория](epic_01/T-01-nextjs-scaffold.md) | dev | done |
-| T-02 | [Схема БД v1 миграциями: все таблицы §6](epic_01/T-02-db-schema-v1.md) | dev | in_progress |
+| T-02 | [Схема БД v1 миграциями: все таблицы §6](epic_01/T-02-db-schema-v1.md) | dev | done |
 | T-03 | [RLS-политики изоляции workspace](epic_01/T-03-rls-policies.md) | dev | todo |
 | T-04 | [Supabase Auth: регистрация, вход, сброс пароля](epic_01/T-04-supabase-auth.md) | dev | todo |
 | T-05 | [Создание workspace при онбординге и защищённая зона](epic_01/T-05-workspace-bootstrap.md) | dev | todo |

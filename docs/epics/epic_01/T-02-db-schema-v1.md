@@ -3,7 +3,7 @@ id: T-02
 epic: E-001
 title: "Схема БД v1 миграциями: все таблицы §6"
 type: dev
-status: in_progress
+status: done
 depends_on: [T-01]
 created: 2026-07-19
 updated: 2026-07-20
@@ -170,6 +170,47 @@ npm test
   `supabase db push` в связанный cloud dev-проект (§13, T-08 шаг 2).
 
 ## 🔍 Ревью
+
+### Повторное ревью после Доработки 1
+
+**Вердикт: APPROVED**
+
+Предыдущее замечание устранено. Составные tenant-aware FK в
+`supabase/migrations/20260720103000_create_schema_v1.sql` исключают ссылки между
+разными workspace для `contact_identities → contacts`, `conversations →
+channel_connections/contacts`, `messages → conversations/contact_identities/categories`
+и `drafts → conversations/messages`. Трёхколоночные FK диапазона `drafts` также
+требуют, чтобы первое и последнее сообщения принадлежали указанному conversation в
+том же workspace.
+
+Независимо перепроверено:
+
+- статическая проверка tenant-инвариантов — PASS: 15 таблиц, 14 прямых
+  `workspace_id → workspaces(id) on delete cascade`, RLS на всех 15 и 9 составных
+  tenant-aware FK;
+- `on delete cascade` сохранён для связей с каналом, conversation и сообщениями;
+  `on delete set null (<id-колонка>)` для контакта, identity и категории не
+  обнуляет `workspace_id`;
+- `INDEX_AND_REQUIRED_UNIQUENESS_CHECK` — PASS: все 27 явных индексов и
+  обязательные уникальности из тикета присутствуют; полный состав таблиц и поля §6
+  не регрессировали;
+- `rg -n -i "\baccount\b" supabase/migrations` — совпадений нет;
+- фактический diff `d9a2df1` меняет только миграцию и отчёт T-02; изменений схемы
+  вне `supabase/migrations/`, внешних сервисов, LLM, вебхуков или секретов нет;
+- `git diff --check 79deb47 d9a2df1` и `git diff --check` — exit code 0, ошибок
+  форматирования нет (только предупреждения Git о CRLF в уже изменённых служебных
+  файлах);
+- `npm.cmd run lint` — exit code 0;
+- `npm.cmd run build` — exit code 0, Next.js собран, TypeScript-проверка прошла;
+- `npm.cmd test` — exit code 0, 1 test file / 1 test passed.
+
+`supabase db reset` не запускался по явному запрету Docker. Связанного cloud
+dev-проекта нет, а создание/линковка и `supabase db push` во внешний сервис не входят
+в полномочия ревью; корректный ручной шаг по §13 уже описан в T-08, шаге 2. После
+появления dev-проекта остаётся выполнить runtime-проверку применения миграции, RLS и
+каскадов.
+
+### Предыдущее ревью
 
 **Вердикт: CHANGES_REQUESTED**
 
