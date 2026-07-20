@@ -81,8 +81,61 @@ npm test
 
 ## 🔧 Отчёт разработчика
 
-_Заполняется агентом-разработчиком: что сделано (файлы), как проверено
-(команды и результат), отклонения, «вне скоупа», вопросы._
+### Сделано
+
+- Добавлен [supabase/seed.sql](../../../supabase/seed.sql): два подтверждённых
+  login-capable пользователя `owner-a@example.com` и `owner-b@example.com` с
+  фиксированными UUID, отдельными workspace и ролью `owner`. Сид создаёт
+  `ai_settings`, по две строки в `channel_connections`, `contacts`,
+  `contact_identities`, DM-`conversations`, `messages`, `kb_files` и по одному
+  `webhook_events` для каждого workspace. Фикстуры используют только
+  демонстрационные данные и известный development-only пароль
+  `drafta-demo-password`.
+- Добавлен отдельный интеграционный сьют
+  [tests/rls/isolation.integration.ts](../../../tests/rls/isolation.integration.ts)
+  и команда `npm run test:rls`. Она создаёт два аутентифицированных и один anon
+  клиента только с publishable-ключом, проверяет изоляцию всех засеянных
+  workspace-таблиц, INSERT/UPDATE с чужим `workspace_id`, отсутствие anon-доступа
+  ко всем клиентским таблицам и server-only доступ к `webhook_events`.
+- Добавлены `lib/rls-test-config.ts`, его unit-тесты, статический контракт сидов
+  и `vitest.rls.config.ts`. Сьют fail-fast до первого сетевого запроса без
+  обязательных `RLS_TEST_*` переменных; локальная цель ограничена loopback,
+  Cloud-цель — явным `cloud-dev` подтверждением, а `sb_secret_` ключ запрещён.
+  Обычный `npm test` не выполняет интеграционные запросы.
+- Полностью обновлён [README.md](../../../README.md): основной путь — Supabase
+  Cloud dev → `supabase db push --include-seed` → явный `npm run test:rls`,
+  Vercel в `fra1`; production запускается без сидов. Локальный путь сохранён как
+  опциональный и явно помечен требующим Docker.
+
+### Проверено
+
+- `git diff --check` — успешно.
+- `npm.cmd test` — успешно: 9 test files, 24 tests; в том числе статический
+  контракт сидов и валидация безопасной конфигурации RLS.
+- `npm.cmd run lint` — успешно.
+- `npm.cmd run build` — успешно (Next.js production build и TypeScript).
+- `npm.cmd run test:rls` без `RLS_TEST_*` — ожидаемо завершился до подключения с
+  `Missing required RLS test environment variable: RLS_TEST_TARGET`. Это
+  подтверждает безопасный fail-fast, **не** является runtime-проверкой RLS.
+
+### Отклонения и ограничение среды
+
+- `supabase db reset` не запускался: пользователь явно запретил Docker и
+  локальный Supabase-стек. По той же причине не выполнялся runtime seed/RLS
+  сценарий и намеренное временное ослабление политики. Результат работы не
+  утверждает, что сиды или RLS-политики уже исполнялись в PostgreSQL.
+- Для runtime-проверки нужен только выделенный Supabase Cloud **dev** проект:
+  `supabase link --project-ref <dev-ref>` → `supabase db push --include-seed`,
+  затем явные `RLS_TEST_*` из README и `npm run test:rls`. Проверку намеренно
+  ослабленной политики нужно выполнить и вернуть политику в этом же disposable
+  dev-окружении; production для этого не использовать.
+- В T-08 уже есть ручный шаг 2a «Подтвердить RLS-изоляцию в Supabase Cloud dev».
+  Он покрывает требуемую cloud-проверку, поэтому другой тикет не менялся.
+
+### Вне скоупа
+
+- Docker, `supabase start`, `supabase db reset`, внешние Supabase/Vercel/SMTP
+  ресурсы и credentials не создавались и не изменялись.
 
 ## 🔍 Ревью
 
