@@ -3,10 +3,10 @@ id: T-04
 epic: E-001
 title: "Supabase Auth: регистрация, вход, сброс пароля"
 type: dev
-status: todo
+status: rework
 depends_on: [T-01, T-02]
 created: 2026-07-19
-updated: 2026-07-19
+updated: 2026-07-20
 ---
 
 # T-04. Supabase Auth: регистрация, вход, сброс пароля
@@ -144,5 +144,27 @@ npm test
 
 ## 🔍 Ревью
 
-_Заполняется агентом-ревьюером: вердикт APPROVED / CHANGES_REQUESTED,
-замечания, что прогнано и с каким результатом._
+**CHANGES_REQUESTED**
+
+1. Регистрация и сброс пароля не работают при поддержанном локальном origin
+   `http://localhost:3000`. Обе формы передают в Supabase callback вида
+   `/auth/confirm?next=…`, но `site_url` задан как `http://127.0.0.1:3000`, а
+   `additional_redirect_urls` для `localhost` содержит только точный
+   `/auth/confirm` без query-параметров. Supabase проверяет полный `redirect_to`
+   (без fragment) по allow-list, поэтому этот URL не проходит. Нужно согласовать
+   фактический callback и allow-list, сохранив защиту от open redirect, и покрыть
+   сценарии регистрации и reset-письма проверкой.
+
+Самостоятельно проверено:
+
+- `npm.cmd run lint` — успешно.
+- `npm.cmd run build` — успешно; Next.js 16.2.10 собрал auth routes и Proxy.
+- `npm.cmd test` — успешно: 5 test files, 11 tests passed.
+- `npx.cmd tsc --noEmit` — успешно.
+- `git diff --check HEAD` — успешно; ошибок whitespace нет.
+- В `.next/static` нет `SUPABASE_SECRET_KEY`; secret используется только в
+  `lib/db/admin.ts` с `server-only`. Собственного отправителя auth-писем нет.
+
+Docker, `supabase start`, локальный Supabase и cloud-ресурсы не запускались по
+явному ограничению задачи. Ручной cloud-прогон в T-08, шаг 7a, описан корректно,
+но не устраняет указанное расхождение callback URL и allow-list.

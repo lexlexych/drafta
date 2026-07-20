@@ -24,7 +24,7 @@
 | T-01 | [Каркас Next.js-приложения и структура репозитория](epic_01/T-01-nextjs-scaffold.md) | dev | done |
 | T-02 | [Схема БД v1 миграциями: все таблицы §6](epic_01/T-02-db-schema-v1.md) | dev | done |
 | T-03 | [RLS-политики изоляции workspace](epic_01/T-03-rls-policies.md) | dev | done |
-| T-04 | [Supabase Auth: регистрация, вход, сброс пароля](epic_01/T-04-supabase-auth.md) | dev | todo |
+| T-04 | [Supabase Auth: регистрация, вход, сброс пароля](epic_01/T-04-supabase-auth.md) | dev | rework |
 | T-05 | [Создание workspace при онбординге и защищённая зона](epic_01/T-05-workspace-bootstrap.md) | dev | todo |
 | T-06 | [Сиды локальной разработки и автотесты RLS-изоляции](epic_01/T-06-seeds-rls-tests.md) | dev | todo |
 | T-07 | [UI-каркас приложения по макету ui-mockup.html на mock-данных](epic_01/T-07-ui-shell-mockup.md) | dev | todo |
