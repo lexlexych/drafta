@@ -52,6 +52,7 @@ create table public.channel_connections (
   status text not null default 'active' check (status in ('active', 'disconnected', 'error')),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
+  unique (workspace_id, id),
   unique (workspace_id, provider, external_id)
 );
 
@@ -70,6 +71,7 @@ create table public.categories (
   is_default boolean not null default false,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
+  unique (workspace_id, id),
   unique (workspace_id, priority)
 );
 
@@ -86,7 +88,8 @@ create table public.contacts (
   tags text[] not null default '{}',
   avatar_url text,
   created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
+  updated_at timestamptz not null default now(),
+  unique (workspace_id, id)
 );
 
 create index contacts_workspace_id_idx on public.contacts (workspace_id);
@@ -94,13 +97,16 @@ create index contacts_workspace_id_idx on public.contacts (workspace_id);
 create table public.contact_identities (
   id uuid primary key default gen_random_uuid(),
   workspace_id uuid not null references public.workspaces(id) on delete cascade,
-  contact_id uuid not null references public.contacts(id) on delete cascade,
+  contact_id uuid not null,
   platform text not null check (length(btrim(platform)) > 0),
   external_id text not null check (length(external_id) > 0),
   display_name text,
   metadata jsonb not null default '{}'::jsonb check (jsonb_typeof(metadata) = 'object'),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
+  unique (workspace_id, id),
+  foreign key (workspace_id, contact_id)
+    references public.contacts(workspace_id, id) on delete cascade,
   unique (workspace_id, platform, external_id)
 );
 
@@ -110,8 +116,8 @@ create index contact_identities_contact_id_idx on public.contact_identities (con
 create table public.conversations (
   id uuid primary key default gen_random_uuid(),
   workspace_id uuid not null references public.workspaces(id) on delete cascade,
-  channel_connection_id uuid not null references public.channel_connections(id) on delete cascade,
-  contact_id uuid references public.contacts(id) on delete set null,
+  channel_connection_id uuid not null,
+  contact_id uuid,
   kind text not null check (kind in ('dm', 'comments')),
   external_id text not null check (length(external_id) > 0),
   post_metadata jsonb check (post_metadata is null or jsonb_typeof(post_metadata) = 'object'),
@@ -121,6 +127,11 @@ create table public.conversations (
   unread_count integer not null default 0 check (unread_count >= 0),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
+  unique (workspace_id, id),
+  foreign key (workspace_id, channel_connection_id)
+    references public.channel_connections(workspace_id, id) on delete cascade,
+  foreign key (workspace_id, contact_id)
+    references public.contacts(workspace_id, id) on delete set null (contact_id),
   unique (channel_connection_id, external_id)
 );
 
@@ -132,20 +143,27 @@ create index conversations_inbox_idx on public.conversations (workspace_id, kind
 create table public.messages (
   id uuid primary key default gen_random_uuid(),
   workspace_id uuid not null references public.workspaces(id) on delete cascade,
-  conversation_id uuid not null references public.conversations(id) on delete cascade,
-  contact_identity_id uuid references public.contact_identities(id) on delete set null,
+  conversation_id uuid not null,
+  contact_identity_id uuid,
   parent_external_id text,
   external_id text not null check (length(external_id) > 0),
   direction text not null check (direction in ('incoming', 'outgoing')),
   text text not null default '',
   attachments jsonb not null default '[]'::jsonb check (jsonb_typeof(attachments) = 'array'),
-  category_id uuid references public.categories(id) on delete set null,
+  category_id uuid,
   delivery_status text not null default 'received'
     check (delivery_status in ('received', 'pending', 'sent', 'delivered', 'failed')),
   provider_metadata jsonb not null default '{}'::jsonb check (jsonb_typeof(provider_metadata) = 'object'),
   sent_at timestamptz,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
+  unique (workspace_id, conversation_id, id),
+  foreign key (workspace_id, conversation_id)
+    references public.conversations(workspace_id, id) on delete cascade,
+  foreign key (workspace_id, contact_identity_id)
+    references public.contact_identities(workspace_id, id) on delete set null (contact_identity_id),
+  foreign key (workspace_id, category_id)
+    references public.categories(workspace_id, id) on delete set null (category_id),
   unique (conversation_id, external_id)
 );
 
@@ -171,16 +189,22 @@ create index kb_files_workspace_id_idx on public.kb_files (workspace_id);
 create table public.drafts (
   id uuid primary key default gen_random_uuid(),
   workspace_id uuid not null references public.workspaces(id) on delete cascade,
-  conversation_id uuid not null references public.conversations(id) on delete cascade,
-  first_message_id uuid not null references public.messages(id) on delete cascade,
-  last_message_id uuid not null references public.messages(id) on delete cascade,
+  conversation_id uuid not null,
+  first_message_id uuid not null,
+  last_message_id uuid not null,
   text text not null default '',
   status text not null default 'generating'
     check (status in ('generating', 'ready', 'edited', 'sent', 'discarded', 'superseded')),
   model text,
   kb_file_ids uuid[] not null default '{}',
   created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
+  updated_at timestamptz not null default now(),
+  foreign key (workspace_id, conversation_id)
+    references public.conversations(workspace_id, id) on delete cascade,
+  foreign key (workspace_id, conversation_id, first_message_id)
+    references public.messages(workspace_id, conversation_id, id) on delete cascade,
+  foreign key (workspace_id, conversation_id, last_message_id)
+    references public.messages(workspace_id, conversation_id, id) on delete cascade
 );
 
 create index drafts_workspace_id_idx on public.drafts (workspace_id);

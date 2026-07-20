@@ -146,6 +146,29 @@ npm test
   проверки требуют внешних ресурсов и остаются ручным/CI-шагом T-08.
 - Чужое изменение `docs/epics/STATUS.md` не затрагивалось.
 
+### Доработка 1
+
+- В `supabase/migrations/20260720103000_create_schema_v1.sql` добавлены составные
+  уникальные ключи родительских tenant-таблиц и tenant-aware FK для
+  `contact_identities → contacts`, `conversations → channel_connections/contacts`,
+  `messages → conversations/contact_identities/categories` и
+  `drafts → conversations/messages`.
+- Составные FK сохраняют прежнее поведение удаления: связи с контактами, identity и
+  category используют `on delete set null` только для ID-колонки, а связи с каналом,
+  диалогом и сообщениями — `on delete cascade`. Поэтому `workspace_id` не может быть
+  обнулён или связан с данными другого workspace.
+- У `drafts.first_message_id` и `last_message_id` FK включает
+  `(workspace_id, conversation_id, message_id)`: оба сообщения теперь обязаны
+  принадлежать указанному диалогу в том же workspace.
+- Повторная статическая PowerShell-проверка миграции — **PASS**: 15 таблиц, прямые
+  workspace-каскады, timestamps, RLS и все tenant-aware FK, включая связь
+  message→conversation для диапазона черновика. `git diff --check` — exit code 0.
+- Повторные проверки: `npm.cmd run lint` — exit code 0; `npm.cmd run build` — exit
+  code 0; `npm.cmd test` — exit code 0, 1 test file / 1 test passed.
+- `supabase start` и `supabase db reset` не запускались по явному запрету не
+  использовать Docker. Runtime-проверка составных FK и каскадов остаётся после
+  `supabase db push` в связанный cloud dev-проект (§13, T-08 шаг 2).
+
 ## 🔍 Ревью
 
 **Вердикт: CHANGES_REQUESTED**
