@@ -78,8 +78,60 @@ npm test
 
 ## 🔧 Отчёт разработчика
 
-_Заполняется агентом-разработчиком: что сделано (файлы), как проверено
-(команды и результат), отклонения, «вне скоупа», вопросы._
+### Что сделано
+
+- Добавлена миграция
+  `supabase/migrations/20260720130000_create_workspace_rpc.sql` с
+  `public.create_workspace(name text)`. `security definer`-функция с фиксированным
+  пустым `search_path` проверяет `auth.uid()` и непустое имя, затем атомарно создаёт
+  `workspaces`, первую строку `workspace_members` с ролью `owner` и одну строку
+  `ai_settings`. Значения `ai_settings`, включая `debounce_seconds = 60`, берутся из
+  дефолтов схемы. Создание `categories` намеренно отсутствует.
+- У RPC отозван дефолтный `PUBLIC EXECUTE`, право вызова выдано только роли
+  `authenticated`. Прямой INSERT в `workspaces` не открывался: действующие ACL и RLS
+  T-03 остаются прежними.
+- Добавлены серверные helpers `lib/db/workspace.ts`: проверка пользователя через
+  Supabase Auth и получение первого доступного workspace по `created_at` с ролью.
+  Модуль помечен `server-only`.
+- Создана защищённая зона `app/(app)/`: общий layout отправляет пользователя без
+  сессии на `/login`; `/onboarding` отправляет уже состоящего в workspace пользователя
+  на `/dashboard`; layout `/dashboard` отправляет пользователя без workspace на
+  `/onboarding`.
+- Добавлены onboarding-форма и минимальный dashboard. Форма вызывает только
+  `createBrowserSupabaseClient().rpc("create_workspace", …)`, после успеха ведёт на
+  `/dashboard`. Dashboard показывает название workspace, email, роль и POST-кнопку
+  выхода через существующий `/auth/sign-out`.
+- Добавлены стили `app/(app)/app.module.css` и статические тесты границ bootstrap в
+  `lib/workspace-bootstrap.test.ts`.
+
+### Как проверено
+
+- `npm.cmd run lint` — exit code 0.
+- `npx.cmd tsc --noEmit` — exit code 0.
+- `npm.cmd test` — exit code 0: 7 test files, 16 tests passed. Новый набор проверяет
+  security-definer RPC, ограниченный EXECUTE, отсутствие категории, вызов RPC из
+  onboarding и оба redirect-гейта.
+- `npm.cmd run build` — exit code 0. Next.js 16.2.10 собрал `/onboarding` и
+  `/dashboard` как динамические SSR-маршруты.
+- Статическая PowerShell-проверка миграции — PASS: `security definer`, пустой
+  `search_path`, проверка `auth.uid()`, три требуемые INSERT и grant только
+  `authenticated` присутствуют; `public.categories` отсутствует.
+- Статическая PowerShell-проверка миграции T-03 — PASS: у `authenticated` по-прежнему
+  нет INSERT ACL на `public.workspaces`, RLS select-политика workspace присутствует.
+- `rg` по коду T-05 — PASS: запрещённый термин `account` не найден.
+- `git diff --check` — exit code 0; Git вывел только предупреждения CRLF для уже
+  изменённых оркестратором файлов статусов.
+
+### Отклонения, вне скоупа и открытые вопросы
+
+- `supabase db reset` не запускался: пользователь явно запретил Docker, а эта команда
+  требует локальный Docker-стек. Cloud-проект не создавался и не изменялся.
+- Реальный сквозной прогон с подтверждением email и двумя браузерными сессиями не
+  выполнялся: для него нужны применённые в Supabase Cloud миграции, SMTP и реальные
+  тестовые пользователи. Он уже предусмотрен в T-08: шаг 7a и «Финальная проверка
+  эпика», пункты 1–3.
+- Не добавлялись переключатель нескольких workspace, категории, виджеты будущих
+  этапов, внешние сервисы или секреты — это вне скоупа T-05.
 
 ## 🔍 Ревью
 
