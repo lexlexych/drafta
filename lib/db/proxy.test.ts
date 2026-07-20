@@ -111,4 +111,16 @@ describe("updateSession", () => {
 
     expect(response.status).toBe(200);
   });
+
+  it("lets both exact email callback routes exchange their PKCE code", async () => {
+    mocks.getClaims.mockResolvedValue({ data: null, error: null });
+
+    for (const pathname of ["/auth/confirm", "/auth/recovery"]) {
+      const response = await updateSession(
+        new NextRequest(`https://drafta.test${pathname}?code=pkce-code`),
+      );
+
+      expect(response.status).toBe(200);
+    }
+  });
 });

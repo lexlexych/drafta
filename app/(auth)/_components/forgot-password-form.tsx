@@ -3,17 +3,13 @@
 import Link from "next/link";
 import { type FormEvent, useState } from "react";
 
+import {
+  createAuthCallbackUrl,
+  passwordRecoveryCallbackPath,
+} from "@/lib/auth/callback-paths";
 import { createBrowserSupabaseClient } from "@/lib/db/browser";
 
 import styles from "../auth.module.css";
-
-function getRecoveryRedirectUrl(): string {
-  const callbackUrl = new URL("/auth/confirm", window.location.origin);
-
-  callbackUrl.searchParams.set("next", "/update-password");
-
-  return callbackUrl.toString();
-}
 
 export function ForgotPasswordForm() {
   const [email, setEmail] = useState("");
@@ -31,7 +27,10 @@ export function ForgotPasswordForm() {
     const { error: resetError } = await supabase.auth.resetPasswordForEmail(
       email.trim().toLowerCase(),
       {
-        redirectTo: getRecoveryRedirectUrl(),
+        redirectTo: createAuthCallbackUrl(
+          window.location.origin,
+          passwordRecoveryCallbackPath,
+        ),
       },
     );
 

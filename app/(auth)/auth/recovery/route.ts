@@ -1,6 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-import { defaultAuthenticatedPath } from "@/lib/auth/redirects";
 import { createServerSupabaseClient } from "@/lib/db/server";
 
 export const dynamic = "force-dynamic";
@@ -28,7 +27,7 @@ export async function GET(request: NextRequest) {
   }
 
   const response = NextResponse.redirect(
-    new URL(defaultAuthenticatedPath, request.url),
+    new URL("/update-password", request.url),
   );
 
   response.headers.set("Cache-Control", "no-store");

@@ -142,6 +142,25 @@ npm test
   времён T-01; `npm audit fix --force` не запускался, так как это ломающая и вне
   скоупа T-04 операция.
 
+### Доработка 1
+
+- Исправлено замечание ревью о несовпадении `redirectTo` и allow-list. Регистрация
+  теперь передаёт строго `…/auth/confirm`, а сброс пароля — строго
+  `…/auth/recovery`: query-параметры в URL, передаваемых Supabase, не формируются.
+  `app/(auth)/auth/recovery/route.ts` обменивает PKCE code и статически направляет
+  пользователя на `/update-password`; `/auth/confirm` статически направляет на
+  `/dashboard`. Это сохраняет PKCE, не требует wildcard и исключает open redirect
+  в email-flow.
+- Добавлен `lib/auth/callback-paths.ts`; формы используют его для построения exact
+  callbacks. В `lib/db/proxy.ts` `/auth/recovery` разрешён до появления сессии.
+- `supabase/config.toml` содержит все четыре точных локальных URL (confirm и
+  recovery для `127.0.0.1` и `localhost`); T-08, шаг 7, синхронизирован с двумя
+  точными production/preview URL.
+- Добавлены `lib/auth/callback-paths.test.ts` (exact URL без query + allow-list)
+  и проверка обоих callback routes в `lib/db/proxy.test.ts`.
+- Повторно проверено: `npx.cmd tsc --noEmit`, `npm.cmd run lint`,
+  `npm.cmd run build`, `npm.cmd test` — exit code 0; 6 test files, 14 tests passed.
+
 ## 🔍 Ревью
 
 **CHANGES_REQUESTED**

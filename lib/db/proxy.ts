@@ -14,6 +14,7 @@ const unauthenticatedPaths = new Set([
   ...authenticationPagePaths,
   "/update-password",
   "/auth/confirm",
+  "/auth/recovery",
   "/auth/sign-out",
 ]);
 

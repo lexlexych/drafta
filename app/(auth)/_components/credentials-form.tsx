@@ -7,6 +7,10 @@ import {
   defaultAuthenticatedPath,
   getSafeRedirectPath,
 } from "@/lib/auth/redirects";
+import {
+  createAuthCallbackUrl,
+  emailConfirmationCallbackPath,
+} from "@/lib/auth/callback-paths";
 import { createBrowserSupabaseClient } from "@/lib/db/browser";
 
 import styles from "../auth.module.css";
@@ -14,14 +18,6 @@ import styles from "../auth.module.css";
 type CredentialsFormProps = {
   mode: "login" | "sign-up";
 };
-
-function getConfirmationRedirectUrl(nextPath: string): string {
-  const callbackUrl = new URL("/auth/confirm", window.location.origin);
-
-  callbackUrl.searchParams.set("next", nextPath);
-
-  return callbackUrl.toString();
-}
 
 export function CredentialsForm({ mode }: CredentialsFormProps) {
   const isSignUp = mode === "sign-up";
@@ -53,14 +49,14 @@ export function CredentialsForm({ mode }: CredentialsFormProps) {
     const normalizedEmail = email.trim().toLowerCase();
 
     if (isSignUp) {
-      const nextPath = getSafeRedirectPath(
-        new URLSearchParams(window.location.search).get("next"),
-      );
       const { error: signUpError } = await supabase.auth.signUp({
         email: normalizedEmail,
         password,
         options: {
-          emailRedirectTo: getConfirmationRedirectUrl(nextPath),
+          emailRedirectTo: createAuthCallbackUrl(
+            window.location.origin,
+            emailConfirmationCallbackPath,
+          ),
         },
       });
 

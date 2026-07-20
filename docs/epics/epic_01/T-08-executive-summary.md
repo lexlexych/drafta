@@ -107,11 +107,14 @@ updated: 2026-07-20
 
 - **Зачем:** ссылки в письмах должны вести на прод-домен, а не на localhost.
 - **Что сделать:** prod-проект → Authentication → URL Configuration: Site URL —
-  прод-URL Vercel; в Redirect URLs добавить `<prod-url>/auth/confirm` (и такой же
-  путь для preview-доменов Vercel при необходимости). Этот callback обслуживает и
-  подтверждение email, и сброс пароля из T-04.
-- **Проверка:** ссылка из письма подтверждения открывает прод-домен, проходит через
-  `/auth/confirm` и завершает вход.
+  прод-URL Vercel; в Redirect URLs добавить два **точных** пути:
+  `<prod-url>/auth/confirm` для подтверждения email и `<prod-url>/auth/recovery`
+  для сброса пароля (и те же два точных пути для preview-доменов Vercel при
+  необходимости). T-04 намеренно не передаёт query-параметры в `redirectTo`, поэтому
+  wildcard в production не требуется.
+- **Проверка:** ссылка подтверждения проходит через `/auth/confirm` и завершает вход;
+  ссылка сброса проходит через `/auth/recovery` и открывает `/update-password` без
+  ошибки redirect allow-list.
 
 ### 7a. Проверить полный cloud Auth flow
 
