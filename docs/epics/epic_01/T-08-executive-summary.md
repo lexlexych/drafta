@@ -60,6 +60,23 @@ updated: 2026-07-20
   ошибкой, разрешённые запросы участника видят только его workspace. Результат сценария
   зафиксирован в отчёте T-03 и повторён ревьюером.
 
+### 2b. Запустить T-06 RLS-сьют только против точно привязанного dev-проекта
+
+- **Зачем:** T-06 создаёт временные тестовые контакты для проверки `WITH CHECK`.
+  Конфигурация не должна случайно направить эти записи в production-проект.
+- **Что сделать:** связать CLI только с ref dev-проекта из шага 1 и выполнить
+  `supabase db push --include-seed` исключительно в нём. Затем задать
+  `RLS_TEST_TARGET=cloud-dev`, `RLS_TEST_DEV_PROJECT_REF=<dev-ref>`,
+  `RLS_TEST_SUPABASE_URL=https://<dev-ref>.supabase.co`,
+  `RLS_TEST_REMOTE_CONFIRMATION=cloud-dev:<dev-ref>`, текущий
+  `sb_publishable_…` ключ dev-проекта и пароли сидов из README; выполнить
+  `npm run test:rls`. Не использовать legacy `anon`/`service_role` JWT или
+  `sb_secret_…` ключ. Production связывается и получает миграции отдельной
+  командой `supabase db push` без `--include-seed` и без этого сьюта.
+- **Проверка:** сьют принимает только URL, который в точности соответствует
+  `RLS_TEST_DEV_PROJECT_REF`, и confirmation `cloud-dev:<тот же ref>`; URL/ref
+  mismatch или production-like ref останавливает его до сетевого запроса.
+
 ### 3. Создать удалённый git-репозиторий и подключить Vercel (регион fra1)
 
 - **Зачем:** деплой через `git push`; регион функций fra1 — GDPR-решение первого дня.
@@ -157,6 +174,7 @@ updated: 2026-07-20
 - [ ] Шаг 1 — проекты Supabase prod/dev (Frankfurt)
 - [ ] Шаг 2 — миграции применены, email-провайдер включён
 - [ ] Шаг 2a — RLS-изоляция проверена в dev-проекте под тестовыми JWT
+- [ ] Шаг 2b — `test:rls` выполнен против точно привязанного dev-проекта
 - [ ] Шаг 3 — git-репозиторий + Vercel (fra1) + env-переменные
 - [ ] Шаг 4 — Postmark: домен, DKIM/SPF верифицированы
 - [ ] Шаг 5 — custom SMTP в Supabase Auth (prod)

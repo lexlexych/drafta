@@ -100,8 +100,8 @@ npm test
 - Добавлены `lib/rls-test-config.ts`, его unit-тесты, статический контракт сидов
   и `vitest.rls.config.ts`. Сьют fail-fast до первого сетевого запроса без
   обязательных `RLS_TEST_*` переменных; локальная цель ограничена loopback,
-  Cloud-цель — явным `cloud-dev` подтверждением, а `sb_secret_` ключ запрещён.
-  Обычный `npm test` не выполняет интеграционные запросы.
+  а Cloud-цель — явным dev project ref, URL и confirmation. Обычный `npm test`
+  не выполняет интеграционные запросы.
 - Полностью обновлён [README.md](../../../README.md): основной путь — Supabase
   Cloud dev → `supabase db push --include-seed` → явный `npm run test:rls`,
   Vercel в `fra1`; production запускается без сидов. Локальный путь сохранён как
@@ -118,6 +118,29 @@ npm test
   `Missing required RLS test environment variable: RLS_TEST_TARGET`. Это
   подтверждает безопасный fail-fast, **не** является runtime-проверкой RLS.
 
+### Доработка 1
+
+- Исправлены замечания ревью в `lib/rls-test-config.ts`: RLS-сьют принимает
+  только современный opaque-ключ формата
+  `sb_publishable_<22-char>_<8-char>`. Произвольные строки, legacy `anon` и
+  `service_role` JWT, `sb_secret_…` и некорректный publishable-формат
+  отклоняются до `createClient`.
+- Cloud-режим теперь требует `RLS_TEST_DEV_PROJECT_REF` (строчный
+  20-символьный Supabase ref), точный URL
+  `https://<ref>.supabase.co` и привязанное подтверждение
+  `RLS_TEST_REMOTE_CONFIRMATION=cloud-dev:<тот же ref>`. Несовпадение URL/ref
+  и production-like ref с фрагментом `prod` останавливают сьют до сети.
+- Расширены `lib/rls-test-config.test.ts`: добавлены негативные случаи для
+  legacy JWT/service role, arbitrary и malformed ключей, отсутствующего ref,
+  URL mismatch, production-like ref и отвязанного confirmation.
+- Обновлены `README.md` и ручной шаг 2b в
+  `T-08-executive-summary.md`: указан обязательный Cloud dev contract и запрет
+  запускать сьют с legacy/secret ключом или против production.
+- Проверки доработки: `npm.cmd test` — успешно (9 файлов, 31 тест),
+  `npm.cmd run lint` — успешно, `npm.cmd run build` — успешно. `npm.cmd run
+  test:rls` без env ожидаемо fail-fast на `RLS_TEST_TARGET` до сетевого
+  запроса; runtime RLS/seed не выполнялся.
+
 ### Отклонения и ограничение среды
 
 - `supabase db reset` не запускался: пользователь явно запретил Docker и
@@ -129,8 +152,9 @@ npm test
   затем явные `RLS_TEST_*` из README и `npm run test:rls`. Проверку намеренно
   ослабленной политики нужно выполнить и вернуть политику в этом же disposable
   dev-окружении; production для этого не использовать.
-- В T-08 уже есть ручный шаг 2a «Подтвердить RLS-изоляцию в Supabase Cloud dev».
-  Он покрывает требуемую cloud-проверку, поэтому другой тикет не менялся.
+- В T-08 уже был шаг 2a «Подтвердить RLS-изоляцию в Supabase Cloud dev»; в
+  доработке добавлен шаг 2b с точной привязкой `test:rls` к выделенному
+  dev-проекту. Это ручное условие для runtime-проверки, не её выполненный факт.
 
 ### Вне скоупа
 

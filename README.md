@@ -49,22 +49,30 @@ PWA-инбокс для малого бизнеса: сообщения и ко�
 `npm run test:rls` — отдельный интеграционный сьют. Он создаёт три клиента
 `supabase-js` только с publishable-ключом: два входят под сид-пользователями,
 третий остаётся анонимным. Перед любым сетевым запросом сьют завершается с
-ошибкой, если отсутствует обязательная конфигурация, передан
-`sb_secret_` ключ в `RLS_TEST_SUPABASE_PUBLISHABLE_KEY`, либо удалённый запуск
-не подтверждён явно.
+ошибкой, если отсутствует обязательная конфигурация. Он принимает только
+современный opaque-ключ формата `sb_publishable_<22-char>_<8-char>`:
+произвольные строки, legacy `anon`/`service_role` JWT и `sb_secret_` ключи
+отклоняются до создания клиента.
 
 После `supabase db push --include-seed` задайте в PowerShell только значения
 выделенного dev-проекта:
 
 ```powershell
 $env:RLS_TEST_TARGET = "cloud-dev"
-$env:RLS_TEST_REMOTE_CONFIRMATION = "cloud-dev-only"
-$env:RLS_TEST_SUPABASE_URL = "https://<dev-project-ref>.supabase.co"
+$env:RLS_TEST_DEV_PROJECT_REF = "<dev-project-ref>"
+$env:RLS_TEST_REMOTE_CONFIRMATION = "cloud-dev:$($env:RLS_TEST_DEV_PROJECT_REF)"
+$env:RLS_TEST_SUPABASE_URL = "https://<same-dev-project-ref>.supabase.co"
 $env:RLS_TEST_SUPABASE_PUBLISHABLE_KEY = "sb_publishable_<dev-key>"
 $env:RLS_TEST_USER_A_PASSWORD = "drafta-demo-password"
 $env:RLS_TEST_USER_B_PASSWORD = "drafta-demo-password"
 npm run test:rls
 ```
+
+`RLS_TEST_SUPABASE_URL` должен в точности равняться
+`https://<RLS_TEST_DEV_PROJECT_REF>.supabase.co`, а подтверждение —
+`cloud-dev:<тот же ref>`. Конфигурация отклоняет несовпадение, невалидный ref и
+ref с production-like фрагментом `prod`; это не заменяет правило запускать сьют
+только против выделенного Cloud dev-проекта.
 
 Фикстуры сидов: `owner-a@example.com` и `owner-b@example.com`, у каждого свой
 `workspace`. Сьют проверяет видимость каждой засеянной таблицы только в своём
@@ -87,8 +95,9 @@ npm run dev
 
 `supabase db reset` последовательно применяет миграции и
 `supabase/seed.sql`. Для локального запуска RLS-сьюта получите URL и
-publishable-ключ из `supabase status`, затем используйте те же пароли выше и
-следующую безопасную конфигурацию:
+современный `sb_publishable_…` ключ из `supabase status`, затем используйте те
+же пароли выше и следующую безопасную конфигурацию. Legacy `anon` JWT для этого
+сьюта намеренно не принимается:
 
 ```powershell
 $env:RLS_TEST_TARGET = "local"

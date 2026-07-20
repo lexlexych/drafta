@@ -16,7 +16,9 @@ const requiredVariableNames = [
   "RLS_TEST_USER_B_PASSWORD",
 ] as const;
 
-const remoteConfirmation = "cloud-dev-only";
+const cloudProjectRefPattern = /^[a-z0-9]{20}$/;
+const currentPublishableKeyPattern =
+  /^sb_publishable_[A-Za-z0-9_-]{22}_[A-Za-z0-9_-]{8}$/;
 
 function getRequiredVariable(name: string, environment: Environment): string {
   const value = environment[name];
@@ -36,10 +38,10 @@ function getRlsTestUrl(value: string): URL {
   }
 }
 
-function assertPublishableKey(value: string): void {
-  if (value.startsWith("sb_secret_")) {
+function assertCurrentPublishableKey(value: string): void {
+  if (!currentPublishableKeyPattern.test(value)) {
     throw new Error(
-      "RLS_TEST_SUPABASE_PUBLISHABLE_KEY must not contain a Supabase secret key",
+      "RLS_TEST_SUPABASE_PUBLISHABLE_KEY must be a current sb_publishable_<22-char>_<8-char> key",
     );
   }
 }
@@ -62,15 +64,40 @@ function assertLocalTarget(url: URL): void {
 }
 
 function assertCloudDevTarget(url: URL, environment: Environment): void {
-  if (url.protocol !== "https:" || !url.hostname.endsWith(".supabase.co")) {
+  const devProjectRef = getRequiredVariable(
+    "RLS_TEST_DEV_PROJECT_REF",
+    environment,
+  );
+
+  if (!cloudProjectRefPattern.test(devProjectRef)) {
     throw new Error(
-      "RLS_TEST_TARGET=cloud-dev requires an https://<project-ref>.supabase.co URL",
+      "RLS_TEST_DEV_PROJECT_REF must be a lowercase 20-character Supabase project ref",
     );
   }
 
-  if (environment.RLS_TEST_REMOTE_CONFIRMATION !== remoteConfirmation) {
+  if (devProjectRef.includes("prod")) {
     throw new Error(
-      `Remote RLS tests require RLS_TEST_REMOTE_CONFIRMATION=${remoteConfirmation}`,
+      'RLS_TEST_DEV_PROJECT_REF must not contain the production-like fragment "prod"',
+    );
+  }
+
+  const expectedUrl = `https://${devProjectRef}.supabase.co`;
+
+  if (
+    url.toString() !== `${expectedUrl}/` ||
+    url.username ||
+    url.password
+  ) {
+    throw new Error(
+      `RLS_TEST_SUPABASE_URL must exactly equal ${expectedUrl}`,
+    );
+  }
+
+  const expectedConfirmation = `cloud-dev:${devProjectRef}`;
+
+  if (environment.RLS_TEST_REMOTE_CONFIRMATION !== expectedConfirmation) {
+    throw new Error(
+      `Remote RLS tests require RLS_TEST_REMOTE_CONFIRMATION=${expectedConfirmation}`,
     );
   }
 }
@@ -91,7 +118,7 @@ export function getRlsTestConfig(
     environment,
   );
 
-  assertPublishableKey(publishableKey);
+  assertCurrentPublishableKey(publishableKey);
 
   if (target === "local") {
     assertLocalTarget(url);
