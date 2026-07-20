@@ -3,7 +3,7 @@ id: T-03
 epic: E-002
 title: "Вебхук-роут с идемпотентностью: пайплайн входящего"
 type: dev
-status: in_progress
+status: review
 depends_on: [T-02]
 created: 2026-07-19
 updated: 2026-07-20
