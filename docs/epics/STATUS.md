@@ -12,7 +12,7 @@
 | Эпик | Название | Статус | Тикеты (done/всего) | Создан | Завершён |
 |---|---|---|---|---|---|
 | [E-001](epic_01/_index.md) | Фундамент: Next.js + Supabase Auth, схема БД v1, RLS | done | 7/8 | 2026-07-19 | 2026-07-20 |
-| [E-002](epic_02/_index.md) | Zernio-контур: адаптер, вебхук, Realtime-инбокс «Сообщения» | in_progress | 2/7 | 2026-07-19 | — |
+| [E-002](epic_02/_index.md) | Zernio-контур: адаптер, вебхук, Realtime-инбокс «Сообщения» | in_progress | 3/7 | 2026-07-19 | — |
 | [E-003](epic_03/_index.md) | AI-черновики с дебаунсом: Inngest + Mistral, generate-draft, панель черновика | todo | 0/8 | 2026-07-19 | — |
 
 ## E-001. Фундамент: Next.js + Supabase Auth, схема БД v1, RLS
@@ -38,7 +38,7 @@
 |---|---|---|---|
 | T-01 | [Ядро слоя каналов: типы, интерфейс адаптера, реестр](epic_02/T-01-channels-core.md) | dev | done |
 | T-02 | [Адаптер Zernio (DM): подпись, парсинг, фикстуры](epic_02/T-02-zernio-adapter.md) | dev | done |
-| T-03 | [Вебхук-роут с идемпотентностью: пайплайн входящего](epic_02/T-03-webhook-inbound.md) | dev | review |
+| T-03 | [Вебхук-роут с идемпотентностью: пайплайн входящего](epic_02/T-03-webhook-inbound.md) | dev | done |
 | T-04 | [Настройки → Каналы: подключения с именами](epic_02/T-04-channels-settings.md) | dev | todo |
 | T-05 | [Инбокс «Сообщения»: список диалогов и тред](epic_02/T-05-inbox-messages.md) | dev | todo |
 | T-06 | [Realtime-обновления инбокса](epic_02/T-06-realtime-inbox.md) | dev | todo |
