@@ -3,7 +3,7 @@ id: T-02
 epic: E-002
 title: "Адаптер Zernio (DM): подпись, парсинг, фикстуры"
 type: dev
-status: in_progress
+status: review
 depends_on: [T-01]
 created: 2026-07-19
 updated: 2026-07-20
