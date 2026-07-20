@@ -69,7 +69,7 @@ describe("parseZernioWebhook", () => {
     expect(events[0]).toEqual(expected);
   });
 
-  it("maps attachment metadata (type/url/fileName/mimeType) from a fixture with an attachment", () => {
+  it("maps attachment metadata (type/url) from a fixture with an attachment; fileName/mimeType stay undefined (not in Zernio's real schema)", () => {
     const rawBody = readFixture("whatsapp-dm-with-attachment.json");
 
     const events = parseZernioWebhook({ rawBody, headers: {} });
@@ -79,8 +79,6 @@ describe("parseZernioWebhook", () => {
       {
         type: "image",
         url: "https://media.zernio.com/wa/acct_wa_31207/img_5f3c1a.jpg",
-        fileName: "IMG_20260720_0925.jpg",
-        mimeType: "image/jpeg",
       },
     ]);
   });
@@ -123,9 +121,9 @@ describe("parseZernioWebhook", () => {
       id: "wh_evt_delivered_1",
       event: "message.delivered",
       account: { id: "acct_tg_98213", platform: "telegram" },
+      conversation: { id: "tg_chat_77120" },
       message: {
         id: "tg_msg_out_1",
-        conversation: { id: "tg_chat_77120" },
         sender: { id: "acct_tg_98213", name: null },
       },
     });

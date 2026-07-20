@@ -7,31 +7,45 @@ import type {
 } from "../types";
 
 /**
- * Raw Zernio webhook envelope — this adapter's working assumption for the
- * inbox webhook shape.
+ * Raw Zernio webhook envelope — this adapter's model of the inbox webhook
+ * shape.
  *
- * Confirmed against docs.zernio.com (checked 2026-07-20): every inbox
- * webhook call delivers a JSON object with top-level fields `id` (stable
+ * Confirmed against Zernio's public OpenAPI spec
+ * (https://docs.zernio.com/api/openapi, re-checked 2026-07-20 against the
+ * `WebhookPayloadMessage` / `WebhookPayloadMessageDeliveryStatus` schemas
+ * after epic E-002's review caught the first pass mis-reading it — see
+ * "Доработка 1" in this ticket's dev report): every inbox webhook call
+ * delivers a JSON object with **top-level, sibling** fields `id` (stable
  * webhook event id), `event` (event name, e.g. "message.received"),
- * `account` (typed `accountInboxWebhookAccount` in their schema — the
- * connected social account), `message` (typed
- * `conversationInboxWebhookConversation` — the conversation/message
- * payload), an optional `metadata` (present only for interactive taps —
- * quick reply / postback / inline keyboard callback), and `timestamp`.
- * Zernio also documents dozens of non-DM event types on the same envelope
+ * `account` (schema `InboxWebhookAccount` — the connected social account),
+ * `message` (schema `InboxWebhookMessage`), `conversation` (schema
+ * `InboxWebhookConversation` — a *sibling* of `message`, not nested inside
+ * it), an optional `metadata` (present only for interactive taps — quick
+ * reply / postback / inline keyboard callback), and `timestamp`. Zernio also
+ * documents dozens of non-DM event types on the same shape of envelope
  * (comment.received, reaction.received, call.*, account.connected, ...) —
  * see docs/epics/epic_02/T-02-zernio-adapter.md "Скоуп — только DM".
  *
- * Zernio's public docs stop short of the full field-by-field schema for the
- * nested `account`/`message` objects (epic E-002 open question #1,
- * docs/epics/epic_02/_index.md) — the nested shapes below
- * (`ZernioRawAccount`, `ZernioRawMessage`, ...) are this adapter's working
- * assumption, chosen to carry exactly what
- * docs/architecture/05-channels.md's normalized event needs. Nothing is
- * lost if these assumed field names turn out wrong once live payloads are
- * available (T-07, step 6): the *entire* raw envelope is also copied
- * verbatim into `NormalizedEvent.rawMetadata`, and this file is the single
- * place the mapping needs correcting.
+ * `InboxWebhookMessage` itself only exposes a flat `conversationId` string —
+ * there is no nested `message.conversation` object in the real schema; the
+ * conversation's identity for a DM thread comes from the envelope's
+ * top-level `conversation.id` (Zernio's own internal conversation ID; the
+ * schema also exposes `platformConversationId`, the platform-native ID —
+ * see the `conversation` field mapping in `parseSingleEnvelope` below for
+ * why this adapter picks the internal one).
+ *
+ * `InboxWebhookMessage.attachments[]` only carries `type`, `url`, and an
+ * opaque `payload` object ("additional attachment metadata", undocumented
+ * sub-shape) — there is no `file_name`/`mime_type` field. See
+ * `mapAttachment` below.
+ *
+ * The nested shapes below (`ZernioRawAccount`, `ZernioRawMessage`,
+ * `ZernioRawConversation`, `ZernioRawAttachment`) only declare the subset of
+ * each real schema's fields this adapter actually maps — not the full
+ * schema (e.g. WhatsApp BSUID fields, Instagram profile flags, Meta ad
+ * referral data are real fields but out of this ticket's DM-mapping scope).
+ * Nothing is lost even so: the *entire* raw envelope is also copied verbatim
+ * into `NormalizedEvent.rawMetadata`.
  *
  * Zernio's docs don't say whether one HTTP call can batch multiple events;
  * `parseZernioWebhook` accepts either a single envelope object or an array
@@ -43,11 +57,17 @@ interface ZernioRawAccount {
   platform: string;
 }
 
+interface ZernioRawConversation {
+  /** Zernio's internal conversation ID — see `parseSingleEnvelope` for why this, not `platformConversationId`, is used as the normalized conversation's `externalId`. */
+  id: string;
+  platformConversationId?: string;
+}
+
 interface ZernioRawAttachment {
   type: string;
   url?: string;
-  file_name?: string;
-  mime_type?: string;
+  /** Opaque, undocumented sub-shape ("additional attachment metadata") — kept only via `rawMetadata`, not mapped field by field. */
+  payload?: Record<string, unknown>;
 }
 
 interface ZernioRawSender {
@@ -57,7 +77,6 @@ interface ZernioRawSender {
 
 interface ZernioRawMessage {
   id: string;
-  conversation: { id: string };
   text?: string | null;
   attachments?: ZernioRawAttachment[];
   sender: ZernioRawSender;
@@ -68,6 +87,7 @@ interface ZernioWebhookEnvelope {
   event: string;
   account: ZernioRawAccount;
   message?: ZernioRawMessage;
+  conversation?: ZernioRawConversation;
   metadata?: Record<string, unknown> | null;
   timestamp?: string;
 }
@@ -122,28 +142,39 @@ function isZernioMessage(value: unknown): value is ZernioRawMessage {
   }
 
   const candidate = value as Record<string, unknown>;
-  const conversation = candidate.conversation as
-    | Record<string, unknown>
-    | undefined;
   const sender = candidate.sender as Record<string, unknown> | undefined;
 
   return (
     typeof candidate.id === "string" &&
-    typeof conversation === "object" &&
-    conversation !== null &&
-    typeof conversation.id === "string" &&
     typeof sender === "object" &&
     sender !== null &&
     typeof sender.id === "string"
   );
 }
 
+function isZernioConversation(value: unknown): value is ZernioRawConversation {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+
+  const candidate = value as Record<string, unknown>;
+
+  return typeof candidate.id === "string";
+}
+
+/**
+ * Zernio's real attachment schema (`InboxWebhookMessage.attachments`,
+ * confirmed via docs.zernio.com/api/openapi) only exposes `type`, `url`,
+ * and an opaque `payload` object — there's no documented `file_name` or
+ * `mime_type` field. `fileName`/`mimeType` are deliberately left `undefined`
+ * here rather than guessed out of `payload`'s undocumented sub-shape;
+ * nothing is lost regardless, since `payload` — like the rest of the
+ * envelope — also survives verbatim in `NormalizedEvent.rawMetadata`.
+ */
 function mapAttachment(raw: ZernioRawAttachment): NormalizedAttachment {
   return {
     type: raw.type ?? "unknown",
     url: raw.url,
-    fileName: raw.file_name,
-    mimeType: raw.mime_type,
   };
 }
 
@@ -173,6 +204,13 @@ function parseSingleEnvelope(raw: unknown): NormalizedEvent | null {
     return null;
   }
 
+  if (!isZernioConversation(raw.conversation)) {
+    console.warn(
+      `[zernio] skipping "${raw.event}" event with no usable conversation payload (event id: ${raw.id})`,
+    );
+    return null;
+  }
+
   if (!isKnownPlatform(raw.account.platform)) {
     console.warn(
       `[zernio] skipping event for unsupported platform "${raw.account.platform}" (event id: ${raw.id})`,
@@ -187,7 +225,13 @@ function parseSingleEnvelope(raw: unknown): NormalizedEvent | null {
     platform: raw.account.platform,
     externalAccountId: raw.account.id,
     interactionKind: "dm",
-    conversation: { externalId: raw.message.conversation.id },
+    // `conversation.id` (Zernio's internal conversation ID) rather than
+    // `conversation.platformConversationId`: same choice as `message.id`
+    // below (Zernio's internal message ID, not `platformMessageId`) — this
+    // adapter consistently keys on Zernio's own IDs, which is what
+    // `webhook_events`/`messages` idempotency needs (the provider in
+    // §5's terms is Zernio, not the underlying platform).
+    conversation: { externalId: raw.conversation.id },
     message: {
       externalId: raw.message.id,
       text: raw.message.text ?? "",

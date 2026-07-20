@@ -6,23 +6,33 @@
     "id": "acct_wa_31207",
     "platform": "whatsapp"
   },
+  "conversation": {
+    "id": "wa_chat_12938",
+    "platformConversationId": "491512345678",
+    "status": "active"
+  },
   "message": {
     "id": "wa_msg_88422",
-    "conversation": {
-      "id": "wa_chat_12938"
-    },
+    "conversationId": "wa_chat_12938",
+    "platform": "whatsapp",
+    "platformMessageId": "wamid.HBgLNDkxNTEyMzQ1Njc4FQIAEhi",
+    "direction": "incoming",
     "text": "Вот фото упаковки, которая пришла повреждённой",
     "attachments": [
       {
         "type": "image",
         "url": "https://media.zernio.com/wa/acct_wa_31207/img_5f3c1a.jpg",
-        "file_name": "IMG_20260720_0925.jpg",
-        "mime_type": "image/jpeg"
+        "payload": {
+          "sha256": "b1946ac92492d2347c6235b4d2611184"
+        }
       }
     ],
     "sender": {
       "id": "wa_user_60214",
-      "name": "+49 151 2345678"
-    }
+      "name": "+49 151 2345678",
+      "phoneNumber": "+49 151 2345678"
+    },
+    "sentAt": "2026-07-20T09:25:47.000Z",
+    "isRead": false
   }
 }

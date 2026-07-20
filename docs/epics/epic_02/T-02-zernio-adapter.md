@@ -271,6 +271,108 @@ Next.js (проверено в песочнице) — значит, файл с
 остаётся открытым до живого доступа к Zernio (T-07, шаг 6), но теперь
 частично сужен подтверждёнными фактами из публичной документации.
 
+### Доработка 1
+
+Устранено главное (блокирующее) замечание ревью и оба некритичных.
+
+**Независимая проверка перед правкой.** Прежде чем менять код, сходил за
+реальной OpenAPI-спецификацией `https://docs.zernio.com/api/openapi`
+(полный YAML, ~1.7 МБ) и нашёл в ней схемы `WebhookPayloadMessage`,
+`WebhookPayloadMessageDeliveryStatus`, `InboxWebhookMessage`,
+`InboxWebhookConversation`, `InboxWebhookAccount`, `WebhookPayloadReaction`
+целиком. Замечание ревью подтвердилось дословно:
+
+- `WebhookPayloadMessage.required: [id, event, message, conversation,
+  account, timestamp]` — `conversation` действительно поле верхнего уровня
+  конверта, соседнее с `message` и `account`, а не вложено в `message`.
+- `InboxWebhookMessage` несёт только плоскую строку `conversationId`;
+  никакого объекта `message.conversation` в схеме нет.
+- `InboxWebhookMessage.attachments[].items.required: [type, url]`,
+  плюс необязательный непрозрачный объект `payload` («Additional attachment
+  metadata») — полей `file_name`/`mime_type` в схеме нет.
+
+Первоначальный отчёт (раздел «Допущения о формате Zernio» выше) ошибочно
+утверждал, что публичная документация «не раскрывает точные вложенные поля
+`account`/`message`» — это было неверно: спецификация раскрывает их
+полностью, и ревью справедливо это указало. Формулировка в докстринге
+`parse.ts` переписана заново (см. п.1 ниже), чтобы не повторять эту ошибку;
+текст исходного раздела «Допущения» ниже по файлу оставлен как есть
+(исторический след первого прохода), а не переписан задним числом.
+
+**Что изменено:**
+
+1. `lib/channels/zernio/parse.ts`:
+   - `ZernioRawMessage` больше не содержит вложенное поле `conversation` —
+     оно убрано из типа целиком.
+   - Добавлен отдельный тип `ZernioRawConversation { id, platformConversationId?
+     }` и поле `conversation?: ZernioRawConversation` в
+     `ZernioWebhookEnvelope` — как поле верхнего уровня, наравне с `account`
+     и `message`.
+   - `isZernioMessage()` больше не требует вложенный `conversation`; добавлен
+     отдельный валидатор `isZernioConversation()`, вызываемый в
+     `parseSingleEnvelope()` для `raw.conversation`.
+   - `parseSingleEnvelope()` теперь читает `raw.conversation.id`
+     (верхнеуровневое поле) вместо `raw.message.conversation.id` для
+     `NormalizedConversationRef.externalId`; добавлен явный комментарий,
+     почему выбран внутренний Zernio ID conversation'а
+     (`conversation.id`), а не платформенный
+     (`conversation.platformConversationId`) — тот же принцип, что уже был
+     применён к `message.id` (внутренний ID сообщения, не
+     `platformMessageId`): некритичное замечание ревью №2 просило
+     явно зафиксировать этот выбор — сделано.
+   - Докстринг вверху файла переписан: описывает подтверждённую схему
+     (`conversation` — сосед `message`/`account`), ссылается на реальные
+     имена схем `InboxWebhookAccount`/`InboxWebhookMessage`/
+     `InboxWebhookConversation` (без выдуманного префикса
+     `accountInboxWebhookAccount`/`conversationInboxWebhookConversation` —
+     некритичное замечание ревью №1).
+2. `mapAttachment()` (`parse.ts`) читает только `type`/`url` — как в реальной
+   схеме `InboxWebhookMessage.attachments[]`. `ZernioRawAttachment` вместо
+   `file_name`/`mime_type` содержит `payload?: Record<string, unknown>`
+   (непрозрачный объект из реальной схемы). `fileName`/`mimeType`
+   нормализованного вложения сознательно остаются `undefined` — реальная
+   схема их не даёт, а гадать по недокументированной вложенной форме
+   `payload` не стал; ничего не теряется — `payload`, как и весь конверт,
+   по-прежнему попадает в `rawMetadata` целиком. Выбор задокументирован
+   комментарием над `mapAttachment()`.
+3. Фикстуры перегенерированы под исправленную форму конверта — `conversation`
+   вынесено на верхний уровень (соседом `message`/`account`) во всех:
+   `telegram-dm.json`, `whatsapp-dm.json`, `whatsapp-dm-with-attachment.json`,
+   `batch-with-unknown-event.json`, `unsupported-platform.json`. Заодно
+   приближены к реальной схеме (не обязательно для тестов, но чтобы
+   фикстуры не вводили в заблуждение): у `message` добавлены
+   `conversationId`/`platform`/`platformMessageId`/`direction`/`sentAt`/
+   `isRead`, у `whatsapp-*` — `sender.phoneNumber`. Вложение в
+   `whatsapp-dm-with-attachment.json` — теперь `{ type, url, payload }` вместо
+   `{ type, url, file_name, mime_type }`. `unknown-event-type.json` (и
+   элемент батча) переписан по реальной схеме `WebhookPayloadReaction`
+   (`reaction` вместо выдуманного `message`-объекта у reaction-события) —
+   раньше это был неверный слепок формы `message.received`, применённый к
+   другому типу события; на прохождение теста это не влияло (тип события
+   отбрасывается раньше, чем парсер смотрит на форму `message`/`reaction`),
+   но фикстура не должна закреплять неверную форму как образец.
+4. `parse.test.ts`: тест на вложение теперь ожидает `{ type, url }` без
+   `fileName`/`mimeType`; инлайновый payload для `message.delivered` в тесте
+   переведён на новую форму конверта (`conversation` — соседнее поле, а не
+   вложенное в `message`).
+
+**Как перепроверено:**
+
+```
+npm run lint    # eslint . — 0 ошибок/предупреждений
+npm run build   # next build — компиляция + TypeScript-проверка прошли,
+                # 14/14 маршрутов, без ошибок
+npm test        # vitest run — 17 файлов, 93 теста, все прошли
+                #   (тот же счётчик, что и до доработки — состав тестов
+                #   не менялся, только форма фикстур/ожиданий)
+```
+
+Дополнительно: `grep -rn "file_name\|mime_type" lib/channels/zernio/` — совпадений
+в коде нет (только в тексте новых комментариев, объясняющих их отсутствие);
+`grep -rn "message.conversation" lib/channels/zernio/*.ts` — совпадений в
+коде нет (только в докстринге, описывающем, что такого поля в реальной схеме
+не существует).
+
 ## 🔍 Ревью
 
 **Вердикт: CHANGES_REQUESTED**

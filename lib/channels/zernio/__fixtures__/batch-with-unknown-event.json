@@ -7,17 +7,25 @@
       "id": "acct_tg_98213",
       "platform": "telegram"
     },
+    "conversation": {
+      "id": "tg_chat_77120",
+      "platformConversationId": "77120",
+      "status": "active"
+    },
     "message": {
       "id": "tg_msg_55210",
-      "conversation": {
-        "id": "tg_chat_77120"
-      },
+      "conversationId": "tg_chat_77120",
+      "platform": "telegram",
+      "platformMessageId": "55210",
+      "direction": "incoming",
       "text": "Здравствуйте! Подскажите, пожалуйста, режим работы сегодня?",
       "attachments": [],
       "sender": {
         "id": "tg_user_44310",
         "name": "Anna Keller"
-      }
+      },
+      "sentAt": "2026-07-20T09:14:32.000Z",
+      "isRead": false
     }
   },
   {
@@ -28,15 +36,20 @@
       "id": "acct_tg_98213",
       "platform": "telegram"
     },
-    "message": {
-      "id": "tg_msg_55211",
-      "conversation": {
-        "id": "tg_chat_77120"
-      },
+    "conversation": {
+      "id": "tg_chat_77120",
+      "platformConversationId": "77120",
+      "status": "active"
+    },
+    "reaction": {
+      "emoji": "👍",
+      "action": "added",
+      "platformMessageId": "tg_msg_55211",
       "sender": {
         "id": "tg_user_44310",
         "name": "Anna Keller"
-      }
+      },
+      "reactedAt": "2026-07-20T09:30:00.000Z"
     }
   },
   {
@@ -47,17 +60,26 @@
       "id": "acct_wa_31207",
       "platform": "whatsapp"
     },
+    "conversation": {
+      "id": "wa_chat_12938",
+      "platformConversationId": "491512345678",
+      "status": "active"
+    },
     "message": {
       "id": "wa_msg_88421",
-      "conversation": {
-        "id": "wa_chat_12938"
-      },
+      "conversationId": "wa_chat_12938",
+      "platform": "whatsapp",
+      "platformMessageId": "wamid.HBgLNDkxNTEyMzQ1Njc4FQIAEhg",
+      "direction": "incoming",
       "text": "Добрый день! Можно узнать статус заказа №4521?",
       "attachments": [],
       "sender": {
         "id": "wa_user_60214",
-        "name": "+49 151 2345678"
-      }
+        "name": "+49 151 2345678",
+        "phoneNumber": "+49 151 2345678"
+      },
+      "sentAt": "2026-07-20T09:20:05.000Z",
+      "isRead": false
     }
   }
 ]
