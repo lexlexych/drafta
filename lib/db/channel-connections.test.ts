@@ -78,11 +78,13 @@ describe.skipIf(!hasLocalSupabaseConfig)("lib/db/channel-connections", () => {
     const workspaceId = await createTestWorkspace();
 
     const first = await createChannelConnection(supabase, workspaceId, {
+      provider: "zernio",
       platform: "whatsapp",
       externalId: "wa_shop_001",
       name: "WhatsApp Магазин",
     });
     const second = await createChannelConnection(supabase, workspaceId, {
+      provider: "zernio",
       platform: "whatsapp",
       externalId: "wa_service_002",
       name: "WhatsApp Сервис",
@@ -103,6 +105,7 @@ describe.skipIf(!hasLocalSupabaseConfig)("lib/db/channel-connections", () => {
     const workspaceId = await createTestWorkspace();
 
     const result = await createChannelConnection(supabase, workspaceId, {
+      provider: "zernio",
       platform: "instagram",
       externalId: "ig_shop_001",
       name: "Instagram Магазин",
@@ -119,6 +122,7 @@ describe.skipIf(!hasLocalSupabaseConfig)("lib/db/channel-connections", () => {
     const workspaceId = await createTestWorkspace();
 
     const first = await createChannelConnection(supabase, workspaceId, {
+      provider: "zernio",
       platform: "telegram",
       externalId: "tg_dup_001",
       name: "Telegram Первый",
@@ -126,6 +130,7 @@ describe.skipIf(!hasLocalSupabaseConfig)("lib/db/channel-connections", () => {
     expect(first.ok).toBe(true);
 
     const duplicate = await createChannelConnection(supabase, workspaceId, {
+      provider: "zernio",
       platform: "telegram",
       externalId: "tg_dup_001",
       name: "Telegram Второй",
@@ -144,6 +149,7 @@ describe.skipIf(!hasLocalSupabaseConfig)("lib/db/channel-connections", () => {
     const workspaceId = await createTestWorkspace();
 
     const emptyName = await createChannelConnection(supabase, workspaceId, {
+      provider: "zernio",
       platform: "telegram",
       externalId: "tg_validation_001",
       name: "   ",
@@ -151,6 +157,7 @@ describe.skipIf(!hasLocalSupabaseConfig)("lib/db/channel-connections", () => {
     expect(emptyName.ok).toBe(false);
 
     const emptyExternalId = await createChannelConnection(supabase, workspaceId, {
+      provider: "zernio",
       platform: "telegram",
       externalId: "  ",
       name: "Telegram",
@@ -158,6 +165,7 @@ describe.skipIf(!hasLocalSupabaseConfig)("lib/db/channel-connections", () => {
     expect(emptyExternalId.ok).toBe(false);
 
     const unsupportedPlatform = await createChannelConnection(supabase, workspaceId, {
+      provider: "zernio",
       platform: "signal",
       externalId: "sig_001",
       name: "Signal",
@@ -171,6 +179,7 @@ describe.skipIf(!hasLocalSupabaseConfig)("lib/db/channel-connections", () => {
   it("renames a connection", async () => {
     const workspaceId = await createTestWorkspace();
     const created = await createChannelConnection(supabase, workspaceId, {
+      provider: "zernio",
       platform: "facebook",
       externalId: "fb_page_001",
       name: "Facebook Старое имя",
@@ -196,6 +205,7 @@ describe.skipIf(!hasLocalSupabaseConfig)("lib/db/channel-connections", () => {
   it("rejects renaming to an empty name", async () => {
     const workspaceId = await createTestWorkspace();
     const created = await createChannelConnection(supabase, workspaceId, {
+      provider: "zernio",
       platform: "facebook",
       externalId: "fb_page_002",
       name: "Facebook Страница",
@@ -213,6 +223,7 @@ describe.skipIf(!hasLocalSupabaseConfig)("lib/db/channel-connections", () => {
   it("toggles status disconnected/active without deleting the row", async () => {
     const workspaceId = await createTestWorkspace();
     const created = await createChannelConnection(supabase, workspaceId, {
+      provider: "zernio",
       platform: "telegram",
       externalId: "tg_toggle_001",
       name: "Telegram Toggle",
@@ -252,6 +263,7 @@ describe.skipIf(!hasLocalSupabaseConfig)("lib/db/channel-connections", () => {
     const foreignWorkspaceId = await createTestWorkspace();
 
     const created = await createChannelConnection(supabase, workspaceId, {
+      provider: "zernio",
       platform: "telegram",
       externalId: "tg_scope_001",
       name: "Telegram Scope",

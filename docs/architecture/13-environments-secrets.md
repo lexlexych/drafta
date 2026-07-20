@@ -16,7 +16,7 @@ related:
   - "[[15-compliance-gdpr]]"
   - "[[16-rollout-plan]]"
 created: 2026-07-19
-updated: 2026-07-19
+updated: 2026-07-20
 ---
 
 # 13. Окружения, секреты, деплой
@@ -39,8 +39,13 @@ updated: 2026-07-19
 ```
 supabase start
 npx inngest-cli dev
-+ туннель (cloudflared / ngrok) для вебхуков Zernio
++ туннель (cloudflared / ngrok) для вебхуков Zernio и OAuth-callback подключения канала
 ```
+
+> [!note] Callback OAuth-подключения канала
+> Публичный URL `…/api/channels/<провайдер>/connect/callback` нужно внести в
+> allow-list redirect-адресов на стороне провайдера (Zernio). Локально это адрес
+> туннеля, в проде — домен приложения ([5. Подключение аккаунта](05-channels.md#подключение-аккаунта-oauth)).
 
 ## Разовая ручная настройка (не код)
 
@@ -59,8 +64,10 @@ npx inngest-cli dev
 | `NEXT_PUBLIC_SUPABASE_URL` | URL проекта |
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | клиентский ключ, `sb_publishable_…` |
 | `SUPABASE_SECRET_KEY` | серверный, `sb_secret_…` — **обходит RLS**, никогда не попадает в клиентский бандл; гейтвей Supabase дополнительно отклоняет его из браузера |
-| `ZERNIO_API_KEY` | доступ к Zernio API ([5. Каналы](05-channels.md)) |
+| `ZERNIO_API_KEY` | доступ к Zernio API; клиентский идентификатор в OAuth-подключении аккаунта ([5. Подключение аккаунта](05-channels.md#подключение-аккаунта-oauth)) |
+| `ZERNIO_CONNECT_URL` | база хостед-страницы авторизации Zernio для OAuth-подключения канала ([5. Подключение аккаунта](05-channels.md#подключение-аккаунта-oauth)) |
 | `ZERNIO_WEBHOOK_SECRET` | проверка подписи вебхуков ([7.1](07-data-flows.md#61-входящее-dm-или-комментарий)) |
+| `CHANNEL_CONNECT_STATE_SECRET` | подпись OAuth-`state` при подключении канала (защита от CSRF, `lib/channels/connect-state.ts`) |
 | `MISTRAL_API_KEY` | LLM, основной провайдер; если задан — используется Mistral ([8. AI-подсистема](08-ai-subsystem.md#клиент-и-выбор-провайдера)) |
 | `OPENROUTER_API_KEY` | LLM, резервный провайдер OpenRouter — используется, только когда `MISTRAL_API_KEY` не задан ([8. AI-подсистема](08-ai-subsystem.md#резервный-провайдер--openrouter)) |
 | `OPENROUTER_MODEL` | модель OpenRouter по умолчанию, формат `vendor/model` — обязательна вместе с `OPENROUTER_API_KEY` |

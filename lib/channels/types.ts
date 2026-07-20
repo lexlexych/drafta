@@ -133,7 +133,35 @@ export interface SendMessageResult {
 /** Input to the optional `getConnectUrl` — a link that starts the provider's account-connect flow. */
 export interface GetConnectUrlInput {
   workspaceId: string;
+  /** Platform the user is connecting — the provider's connect page needs it up front. */
+  platform: ChannelPlatform;
+  /** Absolute URL the provider must redirect the browser back to once the account is authorized. */
   redirectUrl: string;
+  /** Opaque, signed anti-CSRF token round-tripped through the provider back to `parseConnectCallback`'s caller. */
+  state: string;
+}
+
+/** Input to the optional `parseConnectCallback` — the query parameters the provider appended to the redirect. */
+export interface ParseConnectCallbackInput {
+  /** Query-string parameters of the provider's redirect back to us (keys as-is). */
+  query: Record<string, string>;
+}
+
+/** Result of `parseConnectCallback` — what the callback route needs to create the `channel_connections` row. */
+export interface ConnectCallbackResult {
+  /**
+   * External ID of the connected social account — must equal what the
+   * provider reports as `externalAccountId` on inbound webhooks
+   * (NormalizedEvent.externalAccountId), so (provider, externalAccountId)
+   * keeps resolving the same connection.
+   */
+  externalAccountId: string;
+  /**
+   * Optional provider credentials/tokens to persist encrypted
+   * (channel_connections.encrypted_credentials). Empty for Zernio — Zernio
+   * holds the platform tokens; drafta only stores the account ID.
+   */
+  credentials?: Record<string, unknown>;
 }
 
 /**
@@ -163,6 +191,17 @@ export interface ChannelAdapter {
 
   /** Optional: a link that starts the provider's account-connect flow. */
   getConnectUrl?(input: GetConnectUrlInput): string | Promise<string>;
+
+  /**
+   * Optional: turn the provider's connect-callback query parameters into the
+   * connected account's external ID (and any credentials). Provider-specific
+   * parsing lives here — not in the callback route — per vibecoding rule 4
+   * (docs/architecture/05-channels.md#дисциплина). Paired with
+   * `getConnectUrl`: a provider that offers a connect flow implements both.
+   */
+  parseConnectCallback?(
+    input: ParseConnectCallbackInput,
+  ): ConnectCallbackResult | Promise<ConnectCallbackResult>;
 }
 
 /**

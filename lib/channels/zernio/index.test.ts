@@ -17,14 +17,17 @@ function readSource(name: string): string {
 }
 
 describe("Zernio adapter registration (lib/channels/zernio/index.ts)", () => {
-  it("guards ZERNIO_WEBHOOK_SECRET behind server-only and registers the adapter as 'zernio'", () => {
+  it("guards the Zernio secrets/config behind server-only and registers the adapter as 'zernio'", () => {
     const indexSource = readSource("index.ts");
 
     expect(indexSource).toContain('import "server-only";');
     expect(indexSource).toContain("process.env.ZERNIO_WEBHOOK_SECRET");
-    expect(indexSource).toContain(
-      "createZernioAdapter(getZernioWebhookSecret)",
-    );
+    // Account-connect (OAuth) config is read here too, behind the same guard.
+    expect(indexSource).toContain("process.env.ZERNIO_CONNECT_URL");
+    expect(indexSource).toContain("process.env.ZERNIO_API_KEY");
+    expect(indexSource).toContain("createZernioAdapter(");
+    expect(indexSource).toContain("getZernioWebhookSecret");
+    expect(indexSource).toContain("getZernioConnectConfig");
     expect(indexSource).toContain("registerChannelAdapter(zernioAdapter)");
   });
 

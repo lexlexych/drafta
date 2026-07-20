@@ -50,12 +50,12 @@ export type ChannelConnectionResult<T> =
   | { ok: false; error: string };
 
 /**
- * Platforms the "add channel" form offers — the same set
- * `lib/channels/capabilities.ts` has defaults for (T-01). Only Zernio is a
- * registered provider (T-02), so every connection created here is
- * `provider = "zernio"`; nothing here imports Zernio-specific code, though
- * (vibecoding rule 4) — just the provider-agnostic platform/capabilities
- * types from `lib/channels/`.
+ * Platforms the "add channel" flow offers — the same set
+ * `lib/channels/capabilities.ts` has defaults for (T-01). Nothing here
+ * imports Zernio-specific code (vibecoding rule 4) — just the
+ * provider-agnostic platform/capabilities types from `lib/channels/`. The
+ * `provider` is passed in by the account-connect callback (resolved from the
+ * `[provider]` route segment), not hardcoded here.
  */
 export const SUPPORTED_CHANNEL_PLATFORMS = Object.keys(
   DEFAULT_CHANNEL_CAPABILITIES,
@@ -83,17 +83,25 @@ export async function listChannelConnections(
 }
 
 export type CreateChannelConnectionInput = {
+  /** Resolved from the account-connect callback's `[provider]` route segment. */
+  provider: string;
   platform: string;
+  /**
+   * External account ID obtained from the provider's OAuth callback — not
+   * user-typed. Must match what the provider reports on inbound webhooks
+   * (lib/webhooks/process-event.ts resolves the row by (provider, external_id)).
+   */
   externalId: string;
   name: string;
 };
 
 /**
- * Creates a `channel_connections` row: provider fixed to `"zernio"` (the
- * only registered provider), capabilities filled with the platform's
- * defaults (T-01's `getDefaultChannelCapabilities`) — see the ticket's step
- * 1/acceptance criteria. Friendly error on a duplicate
- * (workspace, provider, external_id) — the table's unique constraint
+ * Creates a `channel_connections` row for a just-authorized account:
+ * `provider`/`externalId` come from the OAuth connect callback
+ * (`app/api/channels/[provider]/connect/callback/`), capabilities are filled
+ * with the platform's defaults (T-01's `getDefaultChannelCapabilities`).
+ * Friendly error on a duplicate (workspace, provider, external_id) — the
+ * table's unique constraint
  * (supabase/migrations/20260720103000_create_schema_v1.sql).
  */
 export async function createChannelConnection(
@@ -102,14 +110,20 @@ export async function createChannelConnection(
   input: CreateChannelConnectionInput,
 ): Promise<ChannelConnectionResult<ChannelConnectionRow>> {
   const name = input.name.trim();
+  const provider = input.provider.trim();
   const externalId = input.externalId.trim();
   const platform = input.platform as ChannelPlatform;
 
   if (!name) {
     return { ok: false, error: "Введите имя подключения." };
   }
+  // externalId comes from the provider, not the user — an empty one is a
+  // provider/flow error, not a form validation message.
   if (!externalId) {
-    return { ok: false, error: "Введите внешний ID аккаунта." };
+    return { ok: false, error: "Провайдер не вернул идентификатор аккаунта." };
+  }
+  if (!provider) {
+    return { ok: false, error: "Не удалось определить провайдера подключения." };
   }
   if (!SUPPORTED_CHANNEL_PLATFORMS.includes(platform)) {
     return { ok: false, error: "Выберите поддерживаемую платформу." };
@@ -120,7 +134,7 @@ export async function createChannelConnection(
     .insert({
       workspace_id: workspaceId,
       name,
-      provider: "zernio",
+      provider,
       platform,
       external_id: externalId,
       capabilities: DEFAULT_CHANNEL_CAPABILITIES[platform],
@@ -132,8 +146,7 @@ export async function createChannelConnection(
     if (isUniqueViolation(error)) {
       return {
         ok: false,
-        error:
-          "Такой канал уже подключён: этот внешний ID уже используется в этом workspace.",
+        error: "Этот аккаунт уже подключён к рабочему пространству.",
       };
     }
 
