@@ -3,7 +3,7 @@ id: T-01
 epic: E-001
 title: "Каркас Next.js-приложения и структура репозитория"
 type: dev
-status: todo
+status: done
 depends_on: []
 created: 2026-07-19
 updated: 2026-07-20
@@ -123,5 +123,25 @@ npm test
 
 ## 🔍 Ревью
 
-_Заполняется агентом-ревьюером: вердикт APPROVED / CHANGES_REQUESTED,
-замечания, что прогнано и с каким результатом._
+**Вердикт: APPROVED**
+
+Критерии приёмки и затронутые правила вайбкодинга перепроверены независимо:
+
+- `npm.cmd run lint` — exit code 0, замечаний ESLint нет;
+- `npm.cmd run build` — exit code 0, Next.js 16.2.10 успешно собрал приложение,
+  TypeScript-проверка и статическая генерация маршрута `/` прошли;
+- `npm.cmd test` — exit code 0, 1 test file / 1 test passed;
+- dev-сервер запущен на `127.0.0.1:3101`: `GET /` вернул HTTP 200, HTML содержит
+  `drafta`; после проверки процесс остановлен;
+- все семь обязательных каталогов и их `.gitkeep` существуют;
+- `git check-ignore -v --no-index .env .env.local .env.example` подтвердил, что
+  `.env` и `.env.local` игнорируются, а `.env.example` исключён из ignore и содержит
+  ровно три требуемые переменные Supabase;
+- фактический diff коммита `591b9fb` не меняет `.ai/`, `.claude/`, `.codex/`,
+  `AGENTS.md` или `CLAUDE.md`; единственное изменение в `docs/` — отчёт данного тикета;
+- в зависимостях нет Inngest, LLM/OpenRouter/Mistral или Serwist; изменений БД,
+  провайдер-специфичного кода и использования серверного Supabase-ключа в коде нет.
+
+Примечание среды: прямой вызов `npm` в PowerShell блокируется локальной Execution
+Policy для `npm.ps1`, поэтому те же npm-скрипты перепроверены через штатный
+Windows launcher `npm.cmd`.
