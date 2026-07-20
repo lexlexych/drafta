@@ -3,7 +3,7 @@ id: T-05
 epic: E-002
 title: "Инбокс «Сообщения»: список диалогов и тред"
 type: dev
-status: in_progress
+status: review
 depends_on: [T-03, T-04]
 created: 2026-07-19
 updated: 2026-07-20

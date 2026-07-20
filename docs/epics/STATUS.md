@@ -40,7 +40,7 @@
 | T-02 | [Адаптер Zernio (DM): подпись, парсинг, фикстуры](epic_02/T-02-zernio-adapter.md) | dev | done |
 | T-03 | [Вебхук-роут с идемпотентностью: пайплайн входящего](epic_02/T-03-webhook-inbound.md) | dev | done |
 | T-04 | [Настройки → Каналы: подключения с именами](epic_02/T-04-channels-settings.md) | dev | done |
-| T-05 | [Инбокс «Сообщения»: список диалогов и тред](epic_02/T-05-inbox-messages.md) | dev | in_progress |
+| T-05 | [Инбокс «Сообщения»: список диалогов и тред](epic_02/T-05-inbox-messages.md) | dev | review |
 | T-06 | [Realtime-обновления инбокса](epic_02/T-06-realtime-inbox.md) | dev | todo |
 | T-07 | [Executive summary — ручные шаги](epic_02/T-07-executive-summary.md) | manual | todo |
 
