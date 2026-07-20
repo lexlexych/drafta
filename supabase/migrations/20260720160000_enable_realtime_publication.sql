@@ -1,0 +1,32 @@
+-- Enable Supabase Realtime (postgres_changes) for the open inbox.
+--
+-- docs/epics/epic_02/T-06-realtime-inbox.md, docs/architecture/11-realtime-pwa.md#realtime.
+-- Rule 2 (docs/architecture/14-vibecoding-rules.md): publication membership is
+-- schema, changed only by migration, never through the Studio/dashboard.
+--
+-- `supabase_realtime` already exists (Supabase platform default) but starts
+-- out empty (`puballtables = false`, confirmed on the local stack) — nothing
+-- is broadcast until a table is explicitly added.
+--
+-- `drafts` is intentionally NOT added yet — no real drafts exist before stage
+-- 2 (epic E-002 "Существенные факты": "Web Push, send-push, push-digest —
+-- этап 9; здесь только Realtime в открытой вкладке" and "drafts в подписку не
+-- включать — черновиков до этапа 2 нет").
+alter publication supabase_realtime add table public.messages, public.conversations;
+
+-- REPLICA IDENTITY is left at its default (primary key only) for both
+-- tables — not changed here on purpose. Postgres's logical replication (what
+-- Realtime's postgres_changes consumes) always includes the full *new* row
+-- for INSERT/UPDATE regardless of replica identity; only the *old* row (used
+-- for UPDATE's previous values or for DELETE) depends on it. This ticket's
+-- subscriptions only ever read `payload.new` — INSERT on `messages`,
+-- INSERT/UPDATE on `conversations` (the filter itself, `workspace_id=eq.…`,
+-- is also evaluated against the new row) — no consumer needs the pre-change
+-- row, so REPLICA IDENTITY FULL would only add overhead without unlocking
+-- anything this ticket's scope needs.
+--
+-- RLS on `messages_member_access`/`conversations_member_access` (see
+-- supabase/migrations/20260720120000_add_workspace_rls_policies.sql) already
+-- restricts postgres_changes delivery to workspace members — the client-side
+-- subscription filter (lib/realtime/inbox-sync.ts) is defense in depth on top
+-- of that, not a substitute for it.

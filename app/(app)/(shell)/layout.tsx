@@ -6,6 +6,7 @@ import { createServerSupabaseClient } from "@/lib/db/server";
 import { getAuthenticatedUser, getCurrentWorkspace } from "@/lib/db/workspace";
 import { SETTINGS_SECTIONS, getNavigationCounters } from "@/lib/mock";
 
+import { InboxRealtimeSync } from "./_components/inbox-realtime-sync";
 import { Sidebar } from "./_components/sidebar";
 import { Tabbar } from "./_components/tabbar";
 import { Toast } from "./_components/stub";
@@ -19,6 +20,8 @@ import styles from "./_components/shell.module.css";
  * пункт «Сообщения» (счётчик + расхлоп по каналам) — реальные данные
  * `lib/db/inbox.ts` (T-05); остальные счётчики и содержимое разделов —
  * mock-данные T-07 (Комментарии, Контакты, Дашборд — вне скоупа эпика).
+ * `InboxRealtimeSync` (T-06) держит те же счётчики и открытый инбокс живыми —
+ * см. его собственный докстринг.
  */
 export default async function ShellLayout({
   children,
@@ -61,6 +64,7 @@ export default async function ShellLayout({
       <Suspense>
         <Tabbar counters={counters} messagesCounters={messagesCounters} />
       </Suspense>
+      <InboxRealtimeSync workspaceId={workspace.id} />
       <Toast />
     </div>
   );
