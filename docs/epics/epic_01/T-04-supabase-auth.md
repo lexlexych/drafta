@@ -3,7 +3,7 @@ id: T-04
 epic: E-001
 title: "Supabase Auth: регистрация, вход, сброс пароля"
 type: dev
-status: rework
+status: in_progress
 depends_on: [T-01, T-02]
 created: 2026-07-19
 updated: 2026-07-20
