@@ -3,7 +3,7 @@ id: T-01
 epic: E-002
 title: "Ядро слоя каналов: типы, интерфейс адаптера, реестр"
 type: dev
-status: review
+status: done
 depends_on: []
 created: 2026-07-19
 updated: 2026-07-20
@@ -186,5 +186,67 @@ payload'ов.
 
 ## 🔍 Ревью
 
-_Заполняется агентом-ревьюером: вердикт APPROVED / CHANGES_REQUESTED,
-замечания, что прогнано и с каким результатом._
+**Вердикт: APPROVED**
+
+### Прогнанные команды (независимо от отчёта разработчика)
+
+```
+npm run lint    # eslint . — 0 ошибок/предупреждений (совпадает с отчётом)
+npm run build   # next build — успешно, TypeScript-проверка прошла,
+                #   15 маршрутов в дереве (14/14 статически сгенерированных —
+                #   именно эту цифру отчёт называет «14 маршрутов»; расхождение
+                #   не по коду тикета, некритично)
+npm test        # vitest run — 13 файлов, 70 тестов, все прошли, включая
+                #   lib/channels/capabilities.test.ts (9) и
+                #   lib/channels/registry.test.ts (4) — совпадает с отчётом
+```
+
+Diff проверен напрямую (`git diff e30529a bfcc372 -- lib/channels/`) — в тикете
+изменены/созданы ровно заявленные файлы, лишнего нет: `types.ts`,
+`capabilities.ts` (+тест), `registry.ts` (+тест).
+
+### Проверка критериев приёмки
+
+- [x] `lib/channels/` содержит `types.ts`, `capabilities.ts`, `registry.ts` —
+  соответствует §12 (`zernio/`, `postmark/`, `meta/` — будущие тикеты, вне скоупа T-01).
+- [x] `NormalizedEvent` несёт все поля §5: `type`, `providerEventId`, `provider`,
+  `platform`, `externalAccountId`, `interactionKind`, `conversation`, `message`,
+  `rawMetadata`. Отклонение формулировки §5 («ID channel_connection») в пользу
+  «внешнего ID аккаунта соцсети» — обоснованно и соответствует §6
+  (`channel_connections`: «уникальность подключения — (workspace, провайдер,
+  внешний ID)»): UUID `channel_connection` физически не известен на этапе
+  парсинга сырого вебхука, резолвится позже по (provider, externalAccountId).
+- [x] `ChannelAdapter` объявляет все 4 операции (`verifyWebhook`, `parseWebhook`,
+  `sendMessage`, опциональный `getConnectUrl`); `sendMessage` — только
+  объявлена (реализаций пока нет, адаптеров тоже нет — корректно для T-01),
+  добавлен переиспользуемый `ChannelOperationNotImplementedError` под
+  будущие заглушки в T-02+.
+- [x] `DEFAULT_CHANNEL_CAPABILITIES` — данные, не условия в коде; покрывает
+  4 платформы (telegram/whatsapp/instagram/facebook); WhatsApp 24ч — из §5.
+- [x] `grep -rniE "zernio|postmark|meta" lib/channels/*.ts` (вне тестов) —
+  только строковые литералы типа `ChannelProvider`/`ChannelAdapter` и
+  комментарии, SDK/типов конкретных провайдеров нет.
+- [x] Термины соответствуют глоссарию: `channel_connection` нигде не заменён
+  на «account»; `externalAccountId`/«account-connect flow» относятся к
+  внешнему аккаунту соцсети, а не к переименованию `channel_connection`
+  (`grep -rniE "account" lib/channels/*.ts` — все вхождения такого рода).
+
+### Некритичные замечания
+
+1. `DEFAULT_CHANNEL_CAPABILITIES` типизирован как `Readonly<Record<ChannelPlatform,
+   ChannelCapabilities>>` — это защищает только верхний уровень (нельзя
+   переприсвоить `DEFAULT_CHANNEL_CAPABILITIES.telegram`), но не поля внутри
+   (`DEFAULT_CHANNEL_CAPABILITIES.telegram.supportsAttachments = false`
+   пройдёт тайпчек и рантайм без ошибки). Тест проверяет только независимость
+   копии из `getDefaultChannelCapabilities`, а не защищённость самого
+   константного объекта. Не блокирует — предполагаемый путь использования
+   (через хелпер) безопасен, но стоит учесть в T-04, если понадобится
+   действительно неизменяемый источник.
+2. Значения capabilities, не зафиксированные явно в §5 (лимиты длины, стиль
+   тредирования, поддержка комментариев по платформам, окна ответа
+   Instagram/Facebook), — задокументированные допущения разработчика, по
+   плану эпика подлежат сверке в T-07 вместе с реальными payload'ами. Учтено
+   разработчиком в разделе «Открытые вопросы», согласуется с открытым
+   вопросом №1 эпика — фиксирую здесь на будущее, не считаю это дефектом T-01.
+
+Замечаний, блокирующих принятие тикета, нет.
