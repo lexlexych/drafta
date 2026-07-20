@@ -25,6 +25,7 @@ import { StubButton } from "../_components/stub";
 import {
   ChannelsPanel,
   type ChannelConnectionListItem,
+  type ChannelConnectResult,
 } from "./channels/channels-panel";
 import setStyles from "./settings.module.css";
 import styles from "../_components/panes.module.css";
@@ -62,9 +63,28 @@ async function loadChannelsSectionData(): Promise<ChannelConnectionListItem[]> {
     id: row.id,
     name: row.name,
     platform: row.platform,
-    externalId: row.external_id,
     status: row.status,
   }));
+}
+
+/**
+ * Reads the account-connect result the callback route
+ * (app/api/channels/[provider]/connect/callback/) appends to the redirect,
+ * so the Channels panel can show a success/error banner after OAuth.
+ */
+function readConnectResult(
+  params: Record<string, string | string[] | undefined>,
+): ChannelConnectResult | null {
+  const connect = firstParam(params.connect);
+
+  if (connect === "connected") {
+    return { status: "connected", reason: null };
+  }
+  if (connect === "error") {
+    return { status: "error", reason: firstParam(params.reason) };
+  }
+
+  return null;
 }
 
 export default async function SettingsPage({
@@ -80,6 +100,8 @@ export default async function SettingsPage({
   const section = SETTINGS_SECTIONS.find((entry) => entry.id === sectionId);
   const channels =
     sectionId === "channels" ? await loadChannelsSectionData() : null;
+  const connectResult =
+    sectionId === "channels" ? readConnectResult(params) : null;
 
   return (
     <div className={styles.panes} data-detail={isDetail}>
@@ -122,7 +144,11 @@ export default async function SettingsPage({
         </div>
         <div className={setStyles.pane}>
           <div className={setStyles.inner}>
-            <SectionDetail sectionId={sectionId} channels={channels} />
+            <SectionDetail
+              sectionId={sectionId}
+              channels={channels}
+              connectResult={connectResult}
+            />
           </div>
         </div>
       </section>
@@ -133,13 +159,17 @@ export default async function SettingsPage({
 function SectionDetail({
   sectionId,
   channels,
+  connectResult,
 }: {
   sectionId: SettingsSectionId;
   channels: ChannelConnectionListItem[] | null;
+  connectResult: ChannelConnectResult | null;
 }) {
   switch (sectionId) {
     case "channels":
-      return <ChannelsSection channels={channels ?? []} />;
+      return (
+        <ChannelsSection channels={channels ?? []} connectResult={connectResult} />
+      );
     case "categories":
       return <CategoriesSection />;
     case "ai":
@@ -153,7 +183,13 @@ function SectionDetail({
   }
 }
 
-function ChannelsSection({ channels }: { channels: ChannelConnectionListItem[] }) {
+function ChannelsSection({
+  channels,
+  connectResult,
+}: {
+  channels: ChannelConnectionListItem[];
+  connectResult: ChannelConnectResult | null;
+}) {
   return (
     <>
       <p className={setStyles.description}>
@@ -163,6 +199,7 @@ function ChannelsSection({ channels }: { channels: ChannelConnectionListItem[] }
       <ChannelsPanel
         channels={channels}
         supportedPlatforms={SUPPORTED_CHANNEL_PLATFORMS}
+        connectResult={connectResult}
       />
     </>
   );

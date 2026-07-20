@@ -65,4 +65,36 @@ describe("createZernioAdapter", () => {
       }),
     ).rejects.toThrow(ChannelOperationNotImplementedError);
   });
+
+  it("exposes getConnectUrl only when connect config is injected", async () => {
+    const withoutConfig = createZernioAdapter(() => "secret");
+    expect(withoutConfig.getConnectUrl).toBeUndefined();
+
+    const withConfig = createZernioAdapter(() => "secret", () => ({
+      connectUrl: "https://connect.zernio.example/oauth/authorize",
+      apiKey: "zk_test_123",
+    }));
+    expect(withConfig.getConnectUrl).toBeDefined();
+
+    const url = new URL(
+      await withConfig.getConnectUrl!({
+        workspaceId: "ws_1",
+        platform: "telegram",
+        redirectUrl: "https://app.drafta.example/api/channels/zernio/connect/callback",
+        state: "signed.state",
+      }),
+    );
+    expect(url.searchParams.get("platform")).toBe("telegram");
+    expect(url.searchParams.get("state")).toBe("signed.state");
+  });
+
+  it("parseConnectCallback turns the provider's callback query into the account id", async () => {
+    const adapter = createZernioAdapter(() => "secret");
+
+    expect(adapter.parseConnectCallback).toBeDefined();
+    const result = await adapter.parseConnectCallback!({
+      query: { account_id: "acct_tg_98213" },
+    });
+    expect(result.externalAccountId).toBe("acct_tg_98213");
+  });
 });

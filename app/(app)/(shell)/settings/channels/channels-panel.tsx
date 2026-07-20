@@ -6,10 +6,12 @@
  * форма добавления, инлайн-переименование, отключение/включение с
  * подтверждением — через Server Actions (`./actions.ts`).
  *
- * Открытый вопрос №1 эпика: привязка аккаунта соцсети — на стороне Zernio
- * (их дашборд); наш адаптер (T-01/T-02) пока не реализует опциональную
- * `getConnectUrl`, поэтому здесь всегда простое поле ввода внешнего ID с
- * подсказкой, а не кнопка-ссылка «Подключить в Zernio».
+ * Подключение канала — OAuth-флоу: пользователь выбирает платформу и имя и
+ * жмёт «Подключить», после чего `startChannelConnectionAction` возвращает
+ * ссылку авторизации провайдера, и мы уходим на неё
+ * (docs/architecture/05-channels.md). Строку подключения создаёт callback-роут
+ * после авторизации. Пользователь нигде не вводит внешний ID и не видит
+ * провайдера входящих.
  */
 
 import { useState, useTransition, type FormEvent } from "react";
@@ -21,17 +23,22 @@ import { PlatformDot } from "../../_components/chips";
 import setStyles from "../settings.module.css";
 import uiStyles from "../../_components/ui.module.css";
 import {
-  createChannelConnectionAction,
   renameChannelConnectionAction,
   setChannelConnectionStatusAction,
+  startChannelConnectionAction,
 } from "./actions";
 
 export type ChannelConnectionListItem = {
   id: string;
   name: string;
   platform: ChannelPlatform;
-  externalId: string;
   status: "active" | "disconnected" | "error";
+};
+
+/** Result banner after returning from the OAuth connect flow (callback route). */
+export type ChannelConnectResult = {
+  status: "connected" | "error";
+  reason: string | null;
 };
 
 const PLATFORM_LABELS: Record<ChannelPlatform, string> = {
@@ -47,16 +54,26 @@ const STATUS_LABELS: Record<ChannelConnectionListItem["status"], string> = {
   error: "ошибка подключения",
 };
 
+const CONNECT_ERROR_MESSAGES: Record<string, string> = {
+  duplicate: "Этот аккаунт уже подключён к рабочему пространству.",
+  state: "Сессия подключения истекла или недействительна. Попробуйте снова.",
+  provider: "Подключение через этот канал сейчас недоступно.",
+  callback: "Провайдер не завершил подключение. Попробуйте снова.",
+  failed: "Не удалось создать подключение. Попробуйте снова.",
+};
+
 function statusLine(channel: ChannelConnectionListItem): string {
-  return `${PLATFORM_LABELS[channel.platform]} · ${STATUS_LABELS[channel.status]} · ID ${channel.externalId} · через Zernio`;
+  return `${PLATFORM_LABELS[channel.platform]} · ${STATUS_LABELS[channel.status]}`;
 }
 
 export function ChannelsPanel({
   channels,
   supportedPlatforms,
+  connectResult = null,
 }: {
   channels: ChannelConnectionListItem[];
   supportedPlatforms: ChannelPlatform[];
+  connectResult?: ChannelConnectResult | null;
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -69,7 +86,6 @@ export function ChannelsPanel({
   const [platform, setPlatform] = useState<ChannelPlatform>(
     supportedPlatforms[0] ?? "telegram",
   );
-  const [externalId, setExternalId] = useState("");
   const [name, setName] = useState("");
 
   function startRename(channel: ChannelConnectionListItem) {
@@ -135,23 +151,45 @@ export function ChannelsPanel({
     setError(null);
 
     startTransition(async () => {
-      const result = await createChannelConnectionAction({ platform, externalId, name });
+      const result = await startChannelConnectionAction({ platform, name });
 
       if (!result.ok) {
         setError(result.error);
         return;
       }
 
-      setIsAdding(false);
-      setPlatform(supportedPlatforms[0] ?? "telegram");
-      setExternalId("");
-      setName("");
-      router.refresh();
+      // Hand off to the provider's authorization page; the callback route
+      // creates the connection and redirects back to Settings → Channels.
+      window.location.assign(result.url);
     });
   }
 
+  const connectBanner =
+    connectResult?.status === "connected"
+      ? { kind: "success" as const, text: "Канал подключён." }
+      : connectResult?.status === "error"
+        ? {
+            kind: "error" as const,
+            text:
+              CONNECT_ERROR_MESSAGES[connectResult.reason ?? ""] ??
+              "Не удалось подключить канал.",
+          }
+        : null;
+
   return (
     <>
+      {connectBanner ? (
+        <p
+          aria-live="polite"
+          className={
+            connectBanner.kind === "success"
+              ? setStyles.description
+              : setStyles.formError
+          }
+        >
+          {connectBanner.text}
+        </p>
+      ) : null}
       {error ? (
         <p aria-live="polite" className={setStyles.formError}>
           {error}
@@ -248,19 +286,6 @@ export function ChannelsPanel({
             </select>
           </div>
           <div className={uiStyles.field}>
-            <label htmlFor="channel-external-id">Внешний ID аккаунта</label>
-            <input
-              id="channel-external-id"
-              onChange={(event) => setExternalId(event.target.value)}
-              type="text"
-              value={externalId}
-            />
-            <span className={setStyles.fieldHint}>
-              Привязка аккаунта соцсети происходит в дашборде Zernio — скопируйте
-              оттуда внешний ID подключаемого аккаунта.
-            </span>
-          </div>
-          <div className={uiStyles.field}>
             <label htmlFor="channel-name">Имя подключения</label>
             <input
               id="channel-name"
@@ -269,6 +294,10 @@ export function ChannelsPanel({
               type="text"
               value={name}
             />
+            <span className={setStyles.fieldHint}>
+              Дальше вы авторизуете аккаунт в выбранной соцсети — вводить ID
+              вручную не нужно.
+            </span>
           </div>
           <div className={uiStyles.cardRow}>
             <button
@@ -276,7 +305,7 @@ export function ChannelsPanel({
               disabled={isPending}
               type="submit"
             >
-              {isPending ? "Подключаем…" : "Подключить канал"}
+              {isPending ? "Открываем авторизацию…" : "Подключить"}
             </button>
             <button
               className={`${uiStyles.button} ${uiStyles.buttonSecondary}`}

@@ -17,7 +17,7 @@ related:
   - "[[13-environments-secrets]]"
   - "[[15-compliance-gdpr]]"
 created: 2026-07-19
-updated: 2026-07-19
+updated: 2026-07-20
 ---
 
 # 3. Стек
@@ -32,7 +32,7 @@ updated: 2026-07-19
 | Фоновые задачи | Inngest | Генерация черновиков (включая **встроенный debounce**), отправка, ретраи. **Правило: в payload событий — только ID, никогда контент** ([§7.2](07-data-flows.md#62-дебаунс-и-генерация-черновика), [§15](15-compliance-gdpr.md)) |
 | Хостинг | Vercel, **регион функций fra1 (Frankfurt)** | Один деплой через `git push` |
 | PWA | Serwist (`@serwist/next`) | Сервис-воркер, установка, Web Push |
-| Каналы (сейчас) | Zernio API | DM + комментарии для Telegram, WhatsApp, Facebook, Instagram; единые вебхуки. DPA есть (выдаётся через их Trust Center под NDA) — **подписать до этапа 1**, см. [§15.2](15-compliance-gdpr.md#122-субпроцессоры-и-данные) |
+| Каналы (сейчас) | Zernio API | DM + комментарии для Telegram, WhatsApp, Facebook, Instagram; единые вебхуки; подключение аккаунтов — через OAuth-редирект внутри drafta (пользователь не заходит в дашборд Zernio, [5. Подключение аккаунта](05-channels.md#подключение-аккаунта-oauth)). DPA есть (выдаётся через их Trust Center под NDA) — **подписать до этапа 1**, см. [§15.2](15-compliance-gdpr.md#122-субпроцессоры-и-данные) |
 | Транзакционная почта | Postmark | **Обязателен с первого дня как custom SMTP для Supabase Auth**: встроенная почта Supabase шлёт только участникам организации проекта (2 письма/час) — в проде без внешнего SMTP не работают регистрация, сброс пароля и инвайты. Позже этот же Postmark становится email-каналом (inbound). $15/мес за 10 000 писем, dev-план бесплатно |
 | LLM | **Mistral (La Plateforme)**; резерв — **OpenRouter** | Европейский провайдер, обработка в ЕС, вне американской юрисдикции — ключевое для немецкого рынка. API OpenAI-совместимый: клиент в `lib/ai` остаётся стандартным SDK со сменным `baseURL`. Если `MISTRAL_API_KEY` не задан, клиент переключается на OpenRouter (`OPENROUTER_API_KEY` + модель по умолчанию `OPENROUTER_MODEL`) — [§8](08-ai-subsystem.md#резервный-провайдер--openrouter). Прочие альтернативы (Azure OpenAI EU Data Zone, локальная модель) — конфигурация, не код |
 

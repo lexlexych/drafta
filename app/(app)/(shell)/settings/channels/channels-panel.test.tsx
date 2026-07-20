@@ -1,24 +1,24 @@
 // @vitest-environment jsdom
 
 /**
- * Client-side behavior of the Channels panel (T-04): add form, inline
- * rename, disable/enable with confirmation. Server actions
- * (`./actions.ts`) are mocked — the actual DB-backed business logic they
- * delegate to is covered by `lib/db/channel-connections.test.ts`.
+ * Client-side behavior of the Channels panel (T-04): OAuth add flow, inline
+ * rename, disable/enable with confirmation, and the post-OAuth result banner.
+ * Server actions (`./actions.ts`) are mocked — the actual DB-backed business
+ * logic they delegate to is covered by `lib/db/channel-connections.test.ts`.
  */
 
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ChannelsPanel, type ChannelConnectionListItem } from "./channels-panel";
 
-const createChannelConnectionAction = vi.fn();
+const startChannelConnectionAction = vi.fn();
 const renameChannelConnectionAction = vi.fn();
 const setChannelConnectionStatusAction = vi.fn();
 
 vi.mock("./actions", () => ({
-  createChannelConnectionAction: (...args: unknown[]) =>
-    createChannelConnectionAction(...args),
+  startChannelConnectionAction: (...args: unknown[]) =>
+    startChannelConnectionAction(...args),
   renameChannelConnectionAction: (...args: unknown[]) =>
     renameChannelConnectionAction(...args),
   setChannelConnectionStatusAction: (...args: unknown[]) =>
@@ -31,6 +31,16 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ refresh }),
 }));
 
+let assignMock: ReturnType<typeof vi.fn>;
+
+beforeEach(() => {
+  assignMock = vi.fn();
+  Object.defineProperty(window, "location", {
+    configurable: true,
+    value: { assign: assignMock },
+  });
+});
+
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
@@ -41,7 +51,6 @@ const baseChannels: ChannelConnectionListItem[] = [
     id: "chc_telegram_shop",
     name: "Telegram Shop",
     platform: "telegram",
-    externalId: "tg_shop_001",
     status: "active",
   },
 ];
@@ -54,56 +63,80 @@ const supportedPlatforms: ChannelConnectionListItem["platform"][] = [
 ];
 
 describe("ChannelsPanel", () => {
-  it("submits the add-channel form and refreshes on success", async () => {
-    createChannelConnectionAction.mockResolvedValue({ ok: true, data: {} });
+  it("starts the OAuth flow and redirects to the provider's auth url on success", async () => {
+    startChannelConnectionAction.mockResolvedValue({
+      ok: true,
+      url: "https://connect.zernio.example/oauth/authorize?state=abc",
+    });
 
     render(<ChannelsPanel channels={baseChannels} supportedPlatforms={supportedPlatforms} />);
 
     fireEvent.click(screen.getByRole("button", { name: "+ Подключить канал" }));
-    fireEvent.change(screen.getByLabelText("Внешний ID аккаунта"), {
-      target: { value: "wa_shop_9001" },
-    });
+    // No external-id field anymore — only a name.
+    expect(screen.queryByLabelText("Внешний ID аккаунта")).toBeNull();
     fireEvent.change(screen.getByLabelText("Имя подключения"), {
       target: { value: "WhatsApp Сервис" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Подключить канал" }));
+    fireEvent.click(screen.getByRole("button", { name: "Подключить" }));
 
     await waitFor(() =>
-      expect(createChannelConnectionAction).toHaveBeenCalledWith({
+      expect(startChannelConnectionAction).toHaveBeenCalledWith({
         platform: "telegram",
-        externalId: "wa_shop_9001",
         name: "WhatsApp Сервис",
       }),
     );
-    await waitFor(() => expect(refresh).toHaveBeenCalled());
-    // Form closes and clears after success.
-    expect(screen.queryByLabelText("Имя подключения")).toBeNull();
+    await waitFor(() =>
+      expect(assignMock).toHaveBeenCalledWith(
+        "https://connect.zernio.example/oauth/authorize?state=abc",
+      ),
+    );
   });
 
-  it("shows the friendly duplicate error and keeps the form open for correction", async () => {
-    createChannelConnectionAction.mockResolvedValue({
+  it("shows the error and keeps the form open when starting the flow fails", async () => {
+    startChannelConnectionAction.mockResolvedValue({
       ok: false,
-      error: "Такой канал уже подключён: этот внешний ID уже используется в этом workspace.",
+      error: "Выберите поддерживаемую платформу.",
     });
 
     render(<ChannelsPanel channels={baseChannels} supportedPlatforms={supportedPlatforms} />);
 
     fireEvent.click(screen.getByRole("button", { name: "+ Подключить канал" }));
-    fireEvent.change(screen.getByLabelText("Внешний ID аккаунта"), {
-      target: { value: "tg_shop_001" },
-    });
     fireEvent.change(screen.getByLabelText("Имя подключения"), {
-      target: { value: "Telegram Дубликат" },
+      target: { value: "Некорректный" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Подключить канал" }));
+    fireEvent.click(screen.getByRole("button", { name: "Подключить" }));
 
     expect(
-      await screen.findByText(
-        "Такой канал уже подключён: этот внешний ID уже используется в этом workspace.",
-      ),
+      await screen.findByText("Выберите поддерживаемую платформу."),
     ).toBeDefined();
     expect(screen.getByLabelText("Имя подключения")).toBeDefined();
-    expect(refresh).not.toHaveBeenCalled();
+    expect(assignMock).not.toHaveBeenCalled();
+  });
+
+  it("shows a success banner after returning from OAuth", () => {
+    render(
+      <ChannelsPanel
+        channels={baseChannels}
+        supportedPlatforms={supportedPlatforms}
+        connectResult={{ status: "connected", reason: null }}
+      />,
+    );
+
+    expect(screen.getByText("Канал подключён.")).toBeDefined();
+  });
+
+  it("maps a connect error reason to a friendly banner", () => {
+    render(
+      <ChannelsPanel
+        channels={baseChannels}
+        supportedPlatforms={supportedPlatforms}
+        connectResult={{ status: "error", reason: "duplicate" }}
+      />,
+    );
+
+    expect(
+      screen.getByText("Этот аккаунт уже подключён к рабочему пространству."),
+    ).toBeDefined();
   });
 
   it("renames a channel inline", async () => {
