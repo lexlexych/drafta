@@ -3,6 +3,8 @@ export const rlsSeedFixtures = {
   contactBId: "b0000000-0000-4000-8000-000000000201",
   // supabase/seed.sql — "Telegram Shop B" channel_connection, workspace B.
   channelConnectionBId: "b0000000-0000-4000-8000-000000000101",
+  // supabase/seed.sql — Bernd's conversation, workspace B, unread_count = 1.
+  conversationBId: "b0000000-0000-4000-8000-000000000401",
   ownerA: {
     email: "owner-a@example.com",
     id: "11111111-1111-4111-8111-111111111111",

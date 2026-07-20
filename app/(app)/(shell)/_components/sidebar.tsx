@@ -6,6 +6,7 @@ import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useState } from "react";
 
+import type { ChannelPlatform } from "@/lib/channels/types";
 import type { NavigationCountersView, SettingsSectionView } from "@/lib/mock";
 
 import { Avatar } from "./avatar";
@@ -23,6 +24,7 @@ import {
   SECTIONS,
   buildHref,
   sectionIdForPathname,
+  type InboxNavCounters,
   type SectionId,
 } from "./navigation";
 import styles from "./shell.module.css";
@@ -41,7 +43,23 @@ export type SidebarProps = {
   userName: string;
   userRole: string;
   counters: NavigationCountersView;
+  /**
+   * Real per-channel DM unread counts (docs/epics/epic_02/T-05-inbox-messages.md,
+   * `lib/db/inbox.ts`'s `getInboxNavigationCounters`) — drives the
+   * "Сообщения" nav item and its channel expand specifically. Every other
+   * section (Комментарии, Контакты, Дашборд) still reads `counters`
+   * (mock, E-001/T-07) — out of scope for this ticket (epic E-002 "Вне
+   * скоупа").
+   */
+  messagesCounters: InboxNavCounters;
   settingsSections: SettingsSectionView[];
+};
+
+type SubListChannel = {
+  id: string;
+  name: string;
+  platform: ChannelPlatform;
+  count: number;
 };
 
 export function Sidebar({
@@ -49,6 +67,7 @@ export function Sidebar({
   userName,
   userRole,
   counters,
+  messagesCounters,
   settingsSections,
 }: SidebarProps) {
   const pathname = usePathname();
@@ -70,7 +89,7 @@ export function Sidebar({
 
   const sectionCounts: Record<SectionId, number> = {
     dashboard: 0,
-    inbox: counters.dmUnread,
+    inbox: messagesCounters.totalUnread,
     comments: counters.commentsUnread,
     contacts: 0,
     settings: 0,
@@ -83,15 +102,29 @@ export function Sidebar({
       return 0;
     }
 
-    if (sectionId === "inbox") {
-      return channel.dmUnread;
-    }
-
     if (sectionId === "comments") {
       return channel.commentsUnread;
     }
 
     return channel.contactCount;
+  }
+
+  function subListChannelsFor(sectionId: SectionId): SubListChannel[] {
+    if (sectionId === "inbox") {
+      return messagesCounters.channels.map((channel) => ({
+        id: channel.id,
+        name: channel.name,
+        platform: channel.platform,
+        count: channel.unreadCount,
+      }));
+    }
+
+    return counters.channels.map((channel) => ({
+      id: channel.id,
+      name: channel.name,
+      platform: channel.platform,
+      count: channelCount(sectionId, channel.id),
+    }));
   }
 
   return (
@@ -153,28 +186,24 @@ export function Sidebar({
                     <PlatformDot platform="all" />
                     <span className={styles.subLabel}>Все каналы</span>
                   </Link>
-                  {counters.channels.map((channel) => {
-                    const count = channelCount(section.id, channel.id);
-
-                    return (
-                      <Link
-                        key={channel.id}
-                        className={styles.subItem}
-                        data-active={isActive && activeChannelId === channel.id}
-                        href={buildHref(section.pathname, {
-                          [QUERY_KEYS.channel]: channel.id,
-                        })}
-                      >
-                        <PlatformDot platform={channel.platform} />
-                        <span className={styles.subLabel}>{channel.name}</span>
-                        {count > 0 ? (
-                          <span className={`${styles.subCount} ${uiStyles.num}`}>
-                            {count}
-                          </span>
-                        ) : null}
-                      </Link>
-                    );
-                  })}
+                  {subListChannelsFor(section.id).map((channel) => (
+                    <Link
+                      key={channel.id}
+                      className={styles.subItem}
+                      data-active={isActive && activeChannelId === channel.id}
+                      href={buildHref(section.pathname, {
+                        [QUERY_KEYS.channel]: channel.id,
+                      })}
+                    >
+                      <PlatformDot platform={channel.platform} />
+                      <span className={styles.subLabel}>{channel.name}</span>
+                      {channel.count > 0 ? (
+                        <span className={`${styles.subCount} ${uiStyles.num}`}>
+                          {channel.count}
+                        </span>
+                      ) : null}
+                    </Link>
+                  ))}
                 </div>
               ) : null}
 

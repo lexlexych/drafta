@@ -224,6 +224,20 @@ values
     'active'
   ),
   (
+    -- Second Telegram connection for Workspace A, different user-given name —
+    -- docs/epics/epic_02/T-05-inbox-messages.md step 6: "два канала одной
+    -- платформы с разными именами", exercising the inbox's channel badge
+    -- (docs/architecture/05-channels.md#несколько-каналов-и-имена).
+    'a0000000-0000-4000-8000-000000000103',
+    'a0000000-0000-4000-8000-000000000001',
+    'Telegram Поддержка A',
+    'zernio',
+    'telegram',
+    'seed-a-telegram-support',
+    '{"dm":true,"comments":false}'::jsonb,
+    'active'
+  ),
+  (
     'b0000000-0000-4000-8000-000000000101',
     'b0000000-0000-4000-8000-000000000001',
     'Telegram Shop B',
@@ -268,6 +282,16 @@ values
     'Anton Kunde',
     'Second seed contact for Workspace A',
     array['instagram']
+  ),
+  (
+    -- Contact on the second Telegram connection (Telegram Поддержка A) —
+    -- same platform as Anna's, different channel_connection, so the inbox
+    -- shows both under their own channel badge/name.
+    'a0000000-0000-4000-8000-000000000203',
+    'a0000000-0000-4000-8000-000000000001',
+    'Clara Support',
+    'Third seed contact for Workspace A — second Telegram connection',
+    array['support']
   ),
   (
     'b0000000-0000-4000-8000-000000000201',
@@ -316,6 +340,15 @@ values
     'instagram',
     'seed-a-anton',
     'Anton Kunde',
+    '{"seed":true}'::jsonb
+  ),
+  (
+    'a0000000-0000-4000-8000-000000000303',
+    'a0000000-0000-4000-8000-000000000001',
+    'a0000000-0000-4000-8000-000000000203',
+    'telegram',
+    'seed-a-clara',
+    'Clara Support',
     '{"seed":true}'::jsonb
   ),
   (
@@ -378,6 +411,21 @@ values
     'open',
     now() - interval '25 minutes',
     0
+  ),
+  (
+    -- Two unread messages, most recent last_incoming_at of Workspace A's
+    -- conversations — sorts first in the list (T-05 acceptance criteria:
+    -- sorted by last_incoming_at desc) and exercises a non-zero unread
+    -- counter on the second Telegram channel specifically.
+    'a0000000-0000-4000-8000-000000000403',
+    'a0000000-0000-4000-8000-000000000001',
+    'a0000000-0000-4000-8000-000000000103',
+    'a0000000-0000-4000-8000-000000000203',
+    'dm',
+    'seed-a-telegram-chat-clara',
+    'open',
+    now() - interval '5 minutes',
+    2
   ),
   (
     'b0000000-0000-4000-8000-000000000401',
@@ -467,6 +515,30 @@ values
     'Der Versand dauert in der Regel zwei Werktage.',
     'sent',
     now() - interval '24 minutes'
+  ),
+  (
+    -- Second Telegram connection (Telegram Поддержка A) — both still
+    -- unread, matching the conversation's unread_count = 2 above.
+    'a0000000-0000-4000-8000-000000000505',
+    'a0000000-0000-4000-8000-000000000001',
+    'a0000000-0000-4000-8000-000000000403',
+    'a0000000-0000-4000-8000-000000000303',
+    'seed-a-clara-1',
+    'incoming',
+    'Hallo! Haben Sie morgen noch freie Termine?',
+    'received',
+    null
+  ),
+  (
+    'a0000000-0000-4000-8000-000000000506',
+    'a0000000-0000-4000-8000-000000000001',
+    'a0000000-0000-4000-8000-000000000403',
+    'a0000000-0000-4000-8000-000000000303',
+    'seed-a-clara-2',
+    'incoming',
+    'Ich möchte meinen Termin auf 15:00 Uhr verschieben.',
+    'received',
+    null
   ),
   (
     'b0000000-0000-4000-8000-000000000501',

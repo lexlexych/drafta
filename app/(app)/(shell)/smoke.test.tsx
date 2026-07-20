@@ -2,8 +2,12 @@
 
 /**
  * Смоук-тесты рендера разделов UI-каркаса (T-07): страницы открываются,
- * ключевые элементы макета на месте. Layout'ы с гейтами Supabase здесь
- * не рендерятся — их проверяют тесты T-05; страницы работают на mock-данных.
+ * ключевые элементы макета на месте. Layout'ы с гейтами Supabase здесь не
+ * рендерятся (проверено вручную/DB-тестами — см. отчёт T-05). Большинство
+ * страниц всё ещё работает на mock-данных; «Сообщения» (T-05, как и
+ * «Настройки → Каналы» из T-04) подключены к реальному Supabase — здесь
+ * `@/lib/db/inbox` мокается тем же приёмом, что и `@/lib/db/channel-connections`
+ * ниже.
  */
 
 import { cleanup, render, screen } from "@testing-library/react";
@@ -49,32 +53,168 @@ vi.mock("@/lib/db/workspace", () => ({
 vi.mock("@/lib/db/server", () => ({
   createServerSupabaseClient: async () => ({}),
 }));
+const INBOX_CHANNELS = [
+  {
+    id: "chc_instagram_shop",
+    workspace_id: "wsp_tonwerk",
+    name: "Instagram Магазин",
+    provider: "zernio",
+    platform: "instagram",
+    external_id: "17841400000000001",
+    status: "active",
+    capabilities: {},
+    created_at: "2026-07-19T10:00:00.000Z",
+  },
+  {
+    id: "chc_facebook_page",
+    workspace_id: "wsp_tonwerk",
+    name: "Facebook Страница",
+    provider: "zernio",
+    platform: "facebook",
+    external_id: "102740000000002",
+    status: "active",
+    capabilities: {},
+    created_at: "2026-07-19T10:01:00.000Z",
+  },
+];
+
 vi.mock("@/lib/db/channel-connections", () => ({
   SUPPORTED_CHANNEL_PLATFORMS: ["telegram", "whatsapp", "instagram", "facebook"],
-  listChannelConnections: async () => [
+  listChannelConnections: async () => INBOX_CHANNELS,
+}));
+
+const INBOX_LIST_ITEMS = [
+  {
+    id: "cnv_dm_anna_ig",
+    kind: "dm",
+    title: "Anna Weber",
+    preview: "И сколько будет доставка в Гамбург?",
+    time: "12:41",
+    unreadCount: 3,
+    channel: { id: "chc_instagram_shop", name: "Instagram Магазин", platform: "instagram" },
+    category: null,
+    avatar: { initials: "AW", hue: 120 },
+  },
+  {
+    id: "cnv_dm_maxim_ig",
+    kind: "dm",
+    title: "Максим Литвинов",
+    preview: "📎 Вот фото",
+    time: "11:52",
+    unreadCount: 1,
+    channel: { id: "chc_instagram_shop", name: "Instagram Магазин", platform: "instagram" },
+    category: null,
+    avatar: { initials: "МЛ", hue: 60 },
+  },
+  {
+    id: "cnv_dm_anna_fb",
+    kind: "dm",
+    title: "Anna Weber",
+    preview: "Добрый день! Это Анна, писала вам в Instagram…",
+    time: "11:05",
+    unreadCount: 1,
+    channel: { id: "chc_facebook_page", name: "Facebook Страница", platform: "facebook" },
+    category: null,
+    avatar: { initials: "AW", hue: 120 },
+  },
+];
+
+const INBOX_THREAD_MAXIM = {
+  conversationId: "cnv_dm_maxim_ig",
+  contactId: "con_maxim",
+  title: "Максим Литвинов",
+  avatar: { initials: "МЛ", hue: 60 },
+  channel: { id: "chc_instagram_shop", name: "Instagram Магазин", platform: "instagram" },
+  category: null,
+  replyWindowLabel: "Окно ответа: 20 ч",
+  messages: [
     {
-      id: "chc_instagram_shop",
-      workspace_id: "wsp_tonwerk",
-      name: "Instagram Магазин",
-      provider: "zernio",
-      platform: "instagram",
-      external_id: "17841400000000001",
-      status: "active",
-      capabilities: {},
-      created_at: "2026-07-19T10:00:00.000Z",
+      id: "msg_dm_maxim_ig_2",
+      direction: "in",
+      text: "Добрый день. Заказ получил, но одна чашка со сколом на ручке 😞",
+      time: "11:50",
+      deliveryLabel: null,
+      attachmentName: null,
     },
     {
-      id: "chc_facebook_page",
-      workspace_id: "wsp_tonwerk",
-      name: "Facebook Страница",
-      provider: "zernio",
-      platform: "facebook",
-      external_id: "102740000000002",
-      status: "active",
-      capabilities: {},
-      created_at: "2026-07-19T10:01:00.000Z",
+      id: "msg_dm_maxim_ig_3",
+      direction: "in",
+      text: "Вот фото",
+      time: "11:52",
+      deliveryLabel: null,
+      attachmentName: "IMG_2214.jpg",
     },
   ],
+  debounceNote: null,
+  draft: null,
+};
+
+const INBOX_THREAD_ANNA_IG = {
+  ...INBOX_THREAD_MAXIM,
+  conversationId: "cnv_dm_anna_ig",
+  contactId: "con_anna",
+  title: "Anna Weber",
+  avatar: { initials: "AW", hue: 120 },
+  messages: [
+    {
+      id: "msg_dm_anna_ig_3",
+      direction: "in",
+      text: "И сколько будет доставка в Гамбург?",
+      time: "12:41",
+      deliveryLabel: null,
+      attachmentName: null,
+    },
+  ],
+};
+
+vi.mock("@/lib/db/inbox", () => ({
+  listChannelConnections: async () => INBOX_CHANNELS,
+  getChannelFiltersView: async () => [
+    { id: "chc_instagram_shop", name: "Instagram Магазин", platform: "instagram", count: 4 },
+    { id: "chc_facebook_page", name: "Facebook Страница", platform: "facebook", count: 1 },
+  ],
+  getInboxNavigationCounters: async () => ({
+    totalUnread: 5,
+    channels: [
+      { id: "chc_instagram_shop", name: "Instagram Магазин", platform: "instagram", unreadCount: 4 },
+      { id: "chc_facebook_page", name: "Facebook Страница", platform: "facebook", unreadCount: 1 },
+    ],
+  }),
+  getConversationListView: async (
+    _supabase: unknown,
+    _workspaceId: string,
+    _channels: unknown,
+    filter: { channelId?: string | null } = {},
+  ) => {
+    const channelId = filter.channelId ?? null;
+    const items = channelId
+      ? INBOX_LIST_ITEMS.filter((item) => item.channel.id === channelId)
+      : INBOX_LIST_ITEMS;
+    const channel = channelId
+      ? INBOX_CHANNELS.find((candidate) => candidate.id === channelId)
+      : null;
+
+    return {
+      title: channel?.name ?? "Сообщения",
+      subtitle: `${channel ? "канал" : "все каналы"} · ${items.length} диалог(а/ов)`,
+      items,
+    };
+  },
+  getThreadView: async (
+    _supabase: unknown,
+    _workspaceId: string,
+    _channels: unknown,
+    conversationId: string,
+  ) => {
+    if (conversationId === "cnv_dm_maxim_ig") return INBOX_THREAD_MAXIM;
+    if (conversationId === "cnv_dm_anna_ig") return INBOX_THREAD_ANNA_IG;
+    return null;
+  },
+  markConversationRead: async () => ({ ok: true }),
+}));
+
+vi.mock("./inbox/actions", () => ({
+  markConversationReadAction: async () => ({ ok: true }),
 }));
 
 afterEach(cleanup);
@@ -105,7 +245,6 @@ describe("inbox page", () => {
     expect(screen.getByRole("button", { name: "Принять и отправить" })).toBeDefined();
     expect(screen.getByRole("button", { name: "Править" })).toBeDefined();
     expect(screen.getByRole("button", { name: "Отклонить" })).toBeDefined();
-    expect(screen.getByText(/дебаунс/)).toBeDefined();
     expect(screen.getByLabelText("Ответ")).toBeDefined();
   });
 
@@ -212,6 +351,17 @@ describe("settings page", () => {
   });
 });
 
+// Real per-channel unread (T-05) — deliberately distinct from mock's
+// `getNavigationCounters().dmUnread` below so a test asserting on this value
+// actually proves the real prop drives the badge, not the mock one.
+const messagesCounters = {
+  totalUnread: 4,
+  channels: [
+    { id: "chc_instagram_shop", name: "Instagram Магазин", platform: "instagram" as const, unreadCount: 3 },
+    { id: "chc_facebook_page", name: "Facebook Страница", platform: "facebook" as const, unreadCount: 1 },
+  ],
+};
+
 describe("shell navigation", () => {
   it("renders sidebar sections with counters and no knowledge base", () => {
     render(
@@ -220,6 +370,7 @@ describe("shell navigation", () => {
         userName="Алексей"
         userRole="owner"
         counters={getNavigationCounters()}
+        messagesCounters={messagesCounters}
         settingsSections={SETTINGS_SECTIONS}
       />,
     );
@@ -229,17 +380,19 @@ describe("shell navigation", () => {
     expect(screen.getByText("Комментарии")).toBeDefined();
     expect(screen.getByText("Контакты")).toBeDefined();
     expect(screen.getByText("Настройки")).toBeDefined();
-    // Раздел «Сообщения» раскрыт по умолчанию — виден расхлоп каналов.
+    // Раздел «Сообщения» раскрыт по умолчанию — виден расхлоп реальных каналов
+    // (T-05) со своим счётчиком, а не мока.
     expect(screen.getByText("Все каналы")).toBeDefined();
+    expect(screen.getByText(String(messagesCounters.totalUnread))).toBeDefined();
     expect(screen.queryByText("База знаний")).toBeNull();
   });
 
   it("renders the mobile tabbar with unread badges", () => {
     const counters = getNavigationCounters();
 
-    render(<Tabbar counters={counters} />);
+    render(<Tabbar counters={counters} messagesCounters={messagesCounters} />);
 
     expect(screen.getAllByRole("link")).toHaveLength(5);
-    expect(screen.getByText(String(counters.dmUnread))).toBeDefined();
+    expect(screen.getByText(String(messagesCounters.totalUnread))).toBeDefined();
   });
 });

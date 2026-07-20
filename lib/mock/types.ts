@@ -7,7 +7,18 @@
  * не требовала переписывания компонентов.
  */
 
-export type Platform = "instagram" | "facebook";
+import type { ChannelPlatform } from "@/lib/channels/types";
+
+/**
+ * The mockup (E-001/T-07, docs/references/ui-mockup.html) only ever showcases
+ * Instagram/Facebook, but real `channel_connections` (T-01/T-04) can be any
+ * of the four platforms the channel layer supports. Reusing `ChannelPlatform`
+ * here (rather than redeclaring a narrower union) is what lets
+ * `lib/db/inbox.ts` (T-05) return view models typed against these same
+ * `ConversationListItemView`/`ThreadView` shapes for a real Telegram/WhatsApp
+ * channel without a type mismatch.
+ */
+export type Platform = ChannelPlatform;
 
 export type ChannelProvider = "zernio" | "postmark" | "meta";
 

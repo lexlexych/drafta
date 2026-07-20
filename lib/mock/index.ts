@@ -247,6 +247,8 @@ export type SettingsTeamRowView = {
 /* ------------------------------------------------------------------ */
 
 const PLATFORM_LABELS: Record<Platform, string> = {
+  telegram: "Telegram",
+  whatsapp: "WhatsApp",
   instagram: "Instagram",
   facebook: "Facebook",
 };
@@ -290,7 +292,12 @@ function pluralize(count: number, forms: [string, string, string]): string {
   return lastDigit === 1 ? forms[0] : forms[2];
 }
 
-function countWithNoun(count: number, forms: [string, string, string]): string {
+/**
+ * Exported (not just an internal mock helper) because `lib/db/inbox.ts`
+ * (T-05) needs the exact same Russian pluralization for real conversation
+ * counts — one source of truth instead of a second copy drifting from this one.
+ */
+export function countWithNoun(count: number, forms: [string, string, string]): string {
   return `${count} ${pluralize(count, forms)}`;
 }
 
@@ -313,7 +320,13 @@ function initials(name: string): string {
   return `${first}${second}`.toUpperCase();
 }
 
-function avatarFor(id: string, name: string): AvatarView {
+/**
+ * Exported for the same reason as `countWithNoun` above: `lib/db/inbox.ts`
+ * (T-05) derives avatars for real contacts the identical deterministic way
+ * (hash of an id → hue), so a contact's avatar color doesn't change when a
+ * conversation's data source moves from mock to `lib/db`.
+ */
+export function avatarFor(id: string, name: string): AvatarView {
   return { initials: initials(name), hue: avatarHue(id) };
 }
 

@@ -1,24 +1,48 @@
 import Link from "next/link";
 
+import type { DraftView } from "@/lib/mock";
 import {
-  getCategoryFilterOptions,
-  getChannelFilters,
-  getConversationList,
-  getThread,
-} from "@/lib/mock";
+  getChannelFiltersView,
+  getConversationListView,
+  getThreadView,
+  listChannelConnections,
+} from "@/lib/db/inbox";
+import { createServerSupabaseClient } from "@/lib/db/server";
+import { getAuthenticatedUser, getCurrentWorkspace } from "@/lib/db/workspace";
 
 import { Avatar } from "../_components/avatar";
-import { CategoryFilter } from "../_components/category-filter";
-import { CategoryChip, ChannelChip } from "../_components/chips";
+import { ChannelChip } from "../_components/chips";
 import { Composer } from "../_components/composer";
 import { DraftPanel } from "../_components/draft-panel";
 import { FilterChips } from "../_components/filter-chips";
-import { BackIcon, ClockIcon, PictureIcon, SparkIcon } from "../_components/icons";
+import { BackIcon, ClockIcon, PictureIcon } from "../_components/icons";
 import { QUERY_KEYS, buildHref, firstParam } from "../_components/navigation";
 import styles from "../_components/panes.module.css";
 import uiStyles from "../_components/ui.module.css";
+import { MarkThreadRead } from "./mark-thread-read";
 
 const PATHNAME = "/inbox";
+
+/**
+ * Neutral stand-in shown for every real thread — real AI drafts land in
+ * stage 2 (epic E-002 "Вне скоупа"; ticket's "Существенные факты": "Панель
+ * черновика не подключать… панель остаётся mock-заглушкой из E-001/T-07").
+ * Unlike E-001/T-07's mock data, this isn't per-conversation authored text
+ * pretending to be a generated reply — the same interactive stub component
+ * (accept/edit/reject/regenerate still all work as local-only UI, exactly
+ * as before this ticket), just with generic copy so nobody mistakes it for
+ * a real answer to a real customer message.
+ */
+const MOCK_DRAFT_STUB: DraftView = {
+  id: "stub-draft",
+  status: "ready",
+  text: "Здесь появится сгенерированный AI-черновик ответа — генерация подключается на следующем этапе.",
+  alternativeText:
+    "Здесь появится альтернативный вариант черновика после повторной генерации.",
+  caption: "Черновики подключаются на следующем этапе",
+  referenceText: null,
+  kbFileNames: [],
+};
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
@@ -29,18 +53,34 @@ export default async function InboxPage({
 }) {
   const params = await searchParams;
   const channelId = firstParam(params[QUERY_KEYS.channel]);
-  const categoryId = firstParam(params[QUERY_KEYS.category]);
   const conversationId = firstParam(params[QUERY_KEYS.conversation]);
 
-  const list = getConversationList("dm", { channelId, categoryId });
+  const user = await getAuthenticatedUser();
+  const workspace = user ? await getCurrentWorkspace(user.id) : null;
+
+  if (!workspace) {
+    // The shell layout (../layout.tsx) already redirects to /login or
+    // /onboarding before this can render for a real request — a safety net
+    // for this component in isolation (e.g. tests), not a real-world state.
+    return null;
+  }
+
+  const supabase = await createServerSupabaseClient();
+  const channels = await listChannelConnections(supabase, workspace.id);
+  const hasChannels = channels.length > 0;
+
+  const [list, filterChannels] = await Promise.all([
+    getConversationListView(supabase, workspace.id, channels, { channelId }),
+    getChannelFiltersView(supabase, workspace.id, channels),
+  ]);
+
   const openedId = conversationId ?? list.items[0]?.id ?? null;
-  const thread = openedId ? getThread(openedId) : null;
+  const thread = openedId
+    ? await getThreadView(supabase, workspace.id, channels, openedId)
+    : null;
   const isDetail = conversationId !== null;
 
-  const listParams = {
-    [QUERY_KEYS.channel]: channelId,
-    [QUERY_KEYS.category]: categoryId,
-  };
+  const listParams = { [QUERY_KEYS.channel]: channelId };
 
   return (
     <div className={styles.panes} data-detail={isDetail}>
@@ -48,21 +88,33 @@ export default async function InboxPage({
         <div className={styles.paneHead}>
           <div className={styles.paneHeadRow}>
             <h2>{list.title}</h2>
-            <CategoryFilter categories={getCategoryFilterOptions()} />
           </div>
           <span className={styles.paneSubtitle}>{list.subtitle}</span>
         </div>
 
         <FilterChips
           pathname={PATHNAME}
-          channels={getChannelFilters("dm")}
+          channels={filterChannels}
           activeChannelId={channelId}
-          extraParams={{ [QUERY_KEYS.category]: categoryId }}
         />
 
         <div className={styles.list}>
-          {list.items.length === 0 ? (
-            <div className={styles.empty}>Нет диалогов — измените фильтры</div>
+          {!hasChannels ? (
+            <div className={styles.empty}>
+              <p>Нет подключённых каналов.</p>
+              <Link
+                className={`${uiStyles.button} ${uiStyles.buttonPrimary} ${uiStyles.buttonSmall}`}
+                href={buildHref("/settings", { [QUERY_KEYS.section]: "channels" })}
+              >
+                Настройки → Каналы
+              </Link>
+            </div>
+          ) : list.items.length === 0 ? (
+            <div className={styles.empty}>
+              {channelId
+                ? "Нет диалогов с этим каналом."
+                : "Нет диалогов — сообщения появятся здесь, когда придёт первое входящее."}
+            </div>
           ) : null}
           {list.items.map((item) => (
             <Link
@@ -84,7 +136,6 @@ export default async function InboxPage({
                 <span className={styles.listPreview}>{item.preview}</span>
                 <span className={styles.listChips}>
                   <ChannelChip channel={item.channel} />
-                  {item.category ? <CategoryChip category={item.category} /> : null}
                   <span className={styles.listSpacer} />
                   {item.unreadCount > 0 ? (
                     <span className={`${uiStyles.unread} ${uiStyles.num}`}>
@@ -101,6 +152,7 @@ export default async function InboxPage({
       <section className={styles.paneDetail}>
         {thread ? (
           <>
+            <MarkThreadRead conversationId={thread.conversationId} />
             <div className={styles.threadHead}>
               <Link
                 className={styles.backButton}
@@ -114,9 +166,6 @@ export default async function InboxPage({
                 <b>{thread.title}</b>
                 <div className={styles.threadChips}>
                   <ChannelChip channel={thread.channel} />
-                  {thread.category ? (
-                    <CategoryChip category={thread.category} />
-                  ) : null}
                   {thread.replyWindowLabel ? (
                     <span className={`${uiStyles.chip} ${uiStyles.chipStatus}`}>
                       <ClockIcon /> {thread.replyWindowLabel}
@@ -149,7 +198,7 @@ export default async function InboxPage({
                   {message.attachmentName ? (
                     <>
                       <span className={styles.attachment}>
-                        <PictureIcon /> фото · {message.attachmentName}
+                        <PictureIcon /> {message.attachmentName}
                       </span>
                       <br />
                     </>
@@ -161,21 +210,14 @@ export default async function InboxPage({
                   </time>
                 </div>
               ))}
-              {thread.debounceNote ? (
-                <div className={styles.systemLine}>
-                  <SparkIcon /> {thread.debounceNote}
-                </div>
-              ) : null}
             </div>
 
             <div className={styles.draftWrap}>
-              {thread.draft ? (
-                <DraftPanel
-                  key={thread.conversationId}
-                  draft={thread.draft}
-                  channelName={thread.channel.name}
-                />
-              ) : null}
+              <DraftPanel
+                key={thread.conversationId}
+                draft={MOCK_DRAFT_STUB}
+                channelName={thread.channel.name}
+              />
               <Composer placeholder="Написать ответ вручную…" />
             </div>
           </>
