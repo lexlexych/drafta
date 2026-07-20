@@ -397,21 +397,17 @@ async function bumpConversationOnNewIncomingMessage(
   supabase: SupabaseClient,
   conversationId: string,
 ): Promise<void> {
-  const { data: conversation, error: readError } = await supabase
-    .from("conversations")
-    .select("unread_count")
-    .eq("id", conversationId)
-    .single();
-  if (readError) throw readError;
-
-  const { error: updateError } = await supabase
-    .from("conversations")
-    .update({
-      last_incoming_at: new Date().toISOString(),
-      unread_count: conversation.unread_count + 1,
-    })
-    .eq("id", conversationId);
-  if (updateError) throw updateError;
+  // Atomic `unread_count = unread_count + 1` on the Postgres side (see
+  // supabase/migrations/20260720150000_bump_conversation_unread_count_rpc.sql).
+  // A client-side select-then-update pair here is not atomic across two
+  // PostgREST round trips and loses updates under concurrent webhook
+  // delivery for the same conversation (T-03 review finding) — the RPC call
+  // is a single SQL statement, so Postgres serializes concurrent increments
+  // of the same row instead of two requests racing on a stale read.
+  const { error } = await supabase.rpc("bump_conversation_unread_count", {
+    target_conversation_id: conversationId,
+  });
+  if (error) throw error;
 }
 
 async function processDeliveryStatusUpdate(params: {

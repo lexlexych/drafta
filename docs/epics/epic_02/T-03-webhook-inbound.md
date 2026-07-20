@@ -361,6 +361,77 @@ skip-гейта) — правило 5.
 этим тикетом закрыт так, как предполагал сам эпик: клиент и fail-safe
 эмиссия есть, `serve()`/функции-обработчики — нет.
 
+### Доработка 1 (устранение замечания ревью)
+
+Устранено единственное блокирующее замечание — race condition (lost update)
+на `conversations.unread_count`.
+
+- **`supabase/migrations/20260720150000_bump_conversation_unread_count_rpc.sql`**
+  (новая миграция) — `security invoker`-функция
+  `public.bump_conversation_unread_count(target_conversation_id uuid)`,
+  ровно по образцу, предложенному ревьюером (`public.create_workspace`,
+  `20260720130000_create_workspace_rpc.sql`): один SQL-стейтмент `update
+  public.conversations set unread_count = unread_count + 1, last_incoming_at
+  = now() where id = target_conversation_id`. Атомарность обеспечивает сам
+  Postgres (сериализация конкурентных `UPDATE` одной строки на уровне
+  storage), а не клиентский код. `security definer` не нужен (в отличие от
+  `create_workspace`) — единственный вызывающий, `lib/webhooks/process-event.ts`,
+  уже работает через сервисный клиент (`SUPABASE_SECRET_KEY`), у которого и
+  так есть прямые права на таблицу и обход RLS (правило 5; тот же принцип,
+  что и в `revoke all … from anon` / `grant … to service_role` в
+  `20260720120000_add_workspace_rls_policies.sql`). `execute` отозван у
+  `public` и выдан только `service_role` — `authenticated` эту функцию не
+  вызывает (не клиентская операция).
+- **`lib/webhooks/process-event.ts`**, `bumpConversationOnNewIncomingMessage` —
+  вместо `select unread_count` → `update … value + 1` (два отдельных
+  HTTP-вызова PostgREST, не атомарно) теперь один вызов
+  `supabase.rpc("bump_conversation_unread_count", { target_conversation_id
+  })`. Функция по-прежнему бросает исключение при ошибке — вызывающий код
+  (`processIncomingDirectMessage`) ловит его тем же `try/catch`, что и
+  раньше, поведение по остальным веткам (идемпотентность вставки сообщения,
+  fail-safe эмиссия) не менялось.
+- **`app/api/webhooks/[provider]/route.test.ts`** — добавлен 10-й
+  интеграционный тест (регрессия на замечание ревью): 20 разных сообщений
+  одного отправителя в один новый диалог отправляются в роут **параллельно**
+  (`Promise.all`, не последовательно, как остальные тесты файла) — тот же
+  сценарий, которым ревьюер эмпирически воспроизвёл баг вручную (`curl`).
+  Проверяется `messages` = 20 (уникальность `(conversation_id, external_id)`
+  и без того работала верно) и `conversations.unread_count` = 20 (до
+  исправления падало из-за lost update, см. запись ревьюера — итог был 9 из
+  20). Таймаут теста увеличен до 20 с (20 параллельных запросов к локальному
+  Supabase иногда не укладываются в дефолтные 5 с).
+
+Проверено заново по полному DoD после исправления (см. «Как проверено —
+доработка 1» ниже) — все 105 тестов (было 104, +1 новый) проходят, включая
+новый конкурентный тест (реально ловит race до фикса и подтверждает его
+исчезновение после).
+
+### Как проверено — доработка 1
+
+```
+npx supabase db reset   # 5/5 миграций применены без ошибок, включая новую
+                         # 20260720150000_bump_conversation_unread_count_rpc.sql
+                         # (тот же безобидный кэш pg-delta warning от прокси
+                         # песочницы, что и раньше — к миграциям не относится)
+npm run lint             # 0 ошибок/предупреждений
+npm run build             # OK, 15/15 маршрутов
+npm test  (с реальными env локального Supabase)
+                          # 19 файлов / 105 тестов — все passed, включая новый
+                          # конкурентный тест (471ms, unread_count = 20)
+npm test  (без NEXT_PUBLIC_SUPABASE_URL/…)
+                          # 18 файлов passed + 1 skipped / 95 passed + 10 skipped —
+                          # route.test.ts по-прежнему корректно скипается целиком
+```
+
+Функция в БД проверена напрямую через `psql`: `security_type = INVOKER`,
+`execute` выдан только `service_role` (плюс `postgres` как владелец), у
+`public`/`authenticated`/`anon` прав нет.
+
+`grep` на `lib/ai`/`fetch(`/`axios` в `app/api/webhooks/`, `lib/webhooks/` —
+по-прежнему пусто; `SUPABASE_SECRET_KEY` — по-прежнему только в
+`lib/db/admin.ts`. Терминология (`workspace`), правило 2 (только миграция),
+правило 3 (новых таблиц не создано — только новая функция) не нарушены.
+
 ## 🔍 Ревью
 
 ### Вердикт: CHANGES_REQUESTED

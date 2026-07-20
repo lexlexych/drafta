@@ -460,6 +460,65 @@ describe.skipIf(!hasLocalSupabaseConfig)("POST /api/webhooks/[provider] (zernio)
     expect(emitInteractionReceivedMock).not.toHaveBeenCalled();
   });
 
+  it(
+    "concurrent webhooks for the same conversation: unread_count is not lost under a race " +
+      "(regression for the T-03 review finding)",
+    async () => {
+      const workspaceId = await createTestWorkspace();
+      await createTestChannelConnection(workspaceId, {
+        platform: "telegram",
+        externalId: "acct_tg_concurrent",
+      });
+
+      // Mirrors the reviewer's manual repro: many distinct messages from the
+      // same sender into a brand-new conversation, delivered concurrently
+      // (not one-by-one like every other test in this file). Before the fix,
+      // bumpConversationOnNewIncomingMessage did a `select unread_count` then
+      // `update ... + 1` as two separate PostgREST round trips — interleaved
+      // awaits across these concurrent requests raced on a stale read and
+      // lost increments (empirically: 20 concurrent messages left
+      // unread_count at 9 instead of 20).
+      const MESSAGE_COUNT = 20;
+      const responses = await Promise.all(
+        Array.from({ length: MESSAGE_COUNT }, (_, index) =>
+          postZernioWebhook(
+            buildEnvelope({
+              id: `wh_evt_test_concurrent_${index}`,
+              accountId: "acct_tg_concurrent",
+              conversationId: "conv_concurrent",
+              messageId: `msg_concurrent_${index}`,
+              senderId: "sender_concurrent",
+              senderName: "Concurrent Sender",
+            }),
+          ),
+        ),
+      );
+
+      for (const response of responses) {
+        expect(response.status).toBe(200);
+      }
+
+      const { data: conversation } = await supabase
+        .from("conversations")
+        .select("id, unread_count")
+        .eq("workspace_id", workspaceId)
+        .eq("external_id", "conv_concurrent")
+        .single();
+
+      const { data: messages } = await supabase
+        .from("messages")
+        .select("id")
+        .eq("conversation_id", conversation!.id);
+      expect(messages).toHaveLength(MESSAGE_COUNT);
+
+      // The atomic `bump_conversation_unread_count` RPC
+      // (supabase/migrations/20260720150000_bump_conversation_unread_count_rpc.sql)
+      // must account for every one of the concurrently delivered messages.
+      expect(conversation?.unread_count).toBe(MESSAGE_COUNT);
+    },
+    20000,
+  );
+
   it("delivery status update: message.delivered updates an existing message's delivery_status", async () => {
     const workspaceId = await createTestWorkspace();
     await createTestChannelConnection(workspaceId, {
