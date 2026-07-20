@@ -90,8 +90,99 @@ npm test
 
 ## 🔧 Отчёт разработчика
 
-_Заполняется агентом-разработчиком: что сделано (файлы), как проверено
-(команды и результат), отклонения, «вне скоупа», вопросы._
+### Что сделано
+
+Создано провайдер-независимое ядро слоя каналов в `lib/channels/` — до этого тикета
+каталог был пуст (только `.gitkeep`):
+
+- `lib/channels/types.ts` — нормализованные типы и интерфейс адаптера:
+  - `ChannelProvider` (`zernio | postmark | meta`), `ChannelPlatform`
+    (`telegram | whatsapp | instagram | facebook`), `NormalizedEventType`
+    (5 значений из §5), `InteractionKind` (`dm | comment`);
+  - `NormalizedEvent` со всеми полями §5: `type`, `providerEventId` (идемпотентность
+    `webhook_events`), `provider`, `platform`, `externalAccountId` (внешний ID
+    аккаунта соцсети — для резолва `channel_connection` по (provider, external_id),
+    как явно уточняет тикет), `interactionKind`, `conversation`
+    (`NormalizedConversationRef`: внешний ID диалога/поста + `postMetadata` для
+    комментариев), `message` (`NormalizedMessage`: `externalId` — идемпотентность
+    `messages`, `text`, `attachments: NormalizedAttachment[]`, `sender:
+    NormalizedSender` — внешний ID + отображаемое имя), `rawMetadata` — сырые
+    метаданные провайдера целиком;
+  - интерфейс `ChannelAdapter` — 4 операции §5: `verifyWebhook`, `parseWebhook`,
+    `sendMessage` (объявлена, реализация — этапы адаптеров/этап 3), опциональная
+    `getConnectUrl`;
+  - `ChannelOperationNotImplementedError` — переиспользуемая ошибка для
+    заглушек `sendMessage` в будущих адаптерах (T-02+), чтобы не дублировать
+    формулировку в каждом адаптере.
+- `lib/channels/capabilities.ts` — тип `ChannelCapabilities` (окно ответа в часах,
+  вложения, статусы прочтения, лимит длины, стиль тредирования, поддержка
+  комментариев) и `DEFAULT_CHANNEL_CAPABILITIES` — объект-данные с дефолтами для
+  4 платформ (не условия в коде) + хелпер `getDefaultChannelCapabilities(platform)`,
+  возвращающий копию (для T-04, чтобы не мутировать общий объект).
+- `lib/channels/registry.ts` — реестр `Map<ChannelProvider, ChannelAdapter>`:
+  `registerChannelAdapter`, `resolveChannelAdapter(provider: string)` (принимает
+  `string`, а не `ChannelProvider` — резолвится по сегменту URL в вебхук-роуте
+  T-03, значение которого не гарантированно валидно), `UnknownChannelProviderError`
+  с понятным сообщением. Реестр пуст — как и предполагает тикет (Zernio
+  регистрируется в T-02).
+- Юнит-тесты: `lib/channels/capabilities.test.ts` (9 тестов — состав платформ,
+  полнота capability-полей, WhatsApp 24ч, Telegram без окна, комментарии только
+  у Instagram/Facebook, независимость копии) и `lib/channels/registry.test.ts`
+  (4 теста — резолв зарегистрированного адаптера, понятная ошибка для известного,
+  но незарегистрированного провайдера, понятная ошибка для полностью неизвестного
+  имени, изоляция между провайдерами; между тестами `vi.resetModules()` +
+  динамический `import`, так как реестр — модульный синглтон).
+
+### Как проверено
+
+Каталог `node_modules` в рабочей копии отсутствовал — перед проверками выполнен
+`npm ci` (455 пакетов).
+
+```
+npm run lint    # eslint . — 0 ошибок/предупреждений
+npm run build   # next build — компиляция + проверка типов TypeScript прошли,
+                # 14 маршрутов собраны без ошибок
+npm test        # vitest run — 13 файлов, 70 тестов, все прошли
+                #   (в т.ч. новые lib/channels/capabilities.test.ts — 9,
+                #   lib/channels/registry.test.ts — 4)
+```
+
+Дополнительно вручную проверено:
+- `grep` по `lib/channels/*.ts` на упоминания провайдерских SDK/типов — совпадений
+  нет (только строковые литералы `"zernio"` как значения `ChannelProvider`,
+  которые ожидаются самой архитектурой §6, и текст в комментариях/тестах).
+- `grep -i account` по `lib/channels/*.ts` (кроме тестов) — все вхождения относятся
+  к «аккаунту соцсети» (`externalAccountId`, `account-connect flow`), а не к
+  переименованию `channel_connection`; термин `channel_connection` нигде не
+  подменён словом `account`, как того требует глоссарий §2.
+
+### Отклонения от плана тикета
+
+Нет отклонений от шагов и критериев приёмки. Дополнительно к минимуму из шага 5
+(«резолв из реестра, включая неизвестный провайдер; дефолтные capabilities
+платформ») добавлены: тест на изоляцию провайдеров в реестре и тест на
+независимость копии, возвращаемой `getDefaultChannelCapabilities` — это
+не расширяет скоуп ядра, только тестовое покрытие уже объявленного контракта.
+
+### Вне скоупа
+
+- Реализация адаптеров (Zernio и т.д.), сам `sendMessage`, comment-обработка —
+  по плану тикета, следующие тикеты эпика (T-02+).
+- `.env.example` (`ZERNIO_API_KEY`, `ZERNIO_WEBHOOK_SECRET`) — по T-02, не
+  затронуто.
+
+### Открытые вопросы / допущения
+
+Capabilities платформ — данные, а не факт из архитектуры для каждой платформы:
+§5 явно фиксирует только окно ответа WhatsApp (24 ч) и общий состав таблицы
+capabilities. Остальные конкретные значения (окно ответа Instagram/Facebook,
+лимиты длины сообщений, стиль тредирования, поддержка комментариев по
+платформам) — разумные допущения на основе публичных ограничений платформ,
+задокументированы комментарием в `lib/channels/capabilities.ts`. Так как это
+данные (не код), их легко скорректировать в одном месте, когда появится
+доступ к документации Zernio/Meta (открытый вопрос №1 эпика) — рекомендую
+свериться на шаге T-07 (executive summary) вместе с фикстурами реальных
+payload'ов.
 
 ## 🔍 Ревью
 
