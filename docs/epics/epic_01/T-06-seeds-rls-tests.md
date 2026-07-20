@@ -3,10 +3,10 @@ id: T-06
 epic: E-001
 title: "Сиды локальной разработки и автотесты RLS-изоляции"
 type: dev
-status: todo
+status: rework
 depends_on: [T-05]
 created: 2026-07-19
-updated: 2026-07-19
+updated: 2026-07-20
 ---
 
 # T-06. Сиды локальной разработки и автотесты RLS-изоляции
@@ -139,5 +139,40 @@ npm test
 
 ## 🔍 Ревью
 
-_Заполняется агентом-ревьюером: вердикт APPROVED / CHANGES_REQUESTED,
-замечания, что прогнано и с каким результатом._
+### CHANGES_REQUESTED
+
+1. `lib/rls-test-config.ts:39` не гарантирует использование только publishable-ключа:
+   отклоняется лишь префикс `sb_secret_`, поэтому legacy JWT service-role (и любая
+   другая непустая строка) проходит preflight и передаётся в `createClient`.
+   Проверка конфигурации должна разрешать только publishable-ключ проекта (включая
+   корректную безопасную обработку legacy anon JWT, если она нужна) и отклонять
+   service-role JWT; добавьте соответствующие unit-тесты.
+2. `lib/rls-test-config.ts:64-76` не создаёт технического запрета на production:
+   при `RLS_TEST_TARGET=cloud-dev` и строке подтверждения принимается любой
+   `https://<project-ref>.supabase.co`, в том числе production-ref. Затем сьют
+   выполняет INSERT/UPDATE в `tests/rls/isolation.integration.ts:131-179`.
+   Нужен проверяемый до сети allowlist/идентификатор выделенного dev-проекта и
+   тест, доказывающий отклонение production-цели; одного предупреждения README
+   недостаточно.
+
+Статически сиды корректны: два login-capable пользователя, два изолированных
+workspace и требуемые строки/связи в обоих workspace есть; все INSERT имеют
+UPSERT-конфликт. Изменения не добавляют таблиц, миграций, внешних сервисов или
+клиентского секрета.
+
+Прогнано независимо:
+
+- `git diff --check 8b05651^ 8b05651` — успешно.
+- `npm.cmd run lint` — успешно.
+- `npm.cmd run build` — успешно.
+- `npm.cmd test` — успешно: 9 файлов, 24 теста.
+- `npm.cmd run test:rls` с очищенными `RLS_TEST_*` — ожидаемо завершился до
+  сетевого запроса: `Missing required RLS test environment variable: RLS_TEST_TARGET`.
+- Статическая проверка `getRlsTestConfig` без сети воспроизвела оба замечания:
+  приняты JWT-образный непубликуемый ключ и
+  `https://production-project.supabase.co` при `cloud-dev-only`.
+
+`supabase db reset` и настроенный runtime-RLS-сценарий не запускались: Docker
+запрещён, выделенный Cloud dev-проект не предоставлен. Это неподтверждённое
+runtime-доказательство остаётся ручным шагом T-08, а не отдельным замечанием
+данного ревью.
