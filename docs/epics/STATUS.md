@@ -37,7 +37,7 @@
 | # | Тикет | Тип | Статус |
 |---|---|---|---|
 | T-01 | [Ядро слоя каналов: типы, интерфейс адаптера, реестр](epic_02/T-01-channels-core.md) | dev | done |
-| T-02 | [Адаптер Zernio (DM): подпись, парсинг, фикстуры](epic_02/T-02-zernio-adapter.md) | dev | todo |
+| T-02 | [Адаптер Zernio (DM): подпись, парсинг, фикстуры](epic_02/T-02-zernio-adapter.md) | dev | in_progress |
 | T-03 | [Вебхук-роут с идемпотентностью: пайплайн входящего](epic_02/T-03-webhook-inbound.md) | dev | todo |
 | T-04 | [Настройки → Каналы: подключения с именами](epic_02/T-04-channels-settings.md) | dev | todo |
 | T-05 | [Инбокс «Сообщения»: список диалогов и тред](epic_02/T-05-inbox-messages.md) | dev | todo |
