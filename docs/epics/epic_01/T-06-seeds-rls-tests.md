@@ -3,7 +3,7 @@ id: T-06
 epic: E-001
 title: "Сиды локальной разработки и автотесты RLS-изоляции"
 type: dev
-status: rework
+status: in_progress
 depends_on: [T-05]
 created: 2026-07-19
 updated: 2026-07-20
