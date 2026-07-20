@@ -3,10 +3,10 @@ id: T-01
 epic: E-002
 title: "Ядро слоя каналов: типы, интерфейс адаптера, реестр"
 type: dev
-status: todo
+status: in_progress
 depends_on: []
 created: 2026-07-19
-updated: 2026-07-19
+updated: 2026-07-20
 ---
 
 # T-01. Ядро слоя каналов: типы, интерфейс адаптера, реестр
