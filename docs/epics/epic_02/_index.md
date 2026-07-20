@@ -1,10 +1,10 @@
 ---
 id: E-002
 title: "Zernio-контур: адаптер, вебхук, Realtime-инбокс «Сообщения»"
-status: todo
+status: in_progress
 source: "этап 1 плана внедрения (docs/architecture/16-rollout-plan.md)"
 created: 2026-07-19
-updated: 2026-07-19
+updated: 2026-07-20
 ---
 
 # E-002. Zernio-контур: адаптер, вебхук, Realtime-инбокс «Сообщения»
