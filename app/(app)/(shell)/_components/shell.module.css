@@ -1,0 +1,305 @@
+/* Каркас приложения: левое меню (десктоп) + рабочая область + таббар (мобайл). */
+
+.app {
+  display: flex;
+  flex: 1;
+  height: 100dvh;
+  overflow: hidden;
+  font-size: 14px;
+}
+
+.sidebar {
+  width: 236px;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border-right: 1px solid var(--line);
+}
+
+.main {
+  flex: 1;
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+}
+
+.tabbar {
+  display: none;
+}
+
+/* ---------- левое меню ---------- */
+
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 18px 16px 14px;
+}
+
+.logo b {
+  font-size: 17px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.logo b i {
+  font-style: normal;
+  color: var(--accent);
+}
+
+.workspace {
+  font-size: 11px;
+  color: var(--ink3);
+  margin-top: 1px;
+}
+
+.nav {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px 8px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+/* Строка меню: ссылка раздела + опциональная кнопка-расхлоп. */
+.navItem {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 8px;
+  color: var(--ink2);
+  font-weight: 500;
+}
+
+.navLink {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: inherit;
+}
+
+.navItem:hover {
+  background: var(--hover);
+}
+
+.navItem[data-active="true"] {
+  background: var(--accent-soft);
+  color: var(--accent-soft-ink);
+}
+
+.navLabel {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.navCount {
+  font-size: 11px;
+  font-weight: 700;
+  background: var(--badge);
+  color: #fff;
+  border-radius: 99px;
+  min-width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 5px;
+}
+
+.chevron {
+  display: inline-flex;
+  color: var(--ink3);
+  padding: 2px;
+  border-radius: 6px;
+  transition: transform 0.15s;
+}
+
+.chevron[data-open="true"] {
+  transform: rotate(180deg);
+}
+
+.subList {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin: 1px 0 3px;
+}
+
+.subItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  padding: 6px 10px 6px 38px;
+  border-radius: 8px;
+  color: var(--ink2);
+  font-size: 13px;
+}
+
+.subItem:hover {
+  background: var(--hover);
+}
+
+.subItem[data-active="true"] {
+  background: var(--accent-soft);
+  color: var(--accent-soft-ink);
+  font-weight: 600;
+}
+
+.subLabel {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.subCount {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--ink3);
+}
+
+.sidebarFooter {
+  border-top: 1px solid var(--line);
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.user {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.userInfo {
+  min-width: 0;
+}
+
+.userInfo b {
+  display: block;
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.userInfo span {
+  font-size: 11px;
+  color: var(--ink3);
+}
+
+.mockNote {
+  font-size: 10.5px;
+  color: var(--ink3);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+/* ---------- нижний таббар (мобайл) ---------- */
+
+.tabButton {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 7px 0 6px;
+  color: var(--ink3);
+  font-size: 10px;
+  font-weight: 600;
+  position: relative;
+}
+
+.tabButton[data-active="true"] {
+  color: var(--accent);
+}
+
+.tabCount {
+  position: absolute;
+  top: 3px;
+  left: calc(50% + 6px);
+  font-size: 9.5px;
+  font-weight: 700;
+  background: var(--badge);
+  color: #fff;
+  border-radius: 99px;
+  min-width: 15px;
+  height: 15px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 4px;
+}
+
+/* ---------- toast ---------- */
+
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 76px;
+  transform: translateX(-50%) translateY(8px);
+  background: var(--ink);
+  color: var(--bg);
+  font-size: 12.5px;
+  font-weight: 600;
+  border-radius: 99px;
+  padding: 8px 16px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s, transform 0.2s;
+  z-index: 50;
+  max-width: 88vw;
+  text-align: center;
+}
+
+.toastVisible {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+@media (max-width: 899px) {
+  .app {
+    flex-direction: column;
+  }
+
+  .sidebar {
+    display: none;
+  }
+
+  .main {
+    flex: 1;
+    min-height: 0;
+  }
+
+  .tabbar {
+    display: flex;
+    background: var(--surface);
+    border-top: 1px solid var(--line);
+    flex: none;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  /* В режиме «открыт тред» таббар уступает место содержимому. */
+  .app:has([data-detail="true"]) .tabbar {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chevron {
+    transition: none;
+  }
+}

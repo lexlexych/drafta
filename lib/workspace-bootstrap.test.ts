@@ -35,7 +35,7 @@ describe("workspace bootstrap boundaries", () => {
     expect(migration).not.toContain("public.categories");
   });
 
-  it("uses the RPC from onboarding and keeps dashboard behind both gates", () => {
+  it("uses the RPC from onboarding and keeps the app shell behind both gates", () => {
     const appLayout = readSource("app", "(app)", "layout.tsx");
     const onboarding = readSource("app", "(app)", "onboarding", "page.tsx");
     const form = readSource(
@@ -45,12 +45,9 @@ describe("workspace bootstrap boundaries", () => {
       "_components",
       "workspace-form.tsx",
     );
-    const dashboardLayout = readSource(
-      "app",
-      "(app)",
-      "dashboard",
-      "layout.tsx",
-    );
+    // T-07: dashboard и остальные разделы живут в группе (shell);
+    // второй гейт (наличие workspace) — в её layout.
+    const shellLayout = readSource("app", "(app)", "(shell)", "layout.tsx");
 
     expect(appLayout).toContain("getAuthenticatedUser");
     expect(appLayout).toContain('redirect("/login")');
@@ -58,7 +55,7 @@ describe("workspace bootstrap boundaries", () => {
     expect(onboarding).toContain('redirect("/dashboard")');
     expect(form).toContain('supabase.rpc("create_workspace"');
     expect(form).not.toContain('.from("workspaces")');
-    expect(dashboardLayout).toContain("getCurrentWorkspace");
-    expect(dashboardLayout).toContain('redirect("/onboarding")');
+    expect(shellLayout).toContain("getCurrentWorkspace");
+    expect(shellLayout).toContain('redirect("/onboarding")');
   });
 });

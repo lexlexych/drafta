@@ -3,10 +3,10 @@ id: T-07
 epic: E-001
 title: "UI-каркас приложения по макету ui-mockup.html на mock-данных"
 type: dev
-status: todo
+status: done
 depends_on: [T-01, T-05]
 created: 2026-07-19
-updated: 2026-07-19
+updated: 2026-07-20
 ---
 
 # T-07. UI-каркас приложения по макету ui-mockup.html на mock-данных
