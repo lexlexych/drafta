@@ -1,7 +1,7 @@
 ---
 id: E-001
 title: "Фундамент: Next.js + Supabase Auth, схема БД v1, RLS"
-status: in_progress
+status: done
 source: "этап 0 плана внедрения (docs/architecture/16-rollout-plan.md)"
 created: 2026-07-19
 updated: 2026-07-20

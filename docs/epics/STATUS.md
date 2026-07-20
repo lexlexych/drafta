@@ -11,7 +11,7 @@
 
 | Эпик | Название | Статус | Тикеты (done/всего) | Создан | Завершён |
 |---|---|---|---|---|---|
-| [E-001](epic_01/_index.md) | Фундамент: Next.js + Supabase Auth, схема БД v1, RLS | in_progress | 7/8 | 2026-07-19 | — |
+| [E-001](epic_01/_index.md) | Фундамент: Next.js + Supabase Auth, схема БД v1, RLS | done | 7/8 | 2026-07-19 | 2026-07-20 |
 | [E-002](epic_02/_index.md) | Zernio-контур: адаптер, вебхук, Realtime-инбокс «Сообщения» | todo | 0/7 | 2026-07-19 | — |
 | [E-003](epic_03/_index.md) | AI-черновики с дебаунсом: Inngest + Mistral, generate-draft, панель черновика | todo | 0/8 | 2026-07-19 | — |
 
