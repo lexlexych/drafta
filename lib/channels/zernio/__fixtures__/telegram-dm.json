@@ -1,0 +1,21 @@
+{
+  "id": "wh_evt_01HZXTELEGRAM0001",
+  "event": "message.received",
+  "timestamp": "2026-07-20T09:14:32.118Z",
+  "account": {
+    "id": "acct_tg_98213",
+    "platform": "telegram"
+  },
+  "message": {
+    "id": "tg_msg_55210",
+    "conversation": {
+      "id": "tg_chat_77120"
+    },
+    "text": "Здравствуйте! Подскажите, пожалуйста, режим работы сегодня?",
+    "attachments": [],
+    "sender": {
+      "id": "tg_user_44310",
+      "name": "Anna Keller"
+    }
+  }
+}
