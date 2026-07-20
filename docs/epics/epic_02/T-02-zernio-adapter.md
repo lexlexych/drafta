@@ -3,7 +3,7 @@ id: T-02
 epic: E-002
 title: "Адаптер Zernio (DM): подпись, парсинг, фикстуры"
 type: dev
-status: review
+status: rework
 depends_on: [T-01]
 created: 2026-07-19
 updated: 2026-07-20
@@ -273,5 +273,153 @@ Next.js (проверено в песочнице) — значит, файл с
 
 ## 🔍 Ревью
 
-_Заполняется агентом-ревьюером: вердикт APPROVED / CHANGES_REQUESTED,
-замечания, что прогнано и с каким результатом._
+**Вердикт: CHANGES_REQUESTED**
+
+### Прогнанные команды (независимо от отчёта разработчика)
+
+```
+npm run lint    # eslint . — 0 ошибок/предупреждений (совпадает с отчётом)
+npm run build   # next build — успешно, TypeScript-проверка прошла,
+                #   14/14 маршрутов сгенерированы (совпадает с отчётом)
+npm test        # vitest run — 17 файлов, 93 теста, все прошли
+                #   (совпадает с отчётом: 70 из T-01 + 23 новых в lib/channels/zernio/)
+```
+
+Diff проверен напрямую (`git diff main --stat`) — только заявленные файлы в
+`lib/channels/zernio/`, `.env.example`, файлы тикетов/STATUS.md.
+
+### Проверка критериев приёмки
+
+- [x] Zernio-специфичный код только в `lib/channels/zernio/`; наружу экспортируются
+  только `parseZernioWebhook`, `verifyZernioSignature`, `createZernioAdapter`,
+  `zernioAdapter` — сырые Zernio-типы не экспортируются
+  (`grep -rniE "zernio" lib app --include=*.ts --include=*.tsx` вне
+  `lib/channels/zernio/` — только независимый mock-слой E-001/T-07 и строковые
+  литералы `ChannelProvider`, как и заявлено в отчёте).
+- [x] `verifyZernioSignature` отклоняет неверную/отсутствующую подпись — 8 тестов
+  на фикстурах в `verify.test.ts`, все проходят.
+- [x] `sendMessage` — явная заглушка `ChannelOperationNotImplementedError`
+  (`adapter.ts:47-49`, тест в `adapter.test.ts`).
+- [ ] **`parseWebhook` НЕ возвращает корректные нормализованные события для
+  реальных Zernio-payload'ов** — маппинг в `parse.ts` расходится с реальной,
+  публично доступной документацией Zernio, хотя тикет требует в первую очередь
+  "структуру payload взять из доступной документации Zernio" (раздел
+  «Существенные факты»). Подробности и релевантность — ниже.
+
+### Главное замечание (блокирует принятие)
+
+Публичный OpenAPI-контракт Zernio (`https://docs.zernio.com/api/openapi`,
+ссылка с `docs.zernio.com` — один переход от главной страницы доков) описывает
+схему `WebhookPayloadMessage` (событие `message.received`) и
+`WebhookPayloadMessageDeliveryStatus` (`message.delivered/read/failed`) так:
+
+```yaml
+WebhookPayloadMessage:
+  required: [id, event, message, conversation, account, timestamp]
+  properties:
+    message: { $ref: InboxWebhookMessage }   # id, conversationId (строка!), platform,
+                                              # platformMessageId, direction, text,
+                                              # attachments, sender, sentAt, isRead —
+                                              # никакого вложенного `conversation`-объекта
+    conversation: { $ref: InboxWebhookConversation }  # ВЕРХНЕУРОВНЕВОЕ поле,
+                                              # соседнее с `message`, а не вложенное в него
+    account: { $ref: InboxWebhookAccount }
+```
+
+Т.е. `conversation` — это поле верхнего уровня конверта, соседнее с `message` и
+`account`, а не вложенное в `message`. У `InboxWebhookMessage` есть только
+плоская строка `conversationId`, никакого объекта `message.conversation` не
+существует вовсе.
+
+В реализации же (`lib/channels/zernio/parse.ts`):
+
+- `ZernioRawMessage.conversation: { id: string }` (строка 60) — придуманное
+  вложенное поле;
+- `isZernioMessage()` (строки 119-139) требует `candidate.conversation` как
+  объект с `id`;
+- `parseSingleEnvelope()` читает `raw.message.conversation.id` (строка 190).
+
+**Следствие**: на настоящем Zernio-payload'е (соответствующем их реальной,
+публично доступной схеме) `raw.message.conversation` будет `undefined` —
+`isZernioMessage()` вернёт `false`, и `parseZernioWebhook` молча (только
+`console.warn`) отбросит **каждое** реальное DM-событие как «no usable message
+payload». Первый же живой вебхук на шаге T-07 (сверка фикстур с реальностью)
+исчезнет без ошибки — притом что весь смысл адаптера и критерий приёмки №3
+тикета («`parseWebhook` для DM-фикстур возвращает нормализованные события») —
+именно корректный маппинг реального payload'а.
+
+Второе, менее критичное расхождение с той же схемой: элементы `attachments` в
+`InboxWebhookMessage` несут только `type`, `url` и непрозрачный объект
+`payload` — полей `file_name`/`mime_type` в реальной схеме нет. Маппинг
+`mapAttachment()` (`parse.ts:141-148`, читает `raw.file_name`/`raw.mime_type`)
+на реальном payload'е всегда даст `fileName: undefined, mimeType: undefined` —
+тихая потеря части заявленных в критерии приёмки «метаданных вложений».
+
+Дополнительно: отчёт разработчика утверждает — «Публичная документация **не**
+раскрывает точные вложенные поля `account`/`message`… это часть —
+допущение». Проверка показала, что это **не так**: OpenAPI-спецификация с
+точным составом полей `InboxWebhookMessage`/`InboxWebhookConversation`/
+`InboxWebhookAccount` публично доступна и легко находится с главной страницы
+`docs.zernio.com`. Остальные подтверждённые в отчёте факты (заголовок подписи
+`X-Zernio-Signature` + legacy-алиас `X-Late-Signature` — Zernio действительно
+ранее назывался Late, алгоритм HMAC-SHA256 сырого тела, полный список типов
+событий `message.received/sent/edited/deleted/delivered/read/failed`,
+`reaction.received`, `comment.received` и др.) — при независимой проверке
+совпали с реальной документацией; проблема именно в вывезенном "частично
+подтверждено" по вложенным полям `account`/`message`, где документация на
+самом деле была доступна и однозначна, но не использована (или использована
+неверно).
+
+Это не вопрос вкусовщины и не то, что тикет разрешает списать на «допущение,
+сверим в T-07»: пункт «Существенные факты» тикета явно ставит «взять из
+доступной документации» **выше** «спроектировать самостоятельно», а
+допущение уместно только «при её отсутствии». Документация была доступна.
+
+**Что нужно сделать:**
+
+1. В `parse.ts` читать `externalId` диалога из верхнеуровневого поля
+   `conversation` конверта (`conversation.id` или `conversation.platformConversationId`),
+   а не из `message.conversation.id`; обновить `ZernioWebhookEnvelope`/
+   `ZernioRawMessage`/валидаторы `isZernioEnvelope`/`isZernioMessage`
+   соответственно реальной схеме (`account`, `message`, `conversation` —
+   три соседних поля верхнего уровня).
+2. Поправить `mapAttachment()` под реальные поля вложений (`type`, `url`,
+   `payload`) — решить, что делать с `fileName`/`mimeType` (по всей видимости,
+   реальная схема их не даёт напрямую; либо не заполнять, либо доставать
+   из `payload`, если там что-то есть, задокументировав это явно).
+3. Перегенерировать фикстуры (`telegram-dm.json`, `whatsapp-dm.json`,
+   `whatsapp-dm-with-attachment.json`, `batch-with-unknown-event.json`,
+   `unknown-event-type.json`, `unsupported-platform.json`) и тесты
+   (`parse.test.ts`) под исправленную форму конверта.
+4. Поправить формулировку в отчёте/комментариях кода — реальная документация
+   по вложенным полям `account`/`message` была доступна, это не
+   неподтверждаемое допущение.
+
+### Некритичные замечания (не блокируют, но стоит учесть при исправлении)
+
+1. Комментарий в `parse.ts:17-18` называет типы Zernio
+   `accountInboxWebhookAccount`/`conversationInboxWebhookConversation` — в
+   реальной OpenAPI-спецификации они называются `InboxWebhookAccount` и
+   `InboxWebhookConversation` (без префикса по имени поля). Стоит поправить
+   заодно с остальными правками по этой же документации.
+2. `NormalizedMessage.externalId` берётся из `message.id` (внутренний Zernio
+   ID) — в реальной схеме есть также `platformMessageId` (ID сообщения на
+   стороне платформы). Для идемпотентности `webhook_events`/`messages`
+   внутренний Zernio ID тоже подходит (провайдер в терминах §5 — именно
+   Zernio, не сама платформа), поэтому не блокирует, но стоит явно
+   зафиксировать этот выбор в комментарии при исправлении маппинга.
+3. Остальное (структура файлов `adapter.ts`/`index.ts` из-за `server-only`,
+   приём тестирования `index.ts` через чтение исходника, дисциплина
+   импортов, `.env.example`) — проверено, замечаний нет.
+
+### Итог
+
+Инфраструктурная часть тикета (подпись, реестр, разделение
+`adapter.ts`/`index.ts` под `server-only`, тесты, `.env.example`) выполнена
+аккуратно и корректно. Но центральная часть тикета — маппинг реального
+Zernio DM-payload'а в нормализованное событие — не соответствует реальной,
+доступной документации Zernio в структурно значимой части (`conversation` —
+поле верхнего уровня, а не вложенное в `message`), из-за чего парсер на
+практике отбросит все настоящие DM-вебхуки. Это затрагивает критерий приёмки
+№3 и №6 (допущения должны быть корректно задокументированы) и является
+блокирующим.
