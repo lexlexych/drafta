@@ -3,7 +3,7 @@ id: T-04
 epic: E-002
 title: "Настройки → Каналы: подключения с именами"
 type: dev
-status: in_progress
+status: review
 depends_on: [T-02]
 created: 2026-07-19
 updated: 2026-07-20
