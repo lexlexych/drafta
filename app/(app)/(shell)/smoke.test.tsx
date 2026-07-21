@@ -34,13 +34,8 @@ vi.mock("next/navigation", () => ({
   }),
 }));
 
-// Settings → Channels (T-04) is the one section on this page backed by real
-// Supabase queries — every other section here stays on `lib/mock` (T-07
-// UI-каркас). `server-only` throws outside a Next build (see route.test.ts's
-// precedent); `lib/db/workspace`/`lib/db/server`/`lib/db/channel-connections`
-// are mocked so the page renders in jsdom without a request context or a
-// live database — two fixture channels preserve this file's existing
-// "renders the channels section" assertions below.
+// Real settings sections are mocked so the page renders in jsdom without a
+// request context or live Supabase.
 vi.mock("server-only", () => ({}));
 vi.mock("@/lib/db/workspace", () => ({
   getAuthenticatedUser: async () => ({ id: "usr_alexey" }),
@@ -81,6 +76,41 @@ const INBOX_CHANNELS = [
 vi.mock("@/lib/db/channel-connections", () => ({
   SUPPORTED_CHANNEL_PLATFORMS: ["telegram", "whatsapp", "instagram", "facebook"],
   listChannelConnections: async () => INBOX_CHANNELS,
+}));
+
+const CATEGORIES = [
+  {
+    id: "cat_spam",
+    workspace_id: "wsp_tonwerk",
+    name: "Спам",
+    description: "Реклама и массовые рассылки.",
+    draft_instruction: null,
+    channel_connection_ids: [],
+    incoming_kind: "both",
+    skip_draft: true,
+    priority: 0,
+    is_default: false,
+    created_at: "2026-07-21T10:00:00.000Z",
+    updated_at: "2026-07-21T10:00:00.000Z",
+  },
+  {
+    id: "cat_default",
+    workspace_id: "wsp_tonwerk",
+    name: "По умолчанию",
+    description: "Всё остальное.",
+    draft_instruction: null,
+    channel_connection_ids: [],
+    incoming_kind: "both",
+    skip_draft: false,
+    priority: 1,
+    is_default: true,
+    created_at: "2026-07-21T10:00:00.000Z",
+    updated_at: "2026-07-21T10:00:00.000Z",
+  },
+];
+
+vi.mock("@/lib/db/categories", () => ({
+  listCategories: async () => CATEGORIES,
 }));
 
 const KNOWLEDGE_FILES = [

@@ -5,7 +5,6 @@ import {
   SETTINGS_SECTIONS,
   getAiSettings,
   getNotificationSettings,
-  getSettingsCategories,
   getSettingsTeam,
   getWorkspace,
   isSettingsSectionId,
@@ -15,6 +14,7 @@ import {
   SUPPORTED_CHANNEL_PLATFORMS,
   listChannelConnections,
 } from "@/lib/db/channel-connections";
+import { listCategories, type CategoryRow } from "@/lib/db/categories";
 import {
   listKnowledgeFiles,
   type KnowledgeFileRow,
@@ -23,7 +23,7 @@ import { createServerSupabaseClient } from "@/lib/db/server";
 import { getAuthenticatedUser, getCurrentWorkspace } from "@/lib/db/workspace";
 
 import { Avatar } from "../_components/avatar";
-import { BackIcon, GripIcon, LockIcon, SettingsIcon } from "../_components/icons";
+import { BackIcon, SettingsIcon } from "../_components/icons";
 import { QUERY_KEYS, buildHref, firstParam } from "../_components/navigation";
 import { StubButton } from "../_components/stub";
 import {
@@ -35,6 +35,10 @@ import {
   KnowledgeBasePanel,
   type KnowledgeFileListItem,
 } from "./knowledge/knowledge-base-panel";
+import {
+  CategoriesPanel,
+  type CategoryChannelOption,
+} from "./categories/categories-panel";
 import setStyles from "./settings.module.css";
 import styles from "../_components/panes.module.css";
 import uiStyles from "../_components/ui.module.css";
@@ -48,8 +52,8 @@ type SearchParams = Promise<Record<string, string | string[] | undefined>>;
  * section (T-04) — real data, unlike the rest of this page (still mock,
  * T-07 UI-каркас, replaced section by section in later epics). Only called
  * when the Channels section is actually being rendered, so the other
- * sections (categories, ai, team…) stay Supabase-free, same as before this
- * ticket.
+ * sections are loaded independently so opening one settings panel does not
+ * query data owned by another panel.
  */
 async function loadChannelsSectionData(): Promise<ChannelConnectionListItem[]> {
   const user = await getAuthenticatedUser();
@@ -103,6 +107,37 @@ async function loadKnowledgeSectionData(): Promise<KnowledgeFileListItem[]> {
   );
 }
 
+async function loadCategoriesSectionData(): Promise<{
+  categories: CategoryRow[];
+  channels: CategoryChannelOption[];
+}> {
+  const user = await getAuthenticatedUser();
+
+  if (!user) {
+    return { categories: [], channels: [] };
+  }
+
+  const workspace = await getCurrentWorkspace(user.id);
+
+  if (!workspace) {
+    return { categories: [], channels: [] };
+  }
+
+  const supabase = await createServerSupabaseClient();
+  const [categories, channelRows] = await Promise.all([
+    listCategories(supabase, workspace.id),
+    listChannelConnections(supabase, workspace.id),
+  ]);
+
+  return {
+    categories,
+    channels: channelRows.map((channel) => ({
+      id: channel.id,
+      name: channel.name,
+    })),
+  };
+}
+
 /**
  * Reads the account-connect result the callback route
  * (app/api/channels/[provider]/connect/callback/) appends to the redirect,
@@ -138,6 +173,8 @@ export default async function SettingsPage({
     sectionId === "channels" ? await loadChannelsSectionData() : null;
   const knowledgeFiles =
     sectionId === "knowledge" ? await loadKnowledgeSectionData() : null;
+  const categoriesData =
+    sectionId === "categories" ? await loadCategoriesSectionData() : null;
   const connectResult =
     sectionId === "channels" ? readConnectResult(params) : null;
 
@@ -184,6 +221,7 @@ export default async function SettingsPage({
           <div className={setStyles.inner}>
             <SectionDetail
               sectionId={sectionId}
+              categoriesData={categoriesData}
               channels={channels}
               connectResult={connectResult}
               knowledgeFiles={knowledgeFiles}
@@ -197,11 +235,16 @@ export default async function SettingsPage({
 
 function SectionDetail({
   sectionId,
+  categoriesData,
   channels,
   connectResult,
   knowledgeFiles,
 }: {
   sectionId: SettingsSectionId;
+  categoriesData: {
+    categories: CategoryRow[];
+    channels: CategoryChannelOption[];
+  } | null;
   channels: ChannelConnectionListItem[] | null;
   connectResult: ChannelConnectResult | null;
   knowledgeFiles: KnowledgeFileListItem[] | null;
@@ -212,7 +255,7 @@ function SectionDetail({
         <ChannelsSection channels={channels ?? []} connectResult={connectResult} />
       );
     case "categories":
-      return <CategoriesSection />;
+      return <CategoriesSection data={categoriesData} />;
     case "ai":
       return <AiSection />;
     case "knowledge":
@@ -256,64 +299,30 @@ function ChannelsSection({
   );
 }
 
-function CategoriesSection() {
-  const categories = getSettingsCategories();
-
+function CategoriesSection({
+  data,
+}: {
+  data: {
+    categories: CategoryRow[];
+    channels: CategoryChannelOption[];
+  } | null;
+}) {
   return (
     <>
       <p className={setStyles.description}>
         Проверка идёт сверху вниз, первая подходящая категория побеждает.
         «По умолчанию» всегда последняя и не удаляется.
       </p>
-      <div className={uiStyles.card}>
-        {categories.map((category) => (
-          <div
-            key={category.id}
-            className={`${setStyles.categoryRow} ${
-              category.isDefault ? setStyles.categoryDefault : ""
-            }`}
-          >
-            <span
-              className={`${setStyles.grip} ${
-                category.isDefault ? setStyles.gripHidden : ""
-              }`}
-            >
-              <GripIcon />
-            </span>
-            <span className={`${setStyles.priority} ${uiStyles.num}`}>
-              {category.isDefault ? <LockIcon /> : category.priorityLabel}
-            </span>
-            <div className={setStyles.categoryBody}>
-              <b>
-                <span
-                  className={uiStyles.categoryDot}
-                  style={{ background: `var(${category.colorVar})` }}
-                  aria-hidden="true"
-                />
-                {category.name}
-              </b>
-              <div className={setStyles.categoryChips}>
-                <span className={uiStyles.chip}>{category.scopeLabel}</span>
-                {category.extraLabels.map((label) => (
-                  <span key={label} className={uiStyles.chip}>
-                    {label}
-                  </span>
-                ))}
-              </div>
-            </div>
-            <StubButton
-              className={`${uiStyles.button} ${uiStyles.buttonSmall} ${uiStyles.buttonGhost}`}
-            >
-              Изменить
-            </StubButton>
-          </div>
-        ))}
-      </div>
-      <StubButton
-        className={`${uiStyles.button} ${uiStyles.buttonPrimary} ${uiStyles.buttonSelfStart}`}
-      >
-        + Новая категория
-      </StubButton>
+      <CategoriesPanel
+        key={(data?.categories ?? [])
+          .map(
+            (category) =>
+              `${category.id}:${category.priority}:${category.updated_at}`,
+          )
+          .join("|")}
+        categories={data?.categories ?? []}
+        channels={data?.channels ?? []}
+      />
     </>
   );
 }
