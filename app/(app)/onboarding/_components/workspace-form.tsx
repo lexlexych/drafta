@@ -1,15 +1,11 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { type FormEvent, useState } from "react";
-
-import { defaultAuthenticatedPath } from "@/lib/auth/redirects";
 
 import styles from "../../app.module.css";
 import { createWorkspaceAction } from "../actions";
 
 export function WorkspaceForm() {
-  const router = useRouter();
   const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -31,14 +27,8 @@ export function WorkspaceForm() {
       name: workspaceName,
     });
 
-    if (!result.ok) {
-      setIsSubmitting(false);
-      setError(result.error);
-      return;
-    }
-
-    router.replace(defaultAuthenticatedPath);
-    router.refresh();
+    setIsSubmitting(false);
+    setError(result.error);
   }
 
   return (

@@ -7,6 +7,9 @@ const getCurrentWorkspace = vi.fn();
 const createZernioWorkspaceProfile = vi.fn();
 const deleteZernioWorkspaceProfile = vi.fn();
 const rpc = vi.fn();
+const redirect = vi.fn(() => {
+  throw new Error("NEXT_REDIRECT");
+});
 
 vi.mock("@/lib/db/workspace", () => ({
   getAuthenticatedUser: (...args: unknown[]) => getAuthenticatedUser(...args),
@@ -20,6 +23,9 @@ vi.mock("@/lib/channels/zernio", () => ({
 }));
 vi.mock("@/lib/db/admin", () => ({
   createAdminSupabaseClient: () => ({ rpc }),
+}));
+vi.mock("next/navigation", () => ({
+  redirect: (...args: unknown[]) => redirect(...args),
 }));
 
 import { createWorkspaceAction } from "./actions";
@@ -38,22 +44,24 @@ beforeEach(() => {
 
 describe("createWorkspaceAction", () => {
   it("provisions an isolated Zernio profile and persists it atomically with the workspace", async () => {
-    const result = await createWorkspaceAction({ name: "  Acme  " });
+    await expect(createWorkspaceAction({ name: "  Acme  " })).rejects.toThrow(
+      "NEXT_REDIRECT",
+    );
 
-    expect(result.ok).toBe(true);
-    if (!result.ok) return;
+    const workspaceId = createZernioWorkspaceProfile.mock.calls[0][0].workspaceId;
 
     expect(createZernioWorkspaceProfile).toHaveBeenCalledWith({
-      workspaceId: result.workspaceId,
+      workspaceId,
       workspaceName: "Acme",
     });
     expect(rpc).toHaveBeenCalledWith("create_workspace", {
-      target_workspace_id: result.workspaceId,
+      target_workspace_id: workspaceId,
       owner_user_id: "user_1",
       workspace_name: "Acme",
       provider_profiles: { zernio: "prof_1" },
     });
     expect(deleteZernioWorkspaceProfile).not.toHaveBeenCalled();
+    expect(redirect).toHaveBeenCalledWith("/dashboard");
   });
 
   it("does not create a workspace when Zernio provisioning fails", async () => {

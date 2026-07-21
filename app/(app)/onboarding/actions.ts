@@ -1,7 +1,9 @@
 "use server";
 
 import { randomUUID } from "node:crypto";
+import { redirect } from "next/navigation";
 
+import { defaultAuthenticatedPath } from "@/lib/auth/redirects";
 import {
   createZernioWorkspaceProfile,
   deleteZernioWorkspaceProfile,
@@ -10,8 +12,7 @@ import { createAdminSupabaseClient } from "@/lib/db/admin";
 import { getAuthenticatedUser, getCurrentWorkspace } from "@/lib/db/workspace";
 
 export type CreateWorkspaceResult =
-  | { ok: true; workspaceId: string }
-  | { ok: false; error: string };
+  { ok: false; error: string };
 
 /**
  * Creates the provider tenant boundary first, then atomically bootstraps the
@@ -81,5 +82,8 @@ export async function createWorkspaceAction(input: {
     };
   }
 
-  return { ok: true, workspaceId };
+  // A server-side redirect forces a fresh request after the mutation. A
+  // client-router transition can reuse the prefetched/RSC onboarding state
+  // and keep showing the form until a manual refresh.
+  redirect(defaultAuthenticatedPath);
 }
