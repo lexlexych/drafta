@@ -13,6 +13,16 @@ const migration = readFileSync(
   "utf8",
 );
 
+const constraintResolutionFix = readFileSync(
+  join(
+    process.cwd(),
+    "supabase",
+    "migrations",
+    "20260721121000_fix_categories_constraint_resolution.sql",
+  ),
+  "utf8",
+);
+
 describe("categories migration contract", () => {
   it("provisions and protects the last default category", () => {
     expect(migration).toContain("insert into public.categories (");
@@ -30,5 +40,20 @@ describe("categories migration contract", () => {
     expect(migration).toContain("private.is_workspace_member(target_workspace_id)");
     expect(migration).toContain("set constraints categories_workspace_priority_key deferred");
     expect(migration).toContain("to authenticated, service_role");
+  });
+
+  it("resolves the deferred priority constraint with an empty search path", () => {
+    expect(constraintResolutionFix).toContain(
+      "set constraints public.categories_workspace_priority_key deferred",
+    );
+    expect(constraintResolutionFix).toContain(
+      "public.create_category(uuid,text,text,text,uuid[],text,boolean)",
+    );
+    expect(constraintResolutionFix).toContain(
+      "public.delete_category(uuid,uuid)",
+    );
+    expect(constraintResolutionFix).toContain(
+      "public.reorder_categories(uuid,uuid[])",
+    );
   });
 });
