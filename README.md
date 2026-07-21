@@ -114,6 +114,43 @@ npm run test:rls
 обычные `NEXT_PUBLIC_*` переменные приложения, поэтому не может случайно
 подключиться к настроенному Vercel/Supabase окружению.
 
+## Локальный Inngest-контур
+
+Для сквозной проверки вебхука и фоновой функции запустите три процесса в
+отдельных терминалах из корня репозитория:
+
+```powershell
+# Терминал 1: локальная БД (требует Docker)
+npx supabase start
+
+# Терминал 2: Next.js в локальном режиме Inngest SDK v4
+$env:INNGEST_DEV = "1"
+npm run dev
+
+# Терминал 3: Inngest Dev Server; UI откроется на http://localhost:8288
+npx --ignore-scripts=false inngest-cli@latest dev -u http://localhost:3000/api/inngest
+```
+
+Dev Server также умеет автоматически обнаружить `/api/inngest`, но явный `-u`
+делает запуск воспроизводимым. В UI должны появиться приложение `drafta` и
+функция `generate-draft`. Для локальной фикстуры используйте то же значение
+`ZERNIO_WEBHOOK_SECRET`, которое задано приложению. Сид локальной БД содержит
+канал `seed-a-telegram`, поэтому PowerShell-команда ниже подменяет внешний ID
+аккаунта в тестовом payload и подписывает в точности отправляемое тело:
+
+```powershell
+$fixtureBody = (Get-Content -Raw -Encoding utf8 lib/channels/zernio/__fixtures__/telegram-dm.json).Replace("acct_tg_98213", "seed-a-telegram")
+$hmac = [System.Security.Cryptography.HMACSHA256]::new([Text.Encoding]::UTF8.GetBytes($env:ZERNIO_WEBHOOK_SECRET))
+$signature = [Convert]::ToHexString($hmac.ComputeHash([Text.Encoding]::UTF8.GetBytes($fixtureBody))).ToLowerInvariant()
+Invoke-WebRequest -Method Post -Uri http://localhost:3000/api/webhooks/zernio -ContentType application/json -Headers @{ "X-Zernio-Signature" = $signature } -Body $fixtureBody
+```
+
+После отправки в `POST /api/webhooks/zernio` событие
+`interaction/received` должно завершиться успешным запуском единственного шага
+`log-event-identifiers`; его лог содержит только `messageId`, `conversationId`
+и `workspaceId`. Секреты `INNGEST_EVENT_KEY` и `INNGEST_SIGNING_KEY` локальному
+Dev Server не нужны.
+
 ## Статические проверки
 
 ```powershell

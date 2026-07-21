@@ -3,10 +3,10 @@ id: T-01
 epic: E-003
 title: "Inngest-контур: serve-роут, типизация событий, локальный dev"
 type: dev
-status: todo
+status: in_progress
 depends_on: []
 created: 2026-07-19
-updated: 2026-07-19
+updated: 2026-07-21
 ---
 
 # T-01. Inngest-контур: serve-роут, типизация событий, локальный dev
@@ -88,8 +88,61 @@ Dev Server видны событие `interaction/received` и успешный 
 
 ## 🔧 Отчёт разработчика
 
-_Заполняется агентом-разработчиком: что сделано (файлы), как проверено
-(команды и результат), отклонения, «вне скоупа», вопросы._
+### Что сделано
+
+- `lib/inngest/events.ts` — добавлены типизированные события
+  `interaction/received` и `draft/regenerate.requested` с явным ID-only
+  payload; существующая fail-safe эмиссия переведена на типизированный event.
+- `lib/inngest/functions/generate-draft.ts` — добавлена функция-скелет с одним
+  retriable step: структурированный лог и результат содержат только
+  `messageId`, `conversationId`, `workspaceId`.
+- `lib/inngest/functions/index.ts` — добавлен единый реестр функций.
+- `app/api/inngest/route.ts` — добавлен Next.js App Router serve endpoint с
+  `GET`, `POST`, `PUT` и регистрацией общего реестра.
+- `lib/inngest/events.test.ts` — добавлены позитивные контракты обеих схем и
+  `@ts-expect-error`-проверки запрета полей с контентом/именем; сохранены
+  проверки точного набора ID и fail-safe эмиссии.
+- `app/api/inngest/route.test.ts` — smoke-тест реестра и трёх route handlers.
+- `README.md` — описан локальный контур из трёх процессов, обязательный для SDK
+  v4 `INNGEST_DEV=1`, URL serve endpoint и воспроизводимая PowerShell-команда
+  отправки подписанной Zernio-фикстуры на сидовый канал.
+
+### Как проверено
+
+- `npm.cmd run lint` — успешно, ошибок нет.
+- `npm.cmd run build` — успешно; TypeScript и production build прошли,
+  динамический маршрут `/api/inngest` присутствует в route manifest.
+- `npx.cmd vitest run lib/inngest/events.test.ts app/api/inngest/route.test.ts`
+  — успешно: 2 файла, 6 тестов.
+- `npm.cmd test` — общий сьют выполнен, результат: 33 test files passed, 4
+  skipped, 1 failed; 179 tests passed, 27 skipped, 2 failed. Оба падения —
+  существующие `lib/realtime/inbox-sync.test.ts`: тестовый mock не содержит
+  `supabase.auth.getSession`, поэтому ожидаемые `channel`/`removeChannel` не
+  вызываются. Отдельный повтор этого файла воспроизводит те же 2 падения; он
+  не импортирует и не затрагивает код T-01.
+- Ручной сквозной прогон через Dev Server не выполнен: `npx.cmd supabase status`
+  после разрешения записи telemetry завершился ошибкой подключения к
+  `dockerDesktopLinuxEngine` — Docker Desktop в окружении не запущен. Без
+  локальной БД вебхук-фикстура не может пройти до эмиссии события. Полная
+  команда прогона записана в `README.md`.
+
+### Отклонения
+
+- Тикет называет `EventSchemas`, но установленный Inngest SDK `4.13.0` удалил
+  этот API. По актуальной официальной документации v4 использованы
+  `eventType()` + `staticSchema()` и typed event `.create()`: это сохраняет
+  требуемую compile-time типизацию и делает лишние поля ошибкой TypeScript.
+- Для локального запуска добавлен `INNGEST_DEV=1`: SDK v4 по умолчанию работает
+  в cloud mode и без этого флага не подключается к локальному Dev Server.
+
+### Вне скоупа и открытые вопросы
+
+- Исправление двух существующих Realtime-тестов не относится к T-01 и не
+  выполнялось.
+- Бизнес-логика генерации, дебаунс, база знаний, категории и выбор LLM-провайдера
+  не добавлялись: это скоуп последующих тикетов эпика.
+- Открытых вопросов по реализации T-01 нет; ручной smoke остаётся повторить в
+  окружении с запущенным Docker Desktop.
 
 ## 🔍 Ревью
 

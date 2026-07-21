@@ -13,7 +13,57 @@ vi.mock("./client", () => ({
   },
 }));
 
-const { emitInteractionReceived } = await import("./events");
+const {
+  draftRegenerateRequestedEvent,
+  emitInteractionReceived,
+  interactionReceivedEvent,
+} = await import("./events");
+
+describe("Inngest event schemas", () => {
+  it("accepts ID-only payloads for both event types", () => {
+    expect(
+      interactionReceivedEvent.create({
+        messageId: "msg-1",
+        conversationId: "conv-1",
+        workspaceId: "ws-1",
+      }),
+    ).toMatchObject({
+      name: "interaction/received",
+      data: {
+        messageId: "msg-1",
+        conversationId: "conv-1",
+        workspaceId: "ws-1",
+      },
+    });
+
+    expect(
+      draftRegenerateRequestedEvent.create({
+        conversationId: "conv-1",
+        workspaceId: "ws-1",
+      }),
+    ).toMatchObject({
+      name: "draft/regenerate.requested",
+      data: { conversationId: "conv-1", workspaceId: "ws-1" },
+    });
+  });
+
+  it("rejects content fields at compile time", () => {
+    interactionReceivedEvent.create({
+      messageId: "msg-1",
+      conversationId: "conv-1",
+      workspaceId: "ws-1",
+      // @ts-expect-error Rule 7: content must never enter an Inngest payload.
+      content: "personal message text",
+    });
+
+    draftRegenerateRequestedEvent.create({
+      conversationId: "conv-1",
+      workspaceId: "ws-1",
+      // @ts-expect-error Rule 7: names must never enter an Inngest payload.
+      contactName: "Personal Name",
+    });
+  });
+});
 
 describe("emitInteractionReceived", () => {
   beforeEach(() => {
@@ -30,10 +80,12 @@ describe("emitInteractionReceived", () => {
     });
 
     expect(sendMock).toHaveBeenCalledTimes(1);
-    expect(sendMock).toHaveBeenCalledWith({
-      name: "interaction/received",
-      data: { messageId: "msg-1", conversationId: "conv-1", workspaceId: "ws-1" },
-    });
+    expect(sendMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: "interaction/received",
+        data: { messageId: "msg-1", conversationId: "conv-1", workspaceId: "ws-1" },
+      }),
+    );
 
     // Explicit key-set guard: catches a future edit that quietly widens the
     // payload (e.g. adding message text or a contact name) beyond the typed

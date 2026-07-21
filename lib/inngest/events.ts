@@ -1,3 +1,5 @@
+import { eventType, staticSchema } from "inngest";
+
 import { inngest } from "./client";
 
 /**
@@ -10,11 +12,32 @@ import { inngest } from "./client";
  * contact names, or any other personal data — this type is the enforcement,
  * every call site is a TypeScript error away from adding a fourth field.
  */
-export interface InteractionReceivedEvent {
+export type InteractionReceivedEvent = {
   messageId: string;
   conversationId: string;
   workspaceId: string;
-}
+};
+
+export type DraftRegenerateRequestedEvent = {
+  conversationId: string;
+  workspaceId: string;
+};
+
+/**
+ * Inngest SDK v4 event definitions. `staticSchema` provides compile-time
+ * validation without adding a runtime validation dependency; payload fields
+ * remain an explicit allow-list of pseudonymous IDs (vibecoding rule 7).
+ */
+export const interactionReceivedEvent = eventType("interaction/received", {
+  schema: staticSchema<InteractionReceivedEvent>(),
+});
+
+export const draftRegenerateRequestedEvent = eventType(
+  "draft/regenerate.requested",
+  {
+    schema: staticSchema<DraftRegenerateRequestedEvent>(),
+  },
+);
 
 /**
  * Emits `interaction/received`, fail-safe — see
@@ -28,16 +51,14 @@ export interface InteractionReceivedEvent {
  * must not see this as a reason to retry (that would just re-hit the
  * `webhook_events` idempotency guard for no benefit, not recover the event).
  *
- * There is no consumer of this event yet in this epic — debounced draft
- * generation (`generate-draft`) is stage 2 of the rollout plan
- * (docs/architecture/16-rollout-plan.md); this only wires up the emission
- * side, as scoped by T-03.
+ * The event is consumed by the stage 2 `generate-draft` Inngest function;
+ * this helper remains the emission boundary used by the webhook pipeline.
  */
 export async function emitInteractionReceived(
   payload: InteractionReceivedEvent,
 ): Promise<void> {
   try {
-    await inngest.send({ name: "interaction/received", data: payload });
+    await inngest.send(interactionReceivedEvent.create(payload));
   } catch (error) {
     console.error(
       '[inngest] failed to emit "interaction/received" (webhook already persisted; not retried from here)',
