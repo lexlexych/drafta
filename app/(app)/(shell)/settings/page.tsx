@@ -1,20 +1,23 @@
 import Link from "next/link";
 
 import {
-  AI_SETTINGS_OPTIONS,
   SETTINGS_SECTIONS,
-  getAiSettings,
   getNotificationSettings,
   getSettingsTeam,
   getWorkspace,
   isSettingsSectionId,
   type SettingsSectionId,
 } from "@/lib/mock";
+import { getAiModelOptions, type AiModelOption } from "@/lib/ai/config";
 import {
   SUPPORTED_CHANNEL_PLATFORMS,
   listChannelConnections,
 } from "@/lib/db/channel-connections";
 import { listCategories, type CategoryRow } from "@/lib/db/categories";
+import {
+  getWorkspaceAiSettings,
+  type AiSettingsRow,
+} from "@/lib/db/ai-settings";
 import {
   listKnowledgeFiles,
   type KnowledgeFileRow,
@@ -39,6 +42,7 @@ import {
   CategoriesPanel,
   type CategoryChannelOption,
 } from "./categories/categories-panel";
+import { AiSettingsForm } from "./ai/ai-settings-form";
 import setStyles from "./settings.module.css";
 import styles from "../_components/panes.module.css";
 import uiStyles from "../_components/ui.module.css";
@@ -46,6 +50,11 @@ import uiStyles from "../_components/ui.module.css";
 const PATHNAME = "/settings";
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
+
+type AiSectionData = {
+  settings: AiSettingsRow;
+  modelOptions: AiModelOption[];
+};
 
 /**
  * Loads the current workspace's `channel_connections` for the Channels
@@ -138,6 +147,27 @@ async function loadCategoriesSectionData(): Promise<{
   };
 }
 
+async function loadAiSectionData(): Promise<AiSectionData | null> {
+  const user = await getAuthenticatedUser();
+
+  if (!user) {
+    return null;
+  }
+
+  const workspace = await getCurrentWorkspace(user.id);
+
+  if (!workspace) {
+    return null;
+  }
+
+  const supabase = await createServerSupabaseClient();
+
+  return {
+    settings: await getWorkspaceAiSettings(supabase, workspace.id),
+    modelOptions: getAiModelOptions(),
+  };
+}
+
 /**
  * Reads the account-connect result the callback route
  * (app/api/channels/[provider]/connect/callback/) appends to the redirect,
@@ -175,6 +205,7 @@ export default async function SettingsPage({
     sectionId === "knowledge" ? await loadKnowledgeSectionData() : null;
   const categoriesData =
     sectionId === "categories" ? await loadCategoriesSectionData() : null;
+  const aiData = sectionId === "ai" ? await loadAiSectionData() : null;
   const connectResult =
     sectionId === "channels" ? readConnectResult(params) : null;
 
@@ -221,6 +252,7 @@ export default async function SettingsPage({
           <div className={setStyles.inner}>
             <SectionDetail
               sectionId={sectionId}
+              aiData={aiData}
               categoriesData={categoriesData}
               channels={channels}
               connectResult={connectResult}
@@ -235,12 +267,14 @@ export default async function SettingsPage({
 
 function SectionDetail({
   sectionId,
+  aiData,
   categoriesData,
   channels,
   connectResult,
   knowledgeFiles,
 }: {
   sectionId: SettingsSectionId;
+  aiData: AiSectionData | null;
   categoriesData: {
     categories: CategoryRow[];
     channels: CategoryChannelOption[];
@@ -257,7 +291,7 @@ function SectionDetail({
     case "categories":
       return <CategoriesSection data={categoriesData} />;
     case "ai":
-      return <AiSection />;
+      return <AiSection data={aiData} />;
     case "knowledge":
       return (
         <>
@@ -327,78 +361,24 @@ function CategoriesSection({
   );
 }
 
-function AiSection() {
-  const aiSettings = getAiSettings();
+function AiSection({ data }: { data: AiSectionData | null }) {
+  if (!data) {
+    return <p className={setStyles.formError}>AI-настройки недоступны.</p>;
+  }
 
   return (
-    <>
-      <div className={`${uiStyles.card} ${uiStyles.cardStack}`}>
-        <div className={uiStyles.field}>
-          <label htmlFor="ai-tone">Тон ответов</label>
-          <select id="ai-tone" defaultValue={aiSettings.tone}>
-            {AI_SETTINGS_OPTIONS.tones.map((tone) => (
-              <option key={tone}>{tone}</option>
-            ))}
-          </select>
-        </div>
-        <div className={uiStyles.field}>
-          <label htmlFor="ai-language">Язык ответов</label>
-          <select id="ai-language" defaultValue={aiSettings.language}>
-            {AI_SETTINGS_OPTIONS.languages.map((language) => (
-              <option key={language}>{language}</option>
-            ))}
-          </select>
-        </div>
-        <div className={uiStyles.field}>
-          <label htmlFor="ai-signature">Подпись</label>
-          <input
-            id="ai-signature"
-            type="text"
-            defaultValue={aiSettings.signature}
-          />
-        </div>
-        <div className={uiStyles.field}>
-          <label htmlFor="ai-model">Модель</label>
-          <select id="ai-model" defaultValue={aiSettings.model}>
-            {AI_SETTINGS_OPTIONS.models.map((model) => (
-              <option key={model}>{model}</option>
-            ))}
-          </select>
-        </div>
-        <div className={uiStyles.field}>
-          <label>Дебаунс для мессенджеров</label>
-          <div>{aiSettings.debounce_seconds} секунд паузы перед генерацией</div>
-        </div>
-      </div>
-
-      <div className={uiStyles.card}>
-        <h3>Авто-генерация черновиков</h3>
-        <div className={setStyles.toggleRow}>
-          <div className={setStyles.toggleLabel}>
-            Для сообщений
-            <span>черновик на каждую пачку после дебаунса</span>
-          </div>
-          <StubButton
-            className={uiStyles.switch}
-            role="switch"
-            aria-checked={aiSettings.auto_draft_dm}
-            aria-label="Авто-генерация для сообщений"
-          />
-        </div>
-        <div className={setStyles.toggleRow}>
-          <div className={setStyles.toggleLabel}>
-            Для комментариев
-            <span>черновик на каждый комментарий</span>
-          </div>
-          <StubButton
-            className={uiStyles.switch}
-            role="switch"
-            aria-checked={aiSettings.auto_draft_comments}
-            aria-label="Авто-генерация для комментариев"
-          />
-        </div>
-      </div>
-    </>
+    <AiSettingsForm
+      initialValue={{
+        tone: data.settings.tone,
+        language: data.settings.language,
+        signature: data.settings.signature,
+        debounceSeconds: data.settings.debounce_seconds,
+        model: data.settings.model,
+        autoGenerateDm: data.settings.auto_generate_dm,
+        autoGenerateComments: data.settings.auto_generate_comments,
+      }}
+      modelOptions={data.modelOptions}
+    />
   );
 }
 

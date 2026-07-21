@@ -153,6 +153,48 @@
   color: var(--ink3);
 }
 
+.aiForm {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.aiDebounceField {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.aiDebounceField input {
+  width: min(140px, 100%);
+}
+
+.aiDebounceField span {
+  color: var(--ink3);
+  font-size: 12.5px;
+}
+
+.aiFormFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.aiFormState {
+  min-width: 0;
+  color: var(--ink3);
+  font-size: 12.5px;
+}
+
+.aiFormState p {
+  margin: 0;
+}
+
+.formSuccess {
+  color: var(--accent);
+}
+
 /* Строки категорий. */
 .categoryRow {
   display: flex;
@@ -420,6 +462,15 @@
 @media (max-width: 899px) {
   .pane {
     padding: 16px 14px;
+  }
+
+  .aiFormFooter {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .aiFormFooter button {
+    width: 100%;
   }
 }
 

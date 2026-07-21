@@ -3,10 +3,10 @@ id: T-06
 epic: E-003
 title: "Настройки → AI: форма реальных ai_settings"
 type: dev
-status: todo
+status: in_progress
 depends_on: []
 created: 2026-07-19
-updated: 2026-07-19
+updated: 2026-07-22
 ---
 
 # T-06. Настройки → AI: форма реальных ai_settings
@@ -85,8 +85,63 @@ npm test
 
 ## 🔧 Отчёт разработчика
 
-_Заполняется агентом-разработчиком: что сделано (файлы), как проверено
-(команды и результат), отклонения, «вне скоупа», вопросы._
+### Что сделано
+
+- `app/(app)/(shell)/settings/page.tsx` загружает `ai_settings` только для
+  текущего workspace через пользовательский Supabase server client и передаёт
+  реальные значения в AI-раздел вместо mock-данных.
+- Добавлены `app/(app)/(shell)/settings/ai/ai-settings-form.tsx` и `actions.ts`:
+  контролируемая адаптивная форма сохраняет тон, язык, подпись, дебаунс, модель
+  и раздельные флаги DM/комментариев; показывает несохранённые изменения,
+  pending, success и error, не теряя локальные правки при ошибке.
+- Добавлены `lib/ai/settings.ts` и `lib/db/ai-settings.ts`: общая валидация
+  строковых лимитов, целого `debounce_seconds` 0–600, boolean-флагов и модели;
+  workspace-scoped загрузка и upsert по `workspace_id` под существующим RLS.
+- `lib/ai/config.ts` теперь является единственным источником списка моделей:
+  при наличии `MISTRAL_API_KEY` доступны только Mistral-модели; OpenRouter-модель
+  появляется только если Mistral-ключ отсутствует. Секреты в client props не
+  передаются. Пустая модель («Авто») в `lib/ai/client.ts` использует дефолт
+  активного провайдера.
+- `lib/mock/index.ts`: удалены больше не используемые mock-селектор и варианты
+  AI-формы; остальные mock-данные других разделов не затронуты.
+- `tests/rls/isolation.integration.ts`: добавлен негативный сценарий, в котором
+  owner workspace A не может обновить `ai_settings` workspace B.
+- Добавлены unit/action/UI-тесты:
+  `lib/ai/settings.test.ts`, `lib/db/ai-settings.test.ts`,
+  `app/(app)/(shell)/settings/ai/actions.test.ts`,
+  `app/(app)/(shell)/settings/ai/ai-settings-form.test.tsx`; расширены тесты
+  AI-конфига/клиента. Проверены границы 0/600, неизвестная модель, реальный
+  render, сохранение и error UX. Существующие KB/categories helpers и пайплайн
+  T-05 не менялись; regression-тест `draft-pipeline` включён в таргетный прогон.
+
+### Как проверено
+
+- `npm.cmd test -- lib/ai/config.test.ts lib/ai/client.test.ts lib/ai/settings.test.ts lib/db/ai-settings.test.ts "app/(app)/(shell)/settings/ai/actions.test.ts" "app/(app)/(shell)/settings/ai/ai-settings-form.test.tsx" lib/inngest/functions/draft-pipeline.test.ts`
+  — **PASS**, 7 файлов / 36 тестов.
+- `npm.cmd run lint` — **PASS** (exit 0).
+- `git diff --check` — **PASS**.
+- `npm.cmd run build` — production bundle **скомпилирован успешно** за 75 с,
+  затем команда остановлена лимитом runner на этапе TypeScript (exit 124).
+  Отдельный `.\\node_modules\\.bin\\tsc.cmd --noEmit` завершился (exit 1) на
+  ранее существующих ошибках типов только в
+  `inbox-realtime-sync.test.tsx`, `onboarding/actions.test.ts` и
+  `zernio/adapter.test.ts`; новые файлы тикета в диагностике отсутствуют.
+- `npm.cmd test` — **FAIL**, общий прогон завершился с 6 падениями UI-тестов
+  (таймауты/гонки при параллельной нагрузке, включая render-smoke AI-формы;
+  отдельно AI-набор проходит). Среди показанных внешних падений — существующие
+  `channels-panel` и `knowledge-base-panel` тесты.
+- RLS-сценарий добавлен в интеграционный suite, но `npm run test:rls` и ручная
+  браузерная проверка не запускались: в этом прогоне не поднималась отдельная
+  локальная Supabase/auth-среда.
+
+### Отклонения и вне скоупа
+
+- Схема `ai_settings` и существующая RLS-политика полностью покрывают тикет;
+  миграции не создавались.
+- Build/full-suite DoD не полностью зелёный по причинам, зафиксированным выше;
+  исправление чужих TypeScript/UI-тестов находится вне скоупа T-06.
+- Ручных шагов, новых секретов или внешних сервисов не обнаружено. Открытых
+  продуктовых вопросов в скоупе тикета нет.
 
 ## 🔍 Ревью
 

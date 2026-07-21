@@ -87,7 +87,7 @@ export async function generateCompletion(
 
   try {
     const completion = await client.chat.completions.create({
-      model: options.model ?? config.defaultModel,
+      model: options.model?.trim() || config.defaultModel,
       messages: [...messages],
       ...(options.temperature === undefined
         ? {}

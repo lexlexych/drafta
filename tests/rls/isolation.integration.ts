@@ -265,6 +265,40 @@ describe("workspace RLS isolation", () => {
     expect(stillIntact.data?.unread_count).toBe(1);
   });
 
+  it("denies updating another workspace's ai_settings (E-003/T-06)", async () => {
+    const updateAttempt = await ownerAClient
+      .from("ai_settings")
+      .update({
+        tone: "hijacked",
+        debounce_seconds: 0,
+        auto_generate_dm: false,
+      })
+      .eq("workspace_id", rlsSeedFixtures.ownerB.workspaceId)
+      .select("workspace_id");
+
+    expect(
+      updateAttempt.error,
+      "update attempt on foreign ai_settings",
+    ).toBeNull();
+    expectEmpty(
+      updateAttempt,
+      "update attempt on foreign ai_settings must affect 0 rows",
+    );
+
+    const stillIntact = await ownerBClient
+      .from("ai_settings")
+      .select("tone, debounce_seconds, auto_generate_dm")
+      .eq("workspace_id", rlsSeedFixtures.ownerB.workspaceId)
+      .single();
+
+    expect(stillIntact.error, "owner B re-reading their AI settings").toBeNull();
+    expect(stillIntact.data).toMatchObject({
+      tone: "professional",
+      debounce_seconds: 60,
+      auto_generate_dm: true,
+    });
+  });
+
   it("denies webhook_events even to a member of its own workspace", async () => {
     const result = await ownerAClient
       .from("webhook_events")

@@ -16,7 +16,6 @@ import {
   hoursLeftInReplyWindow,
 } from "./time";
 import type {
-  AiSettings,
   Category,
   ChannelConnection,
   Contact,
@@ -1020,17 +1019,6 @@ export function getSettingsCategories(): SettingsCategoryRowView[] {
     };
   });
 }
-
-export function getAiSettings(): AiSettings {
-  return data.aiSettings;
-}
-
-/** Варианты значений форм раздела «AI» (заглушки, как в макете). */
-export const AI_SETTINGS_OPTIONS = {
-  tones: ["Дружелюбный, на «вы»", "Нейтральный", "Формальный"],
-  languages: ["Как у клиента", "Русский", "Немецкий"],
-  models: ["Mistral Large (EU)", "Mistral Small (EU)"],
-} as const;
 
 export function getNotificationSettings(): NotificationSettings {
   return data.notificationSettings;

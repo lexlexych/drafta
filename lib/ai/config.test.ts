@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   AiConfigurationError,
   DEFAULT_MISTRAL_MODEL,
+  getAiModelOptions,
   MISTRAL_BASE_URL,
   OPENROUTER_BASE_URL,
   resolveProvider,
@@ -50,5 +51,31 @@ describe("resolveProvider", () => {
 
   it("fails only when provider configuration is resolved", () => {
     expect(() => resolveProvider({})).toThrowError(AiConfigurationError);
+  });
+});
+
+describe("getAiModelOptions", () => {
+  it("keeps the Mistral allowlist when both providers are configured", () => {
+    expect(
+      getAiModelOptions({
+        MISTRAL_API_KEY: "mistral-secret",
+        OPENROUTER_API_KEY: "openrouter-secret",
+        OPENROUTER_MODEL: "vendor/fallback-model",
+      }).map((option) => option.value),
+    ).toEqual(["mistral-small-latest", "mistral-large-latest"]);
+  });
+
+  it("exposes only the configured OpenRouter model without Mistral", () => {
+    expect(
+      getAiModelOptions({
+        OPENROUTER_API_KEY: "openrouter-secret",
+        OPENROUTER_MODEL: "vendor/fallback-model",
+      }),
+    ).toEqual([
+      {
+        value: "vendor/fallback-model",
+        label: "OpenRouter · vendor/fallback-model",
+      },
+    ]);
   });
 });

@@ -22,7 +22,11 @@ import {
   AiProviderError,
   generateCompletion,
 } from "./client";
-import { AiConfigurationError, MISTRAL_BASE_URL } from "./config";
+import {
+  AiConfigurationError,
+  DEFAULT_MISTRAL_MODEL,
+  MISTRAL_BASE_URL,
+} from "./config";
 
 const messages = [{ role: "user" as const, content: "Hello" }];
 
@@ -65,6 +69,14 @@ describe("generateCompletion", () => {
       temperature: 0.2,
       max_tokens: 256,
     });
+  });
+
+  it("uses the provider default for the AI settings auto model", async () => {
+    await generateCompletion(messages, { model: "" });
+
+    expect(openAiMock.create).toHaveBeenCalledWith(
+      expect.objectContaining({ model: DEFAULT_MISTRAL_MODEL }),
+    );
   });
 
   it("does not switch to OpenRouter after a Mistral request failure", async () => {
