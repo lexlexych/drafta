@@ -397,10 +397,24 @@ self-hosted-контейнера при подписке буквально в �
   актуального состояния из БД.
 - Cleanup теперь отменяет отложенный refresh, а debounce ограничен `maxWait=1000ms`,
   чтобы непрерывный поток событий не откладывал обновление бесконечно.
-- Postgres Changes payload ограничен полями `id` и `workspace_id`. Текст сообщения,
-  attachments и остальные персональные данные браузеру через Realtime не передаются:
-  payload используется только как сигнал, после которого UI читает данные обычным
-  RLS-защищённым запросом.
+- Попытка ограничить Postgres Changes payload полями `id` и `workspace_id`
+  была отменена следующим follow-up: remote Realtime отклоняет сочетание
+  column `select` и фильтра `workspace_id`. Payload по-прежнему используется
+  только как сигнал; транспортную минимизацию нужно реализовать через Broadcast.
 - По прямому указанию пользователя новые тесты на этом follow-up не добавлялись,
-  существующие mock-ожидания только синхронизированы с минимальным `select`,
-  test suite не запускался.
+  test suite не запускался; временная синхронизация mock-ожиданий с `select`
+  отменена вместе с самим `select` в следующем follow-up.
+
+### Follow-up 2026-07-21: исправление отклонённой подписки
+
+Ручная проверка browser WebSocket выявила корневую ошибку, которая не попадала
+в callback `.subscribe()`: Realtime отправил отдельный system frame со статусом
+`error` и сообщением `invalid column for filter workspace_id` для подписки
+`UPDATE conversations` с `select: ["id", "workspace_id"]`.
+
+- `select` удалён из всех трёх Postgres Changes bindings; фильтрация по
+  `workspace_id` и RLS сохранены.
+- Добавлен listener `system`, который переводит статус в `error` и логирует
+  полный текст отказа Postgres Changes. Теперь успешный join WebSocket-канала
+  не маскирует отклонённую сервером replication binding.
+- Новые тесты не добавлялись, test suite по указанию пользователя не запускался.

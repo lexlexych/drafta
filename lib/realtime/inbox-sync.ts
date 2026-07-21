@@ -1,6 +1,7 @@
 import type {
   RealtimePostgresInsertPayload,
   RealtimePostgresUpdatePayload,
+  RealtimeSystemPayload,
   SupabaseClient,
 } from "@supabase/supabase-js";
 import { REALTIME_SUBSCRIBE_STATES } from "@supabase/supabase-js";
@@ -33,7 +34,6 @@ import { REALTIME_SUBSCRIBE_STATES } from "@supabase/supabase-js";
 
 const DEFAULT_DEBOUNCE_MS = 250;
 const DEFAULT_MAX_WAIT_MS = 1_000;
-const REALTIME_PAYLOAD_COLUMNS = ["id", "workspace_id"];
 
 export type InboxRealtimeConnectionStatus =
   | "connecting"
@@ -157,6 +157,22 @@ export function subscribeToInboxRealtime(
 
   const channel = supabase
     .channel(`inbox-realtime:${workspaceId}`)
+    .on("system", {}, (payload: RealtimeSystemPayload) => {
+      if (disposed || payload.status !== "error") {
+        return;
+      }
+
+      connectionWasInterrupted = true;
+      const error = new Error(payload.message);
+
+      console.error("[inbox/realtime] postgres changes subscription rejected", {
+        workspaceId,
+        extension: payload.extension,
+        channel: payload.channel,
+        error,
+      });
+      onStatusChange?.({ status: "error", error });
+    })
     .on(
       "postgres_changes",
       {
@@ -164,7 +180,6 @@ export function subscribeToInboxRealtime(
         schema: "public",
         table: "messages",
         filter,
-        select: REALTIME_PAYLOAD_COLUMNS,
       },
       handleEvent,
     )
@@ -175,7 +190,6 @@ export function subscribeToInboxRealtime(
         schema: "public",
         table: "conversations",
         filter,
-        select: REALTIME_PAYLOAD_COLUMNS,
       },
       handleEvent,
     )
@@ -186,7 +200,6 @@ export function subscribeToInboxRealtime(
         schema: "public",
         table: "conversations",
         filter,
-        select: REALTIME_PAYLOAD_COLUMNS,
       },
       handleEvent,
     )
