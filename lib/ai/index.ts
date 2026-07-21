@@ -9,3 +9,9 @@ export type {
 } from "./client";
 export { AiConfigurationError } from "./config";
 export type { AiProvider } from "./config";
+export { maskMessages, maskText, unmaskText } from "./masking";
+export type {
+  MaskedEntity,
+  MaskedEntityKind,
+  MaskedResult,
+} from "./masking";
