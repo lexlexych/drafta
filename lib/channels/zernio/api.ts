@@ -8,14 +8,17 @@ import type { ChannelPlatform } from "../types";
  * same discipline as the webhook secret.
  *
  * Contract per the official OpenAPI spec (https://docs.zernio.com/api/openapi —
- * operationIds `createProfile`, `getConnectUrl`):
+ * operationIds `listProfiles`, `createProfile`, `getConnectUrl`):
+ *   - GET  /v1/profiles
+ *       -> 200 { profiles: [ { _id, isDefault, … } ] }
  *   - POST /v1/profiles  { name, description }
  *       -> 201 { message, profile: { _id, … } }        (id at profile._id)
  *   - GET  /v1/connect/{platform}  ?profileId&redirect_url
  *       -> 200 { authUrl, state }                       (authUrl at top level)
  * Both authenticate with `Authorization: Bearer <ZERNIO_API_KEY>`. A Zernio
- * "profile" (`profile._id`) groups connected accounts — drafta keeps one per
- * workspace (see lib/db/channel-provider-profile.ts).
+ * "profile" groups connected accounts. `ZERNIO_API_KEY` is one account-wide key,
+ * so the adapter reuses an existing profile (preferring the default) rather than
+ * creating a new one per connect — see lib/channels/zernio/adapter.ts.
  */
 
 /** Zernio REST config — injected into the adapter, read from env in ./index.ts. */
@@ -54,6 +57,65 @@ async function readJson(response: Response): Promise<unknown> {
 }
 
 /**
+ * Builds a `ZernioApiError` for a non-2xx response, including Zernio's own
+ * error body (truncated) — without it a bare "HTTP 400" hides the real reason
+ * (invalid field, duplicate, plan limit…).
+ */
+async function zernioHttpError(
+  response: Response,
+  context: string,
+): Promise<ZernioApiError> {
+  let detail = "";
+  try {
+    detail = (await response.text()).trim().slice(0, 500);
+  } catch {
+    // Body already consumed or unreadable — status alone will have to do.
+  }
+
+  return new ZernioApiError(
+    `${context} (HTTP ${response.status})${detail ? `: ${detail}` : ""}`,
+    response.status,
+  );
+}
+
+/** A Zernio profile (account group) as returned by GET /v1/profiles. */
+export interface ZernioProfileSummary {
+  id: string;
+  isDefault: boolean;
+}
+
+/**
+ * Lists the account's Zernio profiles (GET /v1/profiles). Response per spec:
+ * `{ profiles: [ { _id, isDefault, … } ] }`. Used so the adapter can reuse an
+ * existing profile (preferring the default) instead of creating a new one on a
+ * shared, account-wide API key.
+ */
+export async function listZernioProfiles(
+  config: ZernioApiConfig,
+): Promise<ZernioProfileSummary[]> {
+  const response = await fetch(joinUrl(config.apiBaseUrl, "profiles"), {
+    method: "GET",
+    headers: authHeaders(config),
+  });
+
+  if (!response.ok) {
+    throw await zernioHttpError(response, "Zernio profiles list failed");
+  }
+
+  const body = (await readJson(response)) as
+    | { profiles?: Array<{ _id?: unknown; isDefault?: unknown }> }
+    | null;
+  const profiles = Array.isArray(body?.profiles) ? body.profiles : [];
+
+  return profiles
+    .filter(
+      (p): p is { _id: string; isDefault?: unknown } =>
+        typeof p?._id === "string" && p._id.length > 0,
+    )
+    .map((p) => ({ id: p._id, isDefault: p.isDefault === true }));
+}
+
+/**
  * Creates a Zernio profile (account group) and returns its `_id`. drafta
  * creates one lazily per workspace, on the first channel connection.
  */
@@ -68,10 +130,7 @@ export async function createZernioProfile(
   });
 
   if (!response.ok) {
-    throw new ZernioApiError(
-      `Zernio profile creation failed (HTTP ${response.status}).`,
-      response.status,
-    );
+    throw await zernioHttpError(response, "Zernio profile creation failed");
   }
 
   // Per the spec the 201 body is { message, profile: { _id, … } } — the id is
@@ -103,10 +162,7 @@ export async function getZernioConnectAuthUrl(
   const response = await fetch(url, { method: "GET", headers: authHeaders(config) });
 
   if (!response.ok) {
-    throw new ZernioApiError(
-      `Zernio connect URL request failed (HTTP ${response.status}).`,
-      response.status,
-    );
+    throw await zernioHttpError(response, "Zernio connect URL request failed");
   }
 
   const body = (await readJson(response)) as { authUrl?: unknown } | null;
