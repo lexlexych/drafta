@@ -3,7 +3,7 @@ id: T-05
 epic: E-003
 title: "generate-draft: дебаунс, пайплайн, supersede, регенерация"
 type: dev
-status: in_progress
+status: done
 depends_on: [T-01, T-02, T-03, T-04]
 created: 2026-07-19
 updated: 2026-07-22
