@@ -3,7 +3,7 @@ id: T-01
 epic: E-003
 title: "Inngest-контур: serve-роут, типизация событий, локальный dev"
 type: dev
-status: rework
+status: done
 depends_on: []
 created: 2026-07-19
 updated: 2026-07-21
@@ -181,6 +181,43 @@ Dev Server видны событие `interaction/received` и успешный 
 - Production-логика Realtime и остальные тикеты не изменялись.
 
 ## 🔍 Ревью
+
+### Повторное ревью после Доработки 1
+
+**Вердикт: APPROVED**
+
+Блокирующее замечание предыдущего раунда по общему test suite устранено.
+Коммит `0af20bb` приводит `lib/realtime/inbox-sync.test.ts` в соответствие с
+действующим асинхронным Realtime-контрактом: мок реализует
+`auth.getSession()` и `realtime.setAuth()`, тест ждёт подписки, учитывает
+`system` listener и сохраняет проверки трёх workspace-фильтров и cleanup.
+Production-код Realtime в коммите не менялся.
+
+Независимо перепроверено:
+
+- `npm.cmd run lint` — exit code 0, ошибок ESLint нет;
+- `npm.cmd run build` — exit code 0, production build и TypeScript прошли,
+  маршрут `/api/inngest` присутствует в route manifest;
+- `npm.cmd test` — exit code 0: 34 test files passed, 4 DB-зависимых
+  файла штатно skipped; 181 test passed, 27 skipped;
+- `npx.cmd vitest run lib/realtime/inbox-sync.test.ts` — 1 файл / 9 тестов,
+  все прошли;
+- `npx.cmd vitest run lib/inngest/events.test.ts app/api/inngest/route.test.ts` —
+  2 файла / 6 тестов, все прошли;
+- фактический diff `6b5980f..0af20bb` и прилегающий webhook/Realtime-код
+  проверены: `serve()` регистрирует общий реестр, оба события
+  имеют ID-only payload, `@ts-expect-error` защищает от полей с контентом,
+  fail-safe helper поглощает ошибку `send()`, а инструкция трёх локальных
+  процессов и подписанной Zernio-фикстуры записана в `README.md`;
+- `git diff --check 6b5980f..0af20bb` и `git show --check 0af20bb` — exit code 0.
+
+Сквозной Docker/Inngest Dev Server smoke не выполнялся и не является
+блокером по скорректированному критерию: для T-01 приняты
+существующие unit/contract-тесты. Применимые правила вайбкодинга
+соблюдены; изменений схемы БД, LLM, внешних отправок, новых
+сервисов или секретов нет.
+
+### Предыдущее ревью
 
 **Вердикт: CHANGES_REQUESTED**
 
