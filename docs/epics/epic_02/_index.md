@@ -90,6 +90,7 @@ Realtime-инбокс «Сообщения» показывает диалоги
 | T-05 | [Инбокс «Сообщения»: список диалогов и тред](T-05-inbox-messages.md) | dev | T-03, T-04 | done |
 | T-06 | [Realtime-обновления инбокса](T-06-realtime-inbox.md) | dev | T-05 | done |
 | T-07 | [Executive summary — ручные шаги](T-07-executive-summary.md) | manual | T-01–T-06 | todo |
+| T-08 | [Подключение Telegram и WhatsApp (специфичные connect-флоу Zernio)](T-08-telegram-whatsapp-connect.md) | dev | T-02, T-04 | todo |
 
 ## Критерий готовности эпика
 

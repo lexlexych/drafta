@@ -82,8 +82,12 @@ describe("createZernioAdapter", () => {
   it("getConnectUrl creates a profile when none is passed, then returns authUrl + the new id", async () => {
     const fetchMock = vi
       .fn()
-      // POST /profiles
-      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ _id: "prof_new" }) })
+      // POST /profiles -> 201 { message, profile: { _id } }
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 201,
+        json: async () => ({ message: "Profile created successfully", profile: { _id: "prof_new" } }),
+      })
       // GET /connect/telegram
       .mockResolvedValueOnce({
         ok: true,
