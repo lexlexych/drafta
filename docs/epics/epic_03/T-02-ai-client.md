@@ -3,7 +3,7 @@ id: T-02
 epic: E-003
 title: "Клиент LLM в lib/ai: Mistral с fallback на OpenRouter"
 type: dev
-status: in_progress
+status: done
 depends_on: []
 created: 2026-07-19
 updated: 2026-07-21
@@ -137,5 +137,29 @@ npm test
 
 ## 🔍 Ревью
 
-_Заполняется агентом-ревьюером: вердикт APPROVED / CHANGES_REQUESTED,
-замечания, что прогнано и с каким результатом._
+**Вердикт: APPROVED.**
+
+Критерии приёмки и Definition of Done перепроверены независимо. При
+одновременно заданных ключах выбирается Mistral. После ошибки Mistral
+клиент нормализует и пробрасывает ошибку; ветки runtime-fallback на OpenRouter
+нет, SDK-ретраи отключены (`maxRetries: 0`). OpenRouter выбирается только
+при отсутствии `MISTRAL_API_KEY`. Клиент защищён `server-only`; upstream message
+не попадает в `AiProviderError`, логирования секретов нет. Импортов SDK
+`openai` вне `lib/ai` и провайдерных SDK нет; в клиентских build-ассетах
+LLM-ключей и URL провайдеров нет. Правила вайбкодинга, затронутые
+тикетом, соблюдены; лишних изменений в commit тикета нет.
+
+Прогоны:
+
+- `npm.cmd test -- --run lib/ai/config.test.ts lib/ai/client.test.ts` — 2 файла,
+  8 тестов прошли;
+- `npm.cmd run lint` — успешно;
+- `npm.cmd test` — 36 файлов / 189 тестов прошли, 4 DB-файла /
+  27 тестов пропущены без локального Supabase;
+- при явно пустых `MISTRAL_API_KEY`, `OPENROUTER_API_KEY`,
+  `OPENROUTER_MODEL`: `npm.cmd run build` — успешно, 16 статических
+  страниц;
+- grep/`rg` импортов `openai` вне `lib/ai`, провайдерных SDK,
+  секретов/логов и LLM-маркеров в `.next/static` — запрещённых
+  совпадений нет;
+- `git diff --check` для commit тикета и текущего worktree — успешно.

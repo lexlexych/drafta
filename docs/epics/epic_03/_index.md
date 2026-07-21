@@ -81,7 +81,7 @@ email, IBAN, карты) маскируются плейсхолдерами с 
 | # | Тикет | Тип | Зависит от | Статус |
 |---|---|---|---|---|
 | T-01 | [Inngest-контур: serve-роут, типизация событий, локальный dev](T-01-inngest-serve.md) | dev | — | done |
-| T-02 | [Клиент LLM в lib/ai: Mistral с fallback на OpenRouter](T-02-ai-client.md) | dev | — | todo |
+| T-02 | [Клиент LLM в lib/ai: Mistral с fallback на OpenRouter](T-02-ai-client.md) | dev | — | done |
 | T-03 | [Маскирование идентификаторов lib/ai/masking.ts + юнит-тесты](T-03-masking.md) | dev | — | todo |
 | T-04 | [Сборка промпта по структуре §8 и debug-лог](T-04-prompt-builder.md) | dev | T-02, T-03 | todo |
 | T-05 | [generate-draft: дебаунс, пайплайн, supersede, регенерация](T-05-generate-draft.md) | dev | T-01, T-02, T-03, T-04 | todo |
