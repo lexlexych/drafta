@@ -2,7 +2,7 @@ import "server-only";
 
 import { registerChannelAdapter } from "../registry";
 import { createZernioAdapter } from "./adapter";
-import type { ZernioConnectConfig } from "./connect";
+import type { ZernioApiConfig } from "./api";
 
 /**
  * Reads `ZERNIO_WEBHOOK_SECRET` from the environment. Kept in this
@@ -28,23 +28,23 @@ function getZernioWebhookSecret(): string {
 }
 
 /**
- * Reads the account-connect (OAuth) config — `ZERNIO_CONNECT_URL` (Zernio's
- * hosted authorization page) and `ZERNIO_API_KEY` (client identifier).
- * Guarded the same way and read lazily: only starting a connect flow needs
- * these set, not importing the module or handling a webhook.
+ * Reads the Zernio REST config used by the account-connect (OAuth) flow —
+ * `ZERNIO_API_BASE_URL` (e.g. https://zernio.com/api/v1) and `ZERNIO_API_KEY`
+ * (Bearer token). Guarded the same way and read lazily: only starting a
+ * connect flow needs these set, not importing the module or handling a webhook.
  */
-function getZernioConnectConfig(): ZernioConnectConfig {
-  const connectUrl = process.env.ZERNIO_CONNECT_URL;
+function getZernioApiConfig(): ZernioApiConfig {
+  const apiBaseUrl = process.env.ZERNIO_API_BASE_URL;
   const apiKey = process.env.ZERNIO_API_KEY;
 
-  if (!connectUrl) {
-    throw new Error("Missing required environment variable: ZERNIO_CONNECT_URL");
+  if (!apiBaseUrl) {
+    throw new Error("Missing required environment variable: ZERNIO_API_BASE_URL");
   }
   if (!apiKey) {
     throw new Error("Missing required environment variable: ZERNIO_API_KEY");
   }
 
-  return { connectUrl, apiKey };
+  return { apiBaseUrl, apiKey };
 }
 
 /**
@@ -56,7 +56,7 @@ function getZernioConnectConfig(): ZernioConnectConfig {
  */
 export const zernioAdapter = createZernioAdapter(
   getZernioWebhookSecret,
-  getZernioConnectConfig,
+  getZernioApiConfig,
 );
 
 registerChannelAdapter(zernioAdapter);

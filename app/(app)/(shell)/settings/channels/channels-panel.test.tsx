@@ -66,7 +66,7 @@ describe("ChannelsPanel", () => {
   it("starts the OAuth flow and redirects to the provider's auth url on success", async () => {
     startChannelConnectionAction.mockResolvedValue({
       ok: true,
-      url: "https://connect.zernio.example/oauth/authorize?state=abc",
+      url: "https://api.telegram.org/auth?token=abc",
     });
 
     render(<ChannelsPanel channels={baseChannels} supportedPlatforms={supportedPlatforms} />);
@@ -87,7 +87,7 @@ describe("ChannelsPanel", () => {
     );
     await waitFor(() =>
       expect(assignMock).toHaveBeenCalledWith(
-        "https://connect.zernio.example/oauth/authorize?state=abc",
+        "https://api.telegram.org/auth?token=abc",
       ),
     );
   });

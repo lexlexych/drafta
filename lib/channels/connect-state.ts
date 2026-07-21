@@ -10,10 +10,13 @@ import type { ChannelPlatform } from "./types";
  * When a user starts connecting a channel, the server action encodes the
  * pending intent (which workspace, which platform, the chosen connection
  * name) into a compact token, HMAC-signs it with `CHANNEL_CONNECT_STATE_SECRET`,
- * and round-trips it through the provider as the OAuth `state` parameter. The
- * callback route (`app/api/channels/[provider]/connect/callback/`) verifies
- * the signature and expiry, and separately compares the token's `nonce` with
- * an httpOnly cookie set at start time — the standard OAuth CSRF defense.
+ * and stores it in an httpOnly cookie. The provider (Zernio) does not
+ * round-trip an arbitrary `state` back to our callback, so instead the
+ * signed token's `nonce` is echoed in the `redirect_url` (query param `cn`);
+ * the callback route (`app/api/channels/[provider]/connect/callback/`) reads
+ * the token from the cookie, verifies signature + expiry, and requires the
+ * URL's nonce to match the token's `nonce` — a double-submit OAuth CSRF
+ * defense that doesn't depend on the provider preserving our state.
  *
  * Provider-agnostic on purpose: it lives at the `lib/channels/` root, imports
  * no provider code (vibecoding rule 4), and the secret stays server-only
@@ -23,8 +26,11 @@ import type { ChannelPlatform } from "./types";
 /** How long a started connect flow stays valid before the user must retry. */
 export const CONNECT_STATE_TTL_SECONDS = 10 * 60;
 
-/** Name of the httpOnly cookie holding the nonce that must match the state's `nonce`. */
-export const CONNECT_STATE_NONCE_COOKIE = "drafta_channel_connect_nonce";
+/** Name of the httpOnly cookie holding the signed connect-state token. */
+export const CONNECT_STATE_COOKIE = "drafta_channel_connect";
+
+/** Query parameter (on our own redirect_url) carrying the token's nonce for the CSRF double-submit check. */
+export const CONNECT_STATE_NONCE_PARAM = "cn";
 
 export interface ConnectStatePayload {
   workspaceId: string;

@@ -2,10 +2,16 @@ import { createHmac } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ChannelOperationNotImplementedError } from "../types";
 import { createZernioAdapter } from "./adapter";
+
+const apiConfig = { apiBaseUrl: "https://zernio.com/api/v1", apiKey: "zk_test" };
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 function readFixture(name: string): string {
   const path = fileURLToPath(
@@ -66,26 +72,63 @@ describe("createZernioAdapter", () => {
     ).rejects.toThrow(ChannelOperationNotImplementedError);
   });
 
-  it("exposes getConnectUrl only when connect config is injected", async () => {
-    const withoutConfig = createZernioAdapter(() => "secret");
-    expect(withoutConfig.getConnectUrl).toBeUndefined();
+  it("exposes getConnectUrl only when the API config is injected", () => {
+    expect(createZernioAdapter(() => "secret").getConnectUrl).toBeUndefined();
+    expect(
+      createZernioAdapter(() => "secret", () => apiConfig).getConnectUrl,
+    ).toBeDefined();
+  });
 
-    const withConfig = createZernioAdapter(() => "secret", () => ({
-      connectUrl: "https://connect.zernio.example/oauth/authorize",
-      apiKey: "zk_test_123",
-    }));
-    expect(withConfig.getConnectUrl).toBeDefined();
+  it("getConnectUrl creates a profile when none is passed, then returns authUrl + the new id", async () => {
+    const fetchMock = vi
+      .fn()
+      // POST /profiles
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ _id: "prof_new" }) })
+      // GET /connect/telegram
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ authUrl: "https://api.telegram.org/auth" }),
+      });
+    vi.stubGlobal("fetch", fetchMock);
 
-    const url = new URL(
-      await withConfig.getConnectUrl!({
-        workspaceId: "ws_1",
-        platform: "telegram",
-        redirectUrl: "https://app.drafta.example/api/channels/zernio/connect/callback",
-        state: "signed.state",
-      }),
+    const adapter = createZernioAdapter(() => "secret", () => apiConfig);
+    const result = await adapter.getConnectUrl!({
+      platform: "telegram",
+      redirectUrl: "https://app.drafta.example/api/channels/zernio/connect/callback?cn=n1",
+      providerProfileId: null,
+      profileName: "Acme",
+    });
+
+    expect(result).toEqual({
+      url: "https://api.telegram.org/auth",
+      providerProfileId: "prof_new",
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls[0][0]).toBe("https://zernio.com/api/v1/profiles");
+  });
+
+  it("getConnectUrl reuses an existing profile id (no profile creation call)", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({ authUrl: "https://api.telegram.org/auth" }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const adapter = createZernioAdapter(() => "secret", () => apiConfig);
+    const result = await adapter.getConnectUrl!({
+      platform: "telegram",
+      redirectUrl: "https://app.drafta.example/cb?cn=n1",
+      providerProfileId: "prof_existing",
+      profileName: "Acme",
+    });
+
+    expect(result.providerProfileId).toBe("prof_existing");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(new URL(fetchMock.mock.calls[0][0] as string).pathname).toBe(
+      "/api/v1/connect/telegram",
     );
-    expect(url.searchParams.get("platform")).toBe("telegram");
-    expect(url.searchParams.get("state")).toBe("signed.state");
   });
 
   it("parseConnectCallback turns the provider's callback query into the account id", async () => {
@@ -93,8 +136,9 @@ describe("createZernioAdapter", () => {
 
     expect(adapter.parseConnectCallback).toBeDefined();
     const result = await adapter.parseConnectCallback!({
-      query: { account_id: "acct_tg_98213" },
+      query: { accountId: "acct_tg_98213", connected: "telegram" },
     });
     expect(result.externalAccountId).toBe("acct_tg_98213");
+    expect(result.platform).toBe("telegram");
   });
 });
