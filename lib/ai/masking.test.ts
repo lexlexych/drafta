@@ -73,11 +73,43 @@ describe("maskText", () => {
     );
   });
 
+  it("does not absorb text following a checksum-invalid IBAN", () => {
+    expect(
+      maskText("Test-IBAN DE00 3704 0044 0532 0130 00 bitte verwenden."),
+    ).toEqual({
+      maskedText: "Test-IBAN {{IBAN_1}} bitte verwenden.",
+      entities: [
+        {
+          placeholder: "{{IBAN_1}}",
+          kind: "iban",
+          value: "DE00 3704 0044 0532 0130 00",
+        },
+      ],
+    });
+  });
+
   it("does not mask prices, dates, short order numbers, or invalid cards", () => {
     const text =
       "Preis: 49,90 €. Datum: 12.03.2026. Bestellung: 12345. Referenz: 1234 5678 9012 3456.";
 
     expect(maskText(text)).toEqual({ maskedText: text, entities: [] });
+  });
+
+  it("does not partially mask a Luhn-invalid card as a phone", () => {
+    const text =
+      "Kartennummer: 0123 4567 8901 2345. Telefon: 0176 12345678.";
+
+    expect(maskText(text)).toEqual({
+      maskedText:
+        "Kartennummer: 0123 4567 8901 2345. Telefon: {{PHONE_1}}.",
+      entities: [
+        {
+          placeholder: "{{PHONE_1}}",
+          kind: "phone",
+          value: "0176 12345678",
+        },
+      ],
+    });
   });
 
   it("numbers different phones independently", () => {

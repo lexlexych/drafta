@@ -18,8 +18,35 @@ const CARD_PATTERN =
 const EMAIL_PATTERN =
   /(?<![A-Z0-9.!#$%&'*+/=?^_`{|}~-])([A-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?(?:\.[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?)+)(?![A-Z0-9-])/gi;
 const PHONE_PATTERN =
-  /(?<![\w+])(?:\+\d{1,3}(?:[ \t()./-]*\d){6,14}|0\d(?:[ \t()/-]*\d){7,13}|\(0\d{2,5}\)(?:[ \t/-]*\d){5,12})(?!\d)/g;
+  /(?<![\w+])(?:\+\d{1,3}(?:[ \t()./-]*\d){6,14}|0\d(?:[ \t()/-]*\d){7,13}|\(0\d{2,5}\)(?:[ \t/-]*\d){5,12})(?![ \t()/-]*\d)/g;
 const PLACEHOLDER_PATTERN = /\{\{(PHONE|EMAIL|IBAN|CARD)_\d+\}\}/g;
+
+const IBAN_COUNTRIES_BY_LENGTH = {
+  15: ["NO"],
+  16: ["BE"],
+  18: ["DK", "FI", "FO", "GL", "NL", "SD"],
+  19: ["MK", "SI"],
+  20: ["AT", "BA", "EE", "KZ", "LT", "LU", "MN", "XK"],
+  21: ["CH", "HR", "LI", "LV"],
+  22: ["BG", "BH", "DE", "GB", "GE", "IE", "ME", "RS"],
+  23: ["AE", "GI", "IL", "IQ", "OM", "SO", "TL"],
+  24: ["AD", "CZ", "ES", "MD", "PK", "RO", "SA", "SE", "SK", "TN", "VG"],
+  25: ["PT", "ST"],
+  26: ["IS", "TR"],
+  27: ["BI", "DJ", "FR", "GR", "IT", "MC", "MR", "SM"],
+  28: ["AL", "AZ", "BY", "CY", "DO", "GT", "HU", "LB", "PL", "SV"],
+  29: ["BR", "EG", "PS", "QA", "UA"],
+  30: ["JO", "KW", "MU"],
+  31: ["MT", "SC"],
+  32: ["LC", "NI"],
+  33: ["RU"],
+} as const;
+
+const IBAN_LENGTH_BY_COUNTRY = new Map<string, number>(
+  Object.entries(IBAN_COUNTRIES_BY_LENGTH).flatMap(([length, countries]) =>
+    countries.map((country) => [country, Number(length)]),
+  ),
+);
 
 const PLACEHOLDER_KIND = {
   phone: "PHONE",
@@ -127,13 +154,38 @@ function passesIbanChecksum(value: string): boolean {
   return remainder === 1;
 }
 
+function extractIbanPrefix(candidate: string, compactLength: number): string | null {
+  let seenCharacters = 0;
+  for (let index = 0; index < candidate.length; index += 1) {
+    if (candidate[index] === " ") {
+      continue;
+    }
+
+    seenCharacters += 1;
+    if (seenCharacters === compactLength) {
+      const nextCharacter = candidate[index + 1];
+      if (nextCharacter && nextCharacter !== " ") {
+        return null;
+      }
+      return candidate.slice(0, index + 1);
+    }
+  }
+
+  return null;
+}
+
 /**
- * A formatted IBAN may be followed by an ASCII word, which a deliberately
- * country-agnostic pattern cannot distinguish from its BBAN. A valid checksum
- * gives us a safe earlier boundary, while structurally valid test IBANs remain
- * supported because checksum validation is not required for masking.
+ * The checksum is deliberately optional, so registered country lengths define
+ * the boundary for checksum-invalid IBANs. The checksum scan remains a safe
+ * fallback for a newly introduced country that is not in the registry yet.
  */
-function extractIbanValue(candidate: string): string {
+function extractIbanValue(candidate: string): string | null {
+  const country = candidate.slice(0, 2).toUpperCase();
+  const countryLength = IBAN_LENGTH_BY_COUNTRY.get(country);
+  if (countryLength) {
+    return extractIbanPrefix(candidate, countryLength);
+  }
+
   let compactLength = 0;
   for (let index = 0; index < candidate.length; index += 1) {
     if (candidate[index] !== " ") {
@@ -148,7 +200,7 @@ function extractIbanValue(candidate: string): string {
       return value;
     }
   }
-  return candidate;
+  return null;
 }
 
 function passesLuhn(value: string): boolean {
@@ -183,7 +235,7 @@ function maskWithState(text: string, state: MaskingState): string {
   let maskedText = replaceMatches(text, EMAIL_PATTERN, "email", state);
   maskedText = maskedText.replace(IBAN_PATTERN, (candidate: string) => {
     const value = extractIbanValue(candidate);
-    if (!isStructurallyValidIban(value)) {
+    if (!value || !isStructurallyValidIban(value)) {
       return candidate;
     }
     return placeholderFor("iban", value, state) + candidate.slice(value.length);
