@@ -144,6 +144,42 @@ Dev Server видны событие `interaction/received` и успешный 
 - Открытых вопросов по реализации T-01 нет; ручной smoke остаётся повторить в
   окружении с запущенным Docker Desktop.
 
+### Доработка 1
+
+#### Что исправлено
+
+- `lib/realtime/inbox-sync.test.ts` — тестовый Supabase mock актуализирован под
+  действующий асинхронный контракт `auth.getSession()` →
+  `realtime.setAuth(access_token)` → подписка. Ожидания также учитывают
+  обязательный `system` listener; проверки трёх workspace-фильтров и удаления
+  канала сохранены. Production-код Realtime не менялся, тесты не отключались и
+  не ослаблялись.
+- Отдельный новый сквозной Inngest smoke не добавлялся согласно принятому
+  решению: Docker и Inngest Dev Server не являются блокером T-01. Профильные
+  contract-тесты по-прежнему проверяют ID-only schemas, fail-safe helper,
+  реестр функции и наличие `GET`/`POST`/`PUT` serve handlers. Ручной сценарий с
+  реальной локальной БД и Inngest Dev Server остаётся воспроизводимо описан в
+  `README.md`; общий ручной прогон эпика — в `T-08-executive-summary.md`, шаг 6.
+
+#### Как проверено
+
+- `npx.cmd vitest run lib/realtime/inbox-sync.test.ts` — успешно: 1 файл, 9
+  тестов.
+- `npx.cmd vitest run lib/inngest/events.test.ts app/api/inngest/route.test.ts`
+  — успешно: 2 файла, 6 тестов.
+- `npm.cmd test` — успешно: 34 test files passed, 4 DB-зависимых файла штатно
+  skipped; 181 тест passed, 27 skipped, exit code 0.
+- `npm.cmd run lint` — успешно, ошибок нет.
+- `npm.cmd run build` — успешно; TypeScript и production build прошли, маршрут
+  `/api/inngest` присутствует.
+
+#### Отклонения и вне скоупа
+
+- Docker-зависимый ручной прогон не выполнялся: по явному решению он не является
+  блокером перехода при зелёных unit/contract тестах. Инструкция сохранена для
+  окружения с Docker Desktop.
+- Production-логика Realtime и остальные тикеты не изменялись.
+
 ## 🔍 Ревью
 
 **Вердикт: CHANGES_REQUESTED**

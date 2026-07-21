@@ -140,19 +140,35 @@ describe("subscribeToInboxRealtime", () => {
     return {
       channel,
       supabase: {
+        auth: {
+          getSession: vi.fn().mockResolvedValue({
+            data: { session: { access_token: "test-access-token" } },
+            error: null,
+          }),
+        },
+        realtime: {
+          setAuth: vi.fn().mockResolvedValue(undefined),
+        },
         channel: vi.fn().mockReturnValue(channel),
         removeChannel: vi.fn(),
       },
     };
   }
 
-  it("opens one channel scoped to the workspace and subscribes to INSERT messages + INSERT/UPDATE conversations, filtered by workspace_id (ticket step 2)", () => {
+  it("authenticates, opens one workspace-scoped channel and subscribes to INSERT messages + INSERT/UPDATE conversations", async () => {
     const { channel, supabase } = createFakeSupabase();
 
     subscribeToInboxRealtime(supabase as never, "wsp_a", vi.fn());
 
+    await vi.waitFor(() => {
+      expect(channel.subscribe).toHaveBeenCalledTimes(1);
+    });
+
+    expect(supabase.auth.getSession).toHaveBeenCalledTimes(1);
+    expect(supabase.realtime.setAuth).toHaveBeenCalledWith("test-access-token");
     expect(supabase.channel).toHaveBeenCalledWith("inbox-realtime:wsp_a");
-    expect(channel.on).toHaveBeenCalledTimes(3);
+    expect(channel.on).toHaveBeenCalledTimes(4);
+    expect(channel.on).toHaveBeenCalledWith("system", {}, expect.any(Function));
     expect(channel.on).toHaveBeenCalledWith(
       "postgres_changes",
       {
@@ -183,13 +199,17 @@ describe("subscribeToInboxRealtime", () => {
       },
       expect.any(Function),
     );
-    expect(channel.subscribe).toHaveBeenCalledTimes(1);
   });
 
-  it("returns an unsubscribe function that removes the channel (ticket step 4)", () => {
+  it("returns an unsubscribe function that removes the authorized channel (ticket step 4)", async () => {
     const { channel, supabase } = createFakeSupabase();
 
     const unsubscribe = subscribeToInboxRealtime(supabase as never, "wsp_a", vi.fn());
+
+    await vi.waitFor(() => {
+      expect(channel.subscribe).toHaveBeenCalledTimes(1);
+    });
+
     expect(supabase.removeChannel).not.toHaveBeenCalled();
 
     unsubscribe();
