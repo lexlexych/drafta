@@ -1,56 +1,28 @@
-import type {
-  ConnectCallbackResult,
-  GetConnectUrlInput,
-} from "../types";
+import type { ChannelPlatform, ConnectCallbackResult } from "../types";
 
 /**
- * Zernio account-connect (OAuth) flow — the provider side of "add a channel".
+ * Parsing of Zernio's account-connect (OAuth) callback. The URL-building /
+ * API side lives in ./api.ts; here we only turn the query parameters Zernio
+ * appends to our redirect into the connected account's external ID.
  *
- * Instead of the user copying an external account ID out of the Zernio
- * dashboard, drafta redirects the browser to Zernio's hosted authorization
- * page (`ZERNIO_CONNECT_URL`); Zernio runs the platform's OAuth and redirects
- * back to our callback with the connected account's ID. The user never sees
- * Zernio itself (docs/architecture/05-channels.md).
- *
- * The exact hosted-connect contract (query parameter names, the callback's
- * `account_id` field) is **not yet confirmed against a live Zernio API** —
- * unlike webhook verification (./verify.ts) it has no fixtures. It is
- * expressed here as a single, documented seam driven by env
- * (`ZERNIO_CONNECT_URL`, `ZERNIO_API_KEY`); when the real endpoint is
- * available, only the constants and the callback field name below change.
- * Everything Zernio-specific stays in this folder (vibecoding rule 4).
+ * Real contract (https://docs.zernio.com/guides/connecting-accounts): after
+ * authorization Zernio redirects to our `redirect_url` with
+ * `connected` (platform), `accountId`, `username`, `profileId`. On a failure
+ * it uses `error` (and/or `denied`). Everything Zernio-specific stays in this
+ * folder (vibecoding rule 4).
  */
 
-/** Config read from the environment in ./index.ts and injected into the adapter. */
-export interface ZernioConnectConfig {
-  /** Base URL of Zernio's hosted account-authorization page. */
-  connectUrl: string;
-  /** Zernio API key / client identifier that scopes the connect session to our app. */
-  apiKey: string;
-}
+/** Callback query params (assumed error keys aside — connected/accountId confirmed). */
+const ACCOUNT_ID_PARAM = "accountId";
+const PLATFORM_PARAM = "connected";
+const ERROR_PARAMS = ["error", "denied"] as const;
 
-/** Callback query parameter Zernio appends with the connected account's ID (assumed contract). */
-const ACCOUNT_ID_PARAM = "account_id";
-/** Callback query parameter Zernio uses to signal a user-side failure/decline (assumed contract). */
-const ERROR_PARAM = "error";
-
-/**
- * Builds the URL that starts Zernio's hosted account-connect flow. `state` is
- * an opaque, signed token (lib/channels/connect-state.ts) round-tripped back
- * to our callback for CSRF protection; `redirectUrl` is our callback route.
- */
-export function buildZernioConnectUrl(
-  config: ZernioConnectConfig,
-  input: GetConnectUrlInput,
-): string {
-  const url = new URL(config.connectUrl);
-  url.searchParams.set("client", config.apiKey);
-  url.searchParams.set("platform", input.platform);
-  url.searchParams.set("redirect_uri", input.redirectUrl);
-  url.searchParams.set("state", input.state);
-
-  return url.toString();
-}
+const KNOWN_PLATFORMS: readonly ChannelPlatform[] = [
+  "telegram",
+  "whatsapp",
+  "instagram",
+  "facebook",
+];
 
 /** Thrown when Zernio's connect callback reports an error or omits the account ID. */
 export class ZernioConnectCallbackError extends Error {
@@ -62,18 +34,21 @@ export class ZernioConnectCallbackError extends Error {
 
 /**
  * Turns Zernio's connect-callback query parameters into the connected
- * account's external ID. Throws `ZernioConnectCallbackError` when the
- * provider signalled an error or didn't return an account ID — the callback
- * route maps that to a friendly "connection failed" redirect.
+ * account's external ID (and the platform it reports). Throws
+ * `ZernioConnectCallbackError` when the provider signalled an error or didn't
+ * return an account ID — the callback route maps that to a friendly
+ * "connection failed" redirect.
  */
 export function parseZernioConnectCallback(
   query: Record<string, string>,
 ): ConnectCallbackResult {
-  const providerError = query[ERROR_PARAM]?.trim();
-  if (providerError) {
-    throw new ZernioConnectCallbackError(
-      `Zernio connect flow returned an error: ${providerError}`,
-    );
+  for (const key of ERROR_PARAMS) {
+    const value = query[key]?.trim();
+    if (value) {
+      throw new ZernioConnectCallbackError(
+        `Zernio connect flow returned an error: ${value}`,
+      );
+    }
   }
 
   const externalAccountId = query[ACCOUNT_ID_PARAM]?.trim();
@@ -83,8 +58,11 @@ export function parseZernioConnectCallback(
     );
   }
 
+  const reported = query[PLATFORM_PARAM]?.trim();
+  const platform = KNOWN_PLATFORMS.find((candidate) => candidate === reported);
+
   // No credentials: Zernio holds the platform tokens, drafta stores only the
   // account ID (docs/architecture/06-data-model.md#channel_connections —
   // "зашифрованные credentials (пусто для Zernio)").
-  return { externalAccountId };
+  return { externalAccountId, platform };
 }

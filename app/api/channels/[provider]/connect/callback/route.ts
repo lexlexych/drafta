@@ -9,7 +9,8 @@ import {
   UnknownChannelProviderError,
 } from "@/lib/channels/registry";
 import {
-  CONNECT_STATE_NONCE_COOKIE,
+  CONNECT_STATE_COOKIE,
+  CONNECT_STATE_NONCE_PARAM,
   verifyConnectState,
 } from "@/lib/channels/connect-state";
 import { createChannelConnection } from "@/lib/db/channel-connections";
@@ -22,13 +23,16 @@ export const dynamic = "force-dynamic";
  * hosted account-connect (OAuth) flow redirects the browser back once the
  * user authorized their account (docs/architecture/05-channels.md).
  *
- * It verifies the signed `state` (+ the httpOnly nonce cookie set by
- * `startChannelConnectionAction`), asks the provider's adapter to turn its
- * callback query into the connected account's external ID
- * (`parseConnectCallback` — provider-specific parsing stays in
- * `lib/channels/<provider>/`, rule 4), creates the `channel_connections` row
- * under the user's RLS session, and redirects back to Settings → Channels
- * with a result banner. The user never touches the provider's own dashboard.
+ * It reads the signed pending-intent token from the httpOnly cookie set by
+ * `startChannelConnectionAction`, verifies its signature + expiry, and
+ * requires the nonce echoed in the URL (`cn`) to match the token's nonce (a
+ * CSRF double-submit — the provider doesn't round-trip our state). It then
+ * asks the provider's adapter to turn its callback query into the connected
+ * account's external ID (`parseConnectCallback` — provider-specific parsing
+ * stays in `lib/channels/<provider>/`, rule 4), creates the
+ * `channel_connections` row under the user's RLS session, and redirects back
+ * to Settings → Channels with a result banner. The user never touches the
+ * provider's own dashboard.
  *
  * Mirrors the auth-callback pattern in app/(auth)/auth/confirm/route.ts
  * (force-dynamic, redirects built from `request.url`).
@@ -40,20 +44,22 @@ export async function GET(
   const { provider } = await params;
   const searchParams = request.nextUrl.searchParams;
 
-  const state = searchParams.get("state");
-  if (!state) {
+  // Source of truth for the pending intent is the httpOnly cookie, not the
+  // URL — the provider can't set it, so a forged callback has no valid state.
+  const stateToken = request.cookies.get(CONNECT_STATE_COOKIE)?.value;
+  if (!stateToken) {
     return redirectToChannels(request, "error", "state");
   }
 
-  const verified = verifyConnectState(state);
+  const verified = verifyConnectState(stateToken);
   if (!verified.ok) {
     return redirectToChannels(request, "error", "state");
   }
 
-  // CSRF: the state's nonce must match the httpOnly cookie planted when the
-  // flow started — a state minted for someone else won't have the cookie.
-  const cookieNonce = request.cookies.get(CONNECT_STATE_NONCE_COOKIE)?.value;
-  if (!cookieNonce || cookieNonce !== verified.state.nonce) {
+  // CSRF double-submit: the nonce echoed in our redirect_url must match the
+  // cookie-stored token's nonce.
+  const urlNonce = searchParams.get(CONNECT_STATE_NONCE_PARAM);
+  if (!urlNonce || urlNonce !== verified.state.nonce) {
     return redirectToChannels(request, "error", "state");
   }
 
@@ -74,14 +80,23 @@ export async function GET(
   const query = Object.fromEntries(searchParams.entries());
 
   let externalAccountId: string;
+  let reportedPlatform: string | undefined;
   try {
-    ({ externalAccountId } = await adapter.parseConnectCallback({ query }));
+    const parsed = await adapter.parseConnectCallback({ query });
+    externalAccountId = parsed.externalAccountId;
+    reportedPlatform = parsed.platform;
   } catch (error) {
     console.error(
       `[channels/${provider}] connect callback did not yield an account`,
       error,
     );
     return redirectToChannels(request, "error", "callback");
+  }
+
+  // Sanity: the platform the provider reports should match the one we started
+  // the flow for. A mismatch means a crossed/forged flow — refuse it.
+  if (reportedPlatform && reportedPlatform !== verified.state.platform) {
+    return redirectToChannels(request, "error", "state");
   }
 
   const supabase = await createServerSupabaseClient();
@@ -105,7 +120,7 @@ export async function GET(
 
 /**
  * Redirects to Settings → Channels with a result banner, always clearing the
- * single-use nonce cookie on the way out.
+ * single-use connect-state cookie on the way out.
  */
 function redirectToChannels(
   request: NextRequest,
@@ -121,7 +136,7 @@ function redirectToChannels(
 
   const response = NextResponse.redirect(url);
   response.headers.set("Cache-Control", "no-store");
-  response.cookies.set(CONNECT_STATE_NONCE_COOKIE, "", {
+  response.cookies.set(CONNECT_STATE_COOKIE, "", {
     maxAge: 0,
     path: "/",
   });

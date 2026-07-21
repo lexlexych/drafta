@@ -22,12 +22,12 @@ describe("Zernio adapter registration (lib/channels/zernio/index.ts)", () => {
 
     expect(indexSource).toContain('import "server-only";');
     expect(indexSource).toContain("process.env.ZERNIO_WEBHOOK_SECRET");
-    // Account-connect (OAuth) config is read here too, behind the same guard.
-    expect(indexSource).toContain("process.env.ZERNIO_CONNECT_URL");
+    // Account-connect (OAuth) REST config is read here too, behind the same guard.
+    expect(indexSource).toContain("process.env.ZERNIO_API_BASE_URL");
     expect(indexSource).toContain("process.env.ZERNIO_API_KEY");
     expect(indexSource).toContain("createZernioAdapter(");
     expect(indexSource).toContain("getZernioWebhookSecret");
-    expect(indexSource).toContain("getZernioConnectConfig");
+    expect(indexSource).toContain("getZernioApiConfig");
     expect(indexSource).toContain("registerChannelAdapter(zernioAdapter)");
   });
 

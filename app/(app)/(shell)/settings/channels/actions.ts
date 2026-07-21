@@ -13,12 +13,18 @@ import {
   UnknownChannelProviderError,
 } from "@/lib/channels/registry";
 import {
-  CONNECT_STATE_NONCE_COOKIE,
+  CONNECT_STATE_COOKIE,
+  CONNECT_STATE_NONCE_PARAM,
   CONNECT_STATE_TTL_SECONDS,
   createConnectNonce,
   signConnectState,
 } from "@/lib/channels/connect-state";
 import type { ChannelPlatform } from "@/lib/channels/types";
+import { createAdminSupabaseClient } from "@/lib/db/admin";
+import {
+  getProviderProfileId,
+  setProviderProfileId,
+} from "@/lib/db/channel-provider-profile";
 import {
   renameChannelConnection,
   setChannelConnectionStatus,
@@ -61,7 +67,8 @@ export type StartChannelConnectionResult =
   | { ok: false; error: string };
 
 async function requireCurrentWorkspaceId(): Promise<
-  { ok: true; workspaceId: string } | { ok: false; error: string }
+  | { ok: true; workspaceId: string; workspaceName: string }
+  | { ok: false; error: string }
 > {
   const user = await getAuthenticatedUser();
 
@@ -75,14 +82,16 @@ async function requireCurrentWorkspaceId(): Promise<
     return { ok: false, error: "Рабочее пространство не найдено." };
   }
 
-  return { ok: true, workspaceId: workspace.id };
+  return { ok: true, workspaceId: workspace.id, workspaceName: workspace.name };
 }
 
 /**
- * Starts connecting a channel: validates the choice, mints a signed `state`
- * (+ an httpOnly nonce cookie for CSRF), and returns the provider's
- * authorization URL for the client to redirect to. No row is written yet —
- * the callback route creates it once the account is authorized.
+ * Starts connecting a channel: validates the choice, ensures the workspace's
+ * provider profile, asks the provider for its authorization URL, and returns
+ * that URL for the client to redirect to. The pending intent is signed and
+ * stored in an httpOnly cookie (its nonce is echoed in the redirect_url for a
+ * CSRF double-submit). No `channel_connections` row is written yet — the
+ * callback route creates it once the account is authorized.
  */
 export async function startChannelConnectionAction(input: {
   platform: string;
@@ -122,36 +131,60 @@ export async function startChannelConnectionAction(input: {
   if (!origin) {
     return { ok: false, error: "Не удалось определить адрес приложения." };
   }
-  const redirectUrl = `${origin}/api/channels/${CONNECT_PROVIDER}/connect/callback`;
 
   const nonce = createConnectNonce();
-  const state = signConnectState({
-    workspaceId: workspace.workspaceId,
-    platform,
-    name,
-    nonce,
-  });
-
-  const cookieStore = await cookies();
-  cookieStore.set(CONNECT_STATE_NONCE_COOKIE, nonce, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    path: "/",
-    maxAge: CONNECT_STATE_TTL_SECONDS,
-  });
+  // Our own redirect_url carries the nonce — the provider only appends its
+  // own params to it (Zernio doesn't round-trip an arbitrary state).
+  const callbackUrl = new URL(
+    `${origin}/api/channels/${CONNECT_PROVIDER}/connect/callback`,
+  );
+  callbackUrl.searchParams.set(CONNECT_STATE_NONCE_PARAM, nonce);
 
   try {
-    const url = await adapter.getConnectUrl({
+    // System-managed field (provider profile id) → admin client; the caller
+    // is already an authorized member of this workspace.
+    const admin = createAdminSupabaseClient();
+    const existingProfileId = await getProviderProfileId(
+      admin,
+      workspace.workspaceId,
+      CONNECT_PROVIDER,
+    );
+
+    const { url, providerProfileId } = await adapter.getConnectUrl({
+      platform,
+      redirectUrl: callbackUrl.toString(),
+      providerProfileId: existingProfileId,
+      profileName: workspace.workspaceName,
+    });
+
+    if (providerProfileId !== existingProfileId) {
+      await setProviderProfileId(
+        admin,
+        workspace.workspaceId,
+        CONNECT_PROVIDER,
+        providerProfileId,
+      );
+    }
+
+    const state = signConnectState({
       workspaceId: workspace.workspaceId,
       platform,
-      redirectUrl,
-      state,
+      name,
+      nonce,
+    });
+
+    const cookieStore = await cookies();
+    cookieStore.set(CONNECT_STATE_COOKIE, state, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      path: "/",
+      maxAge: CONNECT_STATE_TTL_SECONDS,
     });
 
     return { ok: true, url };
   } catch (error) {
-    console.error("[settings/channels] failed to build connect url", error);
+    console.error("[settings/channels] failed to start channel connection", error);
     return { ok: false, error: "Не удалось начать подключение канала." };
   }
 }

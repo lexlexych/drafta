@@ -64,8 +64,8 @@ npx inngest-cli dev
 | `NEXT_PUBLIC_SUPABASE_URL` | URL проекта |
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | клиентский ключ, `sb_publishable_…` |
 | `SUPABASE_SECRET_KEY` | серверный, `sb_secret_…` — **обходит RLS**, никогда не попадает в клиентский бандл; гейтвей Supabase дополнительно отклоняет его из браузера |
-| `ZERNIO_API_KEY` | доступ к Zernio API; клиентский идентификатор в OAuth-подключении аккаунта ([5. Подключение аккаунта](05-channels.md#подключение-аккаунта-oauth)) |
-| `ZERNIO_CONNECT_URL` | база хостед-страницы авторизации Zernio для OAuth-подключения канала ([5. Подключение аккаунта](05-channels.md#подключение-аккаунта-oauth)) |
+| `ZERNIO_API_KEY` | Bearer-токен Zernio REST API — профили и OAuth-подключение аккаунта ([5. Подключение аккаунта](05-channels.md#подключение-аккаунта-oauth)) |
+| `ZERNIO_API_BASE_URL` | база Zernio REST API, напр. `https://zernio.com/api/v1` ([5. Подключение аккаунта](05-channels.md#подключение-аккаунта-oauth)) |
 | `ZERNIO_WEBHOOK_SECRET` | проверка подписи вебхуков ([7.1](07-data-flows.md#61-входящее-dm-или-комментарий)) |
 | `CHANNEL_CONNECT_STATE_SECRET` | подпись OAuth-`state` при подключении канала (защита от CSRF, `lib/channels/connect-state.ts`) |
 | `MISTRAL_API_KEY` | LLM, основной провайдер; если задан — используется Mistral ([8. AI-подсистема](08-ai-subsystem.md#клиент-и-выбор-провайдера)) |

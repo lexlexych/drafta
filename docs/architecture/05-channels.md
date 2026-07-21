@@ -72,23 +72,34 @@ Workspace может подключить **несколько каналов о
 имеет доступа к дашборду провайдера (Zernio) и не вводит внешний ID вручную:**
 
 1. в разделе «Каналы» пользователь выбирает платформу и имя, жмёт «Подключить»;
-2. сервер формирует подписанный `state` (защита от CSRF) и через `getConnectUrl`
-   адаптера отдаёт ссылку на хостед-страницу авторизации провайдера;
-3. провайдер проводит OAuth платформы и редиректит браузер на наш callback-роут
-   `app/api/channels/[provider]/connect/callback/`;
-4. роут проверяет `state`, через `parseConnectCallback` адаптера получает внешний
-   ID аккаунта и создаёт [`channel_connections`](06-data-model.md#channel_connections).
+2. сервер (server action) обеспечивает **профиль провайдера** для workspace (у Zernio
+   аккаунты группируются в «профиль»; создаём один на workspace лениво), затем через
+   `getConnectUrl` адаптера — серверный вызов Zernio REST
+   `GET /v1/connect/{platform}` (Bearer `ZERNIO_API_KEY`) — получает `authUrl`;
+3. браузер уходит на `authUrl`; провайдер проводит OAuth платформы и редиректит на наш
+   callback-роут `app/api/channels/[provider]/connect/callback/`, дописывая
+   `connected` (платформа), `accountId`, `username`;
+4. роут проверяет подписанный `state` и создаёт
+   [`channel_connections`](06-data-model.md#channel_connections) с `external_id = accountId`.
 
-Провайдер-специфика (сборка ссылки, разбор callback) живёт только в
-`lib/channels/<провайдер>/` (см. [Дисциплина](#дисциплина)). Внешний ID из callback
-совпадает с тем, что провайдер присылает во входящих вебхуках, — поэтому связка
-`(провайдер, внешний ID)` резолвит то же подключение
+Провайдер-специфика (вызовы Zernio API, разбор callback) живёт только в
+`lib/channels/zernio/` (`api.ts`, `connect.ts` — см. [Дисциплина](#дисциплина)). Внешний
+ID (`accountId`) из callback совпадает с тем, что провайдер присылает во входящих
+вебхуках, — поэтому связка `(провайдер, внешний ID)` резолвит то же подключение
 ([6.1. Входящее](07-data-flows.md#61-входящее-dm-или-комментарий)).
 
-> [!note]
-> Для Zernio токены платформ хранит сам Zernio — drafta сохраняет только внешний
-> ID (`encrypted_credentials` пусто). Прямой Meta App в будущем будет складывать
-> сюда собственные токены ([16. За горизонтом](16-rollout-plan.md)).
+> [!note] Защита от CSRF без round-trip провайдера
+> Zernio не возвращает наш произвольный `state` в callback. Поэтому подписанный
+> `state` (workspace, платформа, имя, nonce) кладётся в httpOnly-cookie, а его `nonce`
+> эхом добавляется в `redirect_url` (`?cn=…`); callback читает `state` из cookie и
+> сверяет `cn` с его `nonce` (double-submit).
+
+> [!note] Профиль провайдера и токены
+> ID профиля Zernio для workspace хранится в
+> [`workspaces.settings.providerProfiles.<провайдер>`](06-data-model.md#workspaces).
+> Токены платформ держит сам Zernio — drafta сохраняет только внешний ID
+> (`channel_connections.encrypted_credentials` пусто). Прямой Meta App в будущем будет
+> складывать сюда собственные токены ([16. За горизонтом](16-rollout-plan.md)).
 
 ## Нормализованное событие
 

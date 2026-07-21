@@ -130,15 +130,62 @@ export interface SendMessageResult {
   providerMessageId: string;
 }
 
-/** Input to the optional `getConnectUrl` — a link that starts the provider's account-connect flow. */
+/** Input to the optional `getConnectUrl` — starts the provider's account-connect flow. */
 export interface GetConnectUrlInput {
-  workspaceId: string;
-  /** Platform the user is connecting — the provider's connect page needs it up front. */
+  /** Platform the user is connecting — the provider's connect flow needs it up front. */
   platform: ChannelPlatform;
-  /** Absolute URL the provider must redirect the browser back to once the account is authorized. */
+  /**
+   * Absolute URL the provider must redirect the browser back to once the
+   * account is authorized. The caller carries its own anti-CSRF nonce inside
+   * this URL (the provider only appends its own params to it).
+   */
   redirectUrl: string;
-  /** Opaque, signed anti-CSRF token round-tripped through the provider back to `parseConnectCallback`'s caller. */
-  state: string;
+  /**
+   * Opaque provider-side account-grouping id (Zernio "profile", etc.) to
+   * connect the account under. `null`/omitted → the adapter creates one and
+   * returns it in `GetConnectUrlResult.providerProfileId` for the caller to
+   * persist per workspace.
+   */
+  providerProfileId?: string | null;
+  /** Display name to use if the adapter has to create the provider-side account group (the workspace name). */
+  profileName: string;
+}
+
+/** Result of the optional `getConnectUrl`. */
+export interface GetConnectUrlResult {
+  /** The provider's authorization URL to redirect the browser to. */
+  url: string;
+  /**
+   * The provider-side account-grouping id actually used — either the one
+   * passed in, or a freshly created one the caller must persist for the
+   * workspace so later connects reuse it.
+   */
+  providerProfileId: string;
+}
+
+/** Input to the optional `parseConnectCallback` — the query parameters the provider appended to the redirect. */
+export interface ParseConnectCallbackInput {
+  /** Query-string parameters of the provider's redirect back to us (keys as-is). */
+  query: Record<string, string>;
+}
+
+/** Result of `parseConnectCallback` — what the callback route needs to create the `channel_connections` row. */
+export interface ConnectCallbackResult {
+  /**
+   * External ID of the connected social account — must equal what the
+   * provider reports as `externalAccountId` on inbound webhooks
+   * (NormalizedEvent.externalAccountId), so (provider, externalAccountId)
+   * keeps resolving the same connection.
+   */
+  externalAccountId: string;
+  /** Platform the provider reports the account was connected for (cross-check against the pending state). */
+  platform?: ChannelPlatform;
+  /**
+   * Optional provider credentials/tokens to persist encrypted
+   * (channel_connections.encrypted_credentials). Empty for Zernio — Zernio
+   * holds the platform tokens; drafta only stores the account ID.
+   */
+  credentials?: Record<string, unknown>;
 }
 
 /** Input to the optional `parseConnectCallback` — the query parameters the provider appended to the redirect. */
@@ -189,8 +236,12 @@ export interface ChannelAdapter {
    */
   sendMessage(input: SendMessageInput): Promise<SendMessageResult>;
 
-  /** Optional: a link that starts the provider's account-connect flow. */
-  getConnectUrl?(input: GetConnectUrlInput): string | Promise<string>;
+  /**
+   * Optional: start the provider's account-connect flow and return the
+   * authorization URL to redirect the browser to (plus the provider-side
+   * account-grouping id used). May call the provider's API, so it's async.
+   */
+  getConnectUrl?(input: GetConnectUrlInput): Promise<GetConnectUrlResult>;
 
   /**
    * Optional: turn the provider's connect-callback query parameters into the

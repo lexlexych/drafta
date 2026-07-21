@@ -10,9 +10,8 @@ vi.mock("server-only", () => ({}));
 process.env.CHANNEL_CONNECT_STATE_SECRET = "test-connect-state-secret";
 
 // The DB layer is mocked: this suite tests the route's own logic — signed
-// state + nonce CSRF, provider resolution, callback parsing, redirect targets
-// — not the create query (covered by lib/db/channel-connections.test.ts). No
-// local Supabase needed, so it runs under plain `npm test`.
+// cookie state + nonce CSRF, provider resolution, callback parsing, redirect
+// targets — not the create query (covered by lib/db/channel-connections.test.ts).
 const createChannelConnectionMock = vi.fn();
 vi.mock("@/lib/db/channel-connections", () => ({
   createChannelConnection: (...args: unknown[]) =>
@@ -23,7 +22,8 @@ vi.mock("@/lib/db/server", () => ({
 }));
 
 import {
-  CONNECT_STATE_NONCE_COOKIE,
+  CONNECT_STATE_COOKIE,
+  CONNECT_STATE_NONCE_PARAM,
   signConnectState,
 } from "@/lib/channels/connect-state";
 
@@ -44,7 +44,7 @@ function mintState(overrides?: Partial<Parameters<typeof signConnectState>[0]>):
 async function callCallback(opts: {
   provider?: string;
   search: Record<string, string>;
-  cookieNonce?: string;
+  cookieToken?: string;
 }) {
   const provider = opts.provider ?? "zernio";
   const url = new URL(`http://localhost/api/channels/${provider}/connect/callback`);
@@ -53,8 +53,8 @@ async function callCallback(opts: {
   }
 
   const headers: Record<string, string> = {};
-  if (opts.cookieNonce !== undefined) {
-    headers.cookie = `${CONNECT_STATE_NONCE_COOKIE}=${opts.cookieNonce}`;
+  if (opts.cookieToken !== undefined) {
+    headers.cookie = `${CONNECT_STATE_COOKIE}=${opts.cookieToken}`;
   }
 
   const request = new NextRequest(url, { headers });
@@ -74,8 +74,12 @@ describe("GET /api/channels/[provider]/connect/callback", () => {
     createChannelConnectionMock.mockResolvedValue({ ok: true, data: {} });
 
     const location = await callCallback({
-      search: { state: mintState(), account_id: "acct_tg_98213" },
-      cookieNonce: NONCE,
+      search: {
+        [CONNECT_STATE_NONCE_PARAM]: NONCE,
+        connected: "telegram",
+        accountId: "acct_tg_98213",
+      },
+      cookieToken: mintState(),
     });
 
     expect(createChannelConnectionMock).toHaveBeenCalledWith(
@@ -100,8 +104,8 @@ describe("GET /api/channels/[provider]/connect/callback", () => {
     });
 
     const location = await callCallback({
-      search: { state: mintState(), account_id: "acct_dup" },
-      cookieNonce: NONCE,
+      search: { [CONNECT_STATE_NONCE_PARAM]: NONCE, accountId: "acct_dup" },
+      cookieToken: mintState(),
     });
 
     expect(location.searchParams.get("connect")).toBe("error");
@@ -115,17 +119,16 @@ describe("GET /api/channels/[provider]/connect/callback", () => {
     });
 
     const location = await callCallback({
-      search: { state: mintState(), account_id: "acct_x" },
-      cookieNonce: NONCE,
+      search: { [CONNECT_STATE_NONCE_PARAM]: NONCE, accountId: "acct_x" },
+      cookieToken: mintState(),
     });
 
     expect(location.searchParams.get("reason")).toBe("failed");
   });
 
-  it("rejects a missing state without touching the database", async () => {
+  it("rejects a missing state cookie without touching the database", async () => {
     const location = await callCallback({
-      search: { account_id: "acct_x" },
-      cookieNonce: NONCE,
+      search: { [CONNECT_STATE_NONCE_PARAM]: NONCE, accountId: "acct_x" },
     });
 
     expect(location.searchParams.get("connect")).toBe("error");
@@ -133,30 +136,44 @@ describe("GET /api/channels/[provider]/connect/callback", () => {
     expect(createChannelConnectionMock).not.toHaveBeenCalled();
   });
 
-  it("rejects a nonce that doesn't match the cookie (CSRF)", async () => {
+  it("rejects a URL nonce that doesn't match the cookie state (CSRF)", async () => {
     const location = await callCallback({
-      search: { state: mintState(), account_id: "acct_x" },
-      cookieNonce: "a-different-nonce",
+      search: { [CONNECT_STATE_NONCE_PARAM]: "a-different-nonce", accountId: "acct_x" },
+      cookieToken: mintState(),
     });
 
     expect(location.searchParams.get("reason")).toBe("state");
     expect(createChannelConnectionMock).not.toHaveBeenCalled();
   });
 
-  it("rejects a tampered state signature", async () => {
+  it("rejects a tampered state cookie", async () => {
     const location = await callCallback({
-      search: { state: mintState() + "x", account_id: "acct_x" },
-      cookieNonce: NONCE,
+      search: { [CONNECT_STATE_NONCE_PARAM]: NONCE, accountId: "acct_x" },
+      cookieToken: mintState() + "x",
     });
 
     expect(location.searchParams.get("reason")).toBe("state");
   });
 
+  it("rejects when the reported platform doesn't match the pending state", async () => {
+    const location = await callCallback({
+      search: {
+        [CONNECT_STATE_NONCE_PARAM]: NONCE,
+        connected: "whatsapp",
+        accountId: "acct_x",
+      },
+      cookieToken: mintState({ platform: "telegram" }),
+    });
+
+    expect(location.searchParams.get("reason")).toBe("state");
+    expect(createChannelConnectionMock).not.toHaveBeenCalled();
+  });
+
   it("redirects with reason=provider for an unknown provider", async () => {
     const location = await callCallback({
       provider: "does-not-exist",
-      search: { state: mintState(), account_id: "acct_x" },
-      cookieNonce: NONCE,
+      search: { [CONNECT_STATE_NONCE_PARAM]: NONCE, accountId: "acct_x" },
+      cookieToken: mintState(),
     });
 
     expect(location.searchParams.get("reason")).toBe("provider");
@@ -165,8 +182,8 @@ describe("GET /api/channels/[provider]/connect/callback", () => {
 
   it("redirects with reason=callback when the provider omits the account id", async () => {
     const location = await callCallback({
-      search: { state: mintState() },
-      cookieNonce: NONCE,
+      search: { [CONNECT_STATE_NONCE_PARAM]: NONCE, connected: "telegram" },
+      cookieToken: mintState(),
     });
 
     expect(location.searchParams.get("reason")).toBe("callback");
