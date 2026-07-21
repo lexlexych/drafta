@@ -3,7 +3,7 @@ id: T-03
 epic: E-003
 title: "Маскирование идентификаторов lib/ai/masking.ts + юнит-тесты"
 type: dev
-status: in_progress
+status: rework
 depends_on: []
 created: 2026-07-19
 updated: 2026-07-21
@@ -135,5 +135,42 @@ npm test
 
 ## 🔍 Ревью
 
-_Заполняется агентом-ревьюером: вердикт APPROVED / CHANGES_REQUESTED,
-замечания, что прогнано и с каким результатом._
+**Вердикт: CHANGES_REQUESTED**
+
+1. `lib/ai/masking.ts` (`IBAN_PATTERN`, `extractIbanValue`) поглощает обычный
+   текст после структурно корректного IBAN с неверной контрольной суммой. Пример:
+   `maskText("Test-IBAN DE00 3704 0044 0532 0130 00 bitte verwenden.")`
+   возвращает entity со значением
+   `DE00 3704 0044 0532 0130 00 bitte verwend` и masked text
+   `Test-IBAN {{IBAN_1}}en.`. По тикету checksum не обязательна, поэтому граница
+   IBAN должна определяться без поглощения следующей фразы. Исправить определение
+   границы и добавить регрессионный тест для IBAN без валидной checksum перед
+   обычным словом.
+2. `lib/ai/masking.ts` (`CARD_PATTERN` → `PHONE_PATTERN`) не изолирует
+   card-shaped последовательность после непрохождения Луна. Пример:
+   `maskText("Kartennummer: 0123 4567 8901 2345.")` возвращает
+   `Kartennummer: {{PHONE_1}} 2345.` с entity `0123 4567 8901`: невалидная карта
+   частично маскируется как телефон. Это нарушает требуемые проверку Луна и порядок
+   обработки пересекающихся цифровых regex. Исключить частичную обработку
+   card-shaped кандидата телефонным детектором и добавить регрессионный тест.
+
+Проверено независимо 2026-07-21:
+
+- `npm.cmd test -- lib/ai/masking.test.ts` — PASS, 14/14;
+- `npm.cmd run lint` — PASS;
+- `npm.cmd run build` — PASS, production build и TypeScript;
+- `npm.cmd test` — первый прогон: FAIL, 1/230, внешний
+  `knowledge-base-panel.test.tsx` не нашёл кнопку «Удалить»; повторный полный
+  прогон: PASS, 203 passed / 27 skipped;
+- изолированный `npm.cmd test -- "app/(app)/(shell)/settings/knowledge/knowledge-base-panel.test.tsx"`
+  — PASS, 4/4. Таким образом, KB-сбой флейковый и не связан с T-03: фактический
+  diff тикета не затрагивает панель или её тест;
+- ручные примеры с `+49 (30) 1234-5678` и ценой `49,90 €`, email,
+  checksum-valid DE IBAN и Luhn-valid картой — корректно маскируются и проходят
+  round-trip; цена остаётся без изменений;
+- API, переиспользование плейсхолдеров через `existing`, общая карта
+  `maskMessages`, неизвестные плейсхолдеры и отсутствие БД/сети проверены по коду;
+- чек-лист правил вайбкодинга: модуль находится в `lib/ai`, новых таблиц,
+  провайдерского кода, SDK-вызовов, секретов, Inngest payload или внешних сервисов
+  нет. Требования о существующих KB-файлах/категориях и выборе OpenRouter только
+  при отсутствии `MISTRAL_API_KEY` этим diff не изменены.

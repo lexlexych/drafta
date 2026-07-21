@@ -52,7 +52,7 @@
 |---|---|---|---|
 | T-01 | [Inngest-контур: serve-роут, типизация событий, локальный dev](epic_03/T-01-inngest-serve.md) | dev | done |
 | T-02 | [Клиент LLM в lib/ai: Mistral с fallback на OpenRouter](epic_03/T-02-ai-client.md) | dev | done |
-| T-03 | [Маскирование идентификаторов lib/ai/masking.ts + юнит-тесты](epic_03/T-03-masking.md) | dev | todo |
+| T-03 | [Маскирование идентификаторов lib/ai/masking.ts + юнит-тесты](epic_03/T-03-masking.md) | dev | rework |
 | T-04 | [Сборка промпта по структуре §8 и debug-лог](epic_03/T-04-prompt-builder.md) | dev | todo |
 | T-05 | [generate-draft: дебаунс, пайплайн, supersede, регенерация](epic_03/T-05-generate-draft.md) | dev | todo |
 | T-06 | [Настройки → AI: форма реальных ai_settings](epic_03/T-06-ai-settings-form.md) | dev | todo |
