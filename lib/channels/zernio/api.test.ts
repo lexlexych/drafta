@@ -3,16 +3,24 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createZernioProfile,
   getZernioConnectAuthUrl,
+  listZernioProfiles,
   ZernioApiError,
 } from "./api";
 
 const config = { apiBaseUrl: "https://zernio.com/api/v1", apiKey: "zk_test_123" };
 
-function mockFetch(response: { ok: boolean; status?: number; json?: unknown }) {
+function mockFetch(response: {
+  ok: boolean;
+  status?: number;
+  json?: unknown;
+  text?: string;
+}) {
   const fetchMock = vi.fn().mockResolvedValue({
     ok: response.ok,
     status: response.status ?? (response.ok ? 200 : 400),
     json: async () => response.json,
+    text: async () =>
+      response.text ?? (response.json != null ? JSON.stringify(response.json) : ""),
   });
   vi.stubGlobal("fetch", fetchMock);
   return fetchMock;
@@ -40,12 +48,12 @@ describe("createZernioProfile", () => {
     expect(JSON.parse(init.body)).toMatchObject({ name: "Acme" });
   });
 
-  it("throws ZernioApiError on a non-2xx response", async () => {
-    mockFetch({ ok: false, status: 500, json: null });
+  it("throws ZernioApiError with the response body on a non-2xx response", async () => {
+    mockFetch({ ok: false, status: 400, text: '{"error":"Duplicate profile name"}' });
 
-    await expect(createZernioProfile(config, { name: "Acme" })).rejects.toThrow(
-      ZernioApiError,
-    );
+    await expect(
+      createZernioProfile(config, { name: "Acme" }),
+    ).rejects.toThrowError(/HTTP 400.*Duplicate profile name/);
   });
 
   it("throws when the response has no profile._id", async () => {
@@ -54,6 +62,41 @@ describe("createZernioProfile", () => {
     await expect(createZernioProfile(config, { name: "Acme" })).rejects.toThrow(
       ZernioApiError,
     );
+  });
+});
+
+describe("listZernioProfiles", () => {
+  it("GETs /profiles and maps { profiles: [{ _id, isDefault }] }", async () => {
+    const fetchMock = mockFetch({
+      ok: true,
+      json: {
+        profiles: [
+          { _id: "prof_default", name: "Personal Brand", isDefault: true },
+          { _id: "prof_other", name: "Second", isDefault: false },
+        ],
+      },
+    });
+
+    const profiles = await listZernioProfiles(config);
+
+    expect(profiles).toEqual([
+      { id: "prof_default", isDefault: true },
+      { id: "prof_other", isDefault: false },
+    ]);
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe("https://zernio.com/api/v1/profiles");
+    expect(init.method).toBe("GET");
+    expect(init.headers.Authorization).toBe("Bearer zk_test_123");
+  });
+
+  it("returns an empty array when the account has no profiles", async () => {
+    mockFetch({ ok: true, json: { profiles: [] } });
+    expect(await listZernioProfiles(config)).toEqual([]);
+  });
+
+  it("throws ZernioApiError on a non-2xx response", async () => {
+    mockFetch({ ok: false, status: 401, text: "unauthorized" });
+    await expect(listZernioProfiles(config)).rejects.toThrow(ZernioApiError);
   });
 });
 

@@ -79,14 +79,19 @@ describe("createZernioAdapter", () => {
     ).toBeDefined();
   });
 
-  it("getConnectUrl creates a profile when none is passed, then returns authUrl + the new id", async () => {
+  it("getConnectUrl reuses the account's default profile (lists, never creates)", async () => {
     const fetchMock = vi
       .fn()
-      // POST /profiles -> 201 { message, profile: { _id } }
+      // GET /profiles -> reuse default, do NOT create
       .mockResolvedValueOnce({
         ok: true,
-        status: 201,
-        json: async () => ({ message: "Profile created successfully", profile: { _id: "prof_new" } }),
+        status: 200,
+        json: async () => ({
+          profiles: [
+            { _id: "prof_other", isDefault: false },
+            { _id: "prof_default", isDefault: true },
+          ],
+        }),
       })
       // GET /connect/telegram
       .mockResolvedValueOnce({
@@ -106,13 +111,49 @@ describe("createZernioAdapter", () => {
 
     expect(result).toEqual({
       url: "https://api.telegram.org/auth",
-      providerProfileId: "prof_new",
+      providerProfileId: "prof_default",
     });
     expect(fetchMock).toHaveBeenCalledTimes(2);
+    // First call lists profiles; no POST /profiles (create) anywhere.
     expect(fetchMock.mock.calls[0][0]).toBe("https://zernio.com/api/v1/profiles");
+    expect(
+      fetchMock.mock.calls.some((call) => call[1]?.method === "POST"),
+    ).toBe(false);
   });
 
-  it("getConnectUrl reuses an existing profile id (no profile creation call)", async () => {
+  it("getConnectUrl creates a profile only when the account has none", async () => {
+    const fetchMock = vi
+      .fn()
+      // GET /profiles -> empty
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ profiles: [] }) })
+      // POST /profiles -> 201 { message, profile: { _id } }
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 201,
+        json: async () => ({ message: "Profile created successfully", profile: { _id: "prof_new" } }),
+      })
+      // GET /connect/telegram
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ authUrl: "https://api.telegram.org/auth" }),
+      });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const adapter = createZernioAdapter(() => "secret", () => apiConfig);
+    const result = await adapter.getConnectUrl!({
+      platform: "telegram",
+      redirectUrl: "https://app.drafta.example/cb?cn=n1",
+      providerProfileId: null,
+      profileName: "Acme",
+    });
+
+    expect(result.providerProfileId).toBe("prof_new");
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock.mock.calls[1][1]?.method).toBe("POST");
+  });
+
+  it("getConnectUrl reuses a passed profile id (no list/create call)", async () => {
     const fetchMock = vi.fn().mockResolvedValueOnce({
       ok: true,
       status: 200,
