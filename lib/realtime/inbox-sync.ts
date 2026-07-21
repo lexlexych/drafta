@@ -3,6 +3,7 @@ import type {
   RealtimePostgresUpdatePayload,
   SupabaseClient,
 } from "@supabase/supabase-js";
+import { REALTIME_SUBSCRIBE_STATES } from "@supabase/supabase-js";
 
 /**
  * Client-side glue behind "Realtime-обновления инбокса"
@@ -31,6 +32,23 @@ import type {
  */
 
 const DEFAULT_DEBOUNCE_MS = 250;
+const DEFAULT_MAX_WAIT_MS = 1_000;
+const REALTIME_PAYLOAD_COLUMNS = ["id", "workspace_id"];
+
+export type InboxRealtimeConnectionStatus =
+  | "connecting"
+  | "subscribed"
+  | "reconnecting"
+  | "error";
+
+export type InboxRealtimeStatusChange = {
+  status: InboxRealtimeConnectionStatus;
+  error?: Error;
+};
+
+type InboxRealtimeHandler = ((event: InboxRealtimeEvent) => void) & {
+  cancel: () => void;
+};
 
 /** The subset of a changed row this module cares about — every table here has one. */
 export type InboxRealtimeRow = Record<string, unknown> & {
@@ -74,23 +92,43 @@ export function createInboxRealtimeHandler(
   workspaceId: string,
   refresh: () => void,
   debounceMs: number = DEFAULT_DEBOUNCE_MS,
-): (event: InboxRealtimeEvent) => void {
+  maxWaitMs: number = DEFAULT_MAX_WAIT_MS,
+): InboxRealtimeHandler {
   let pendingRefresh: ReturnType<typeof setTimeout> | null = null;
+  let burstStartedAt: number | null = null;
 
-  return (event: InboxRealtimeEvent) => {
+  const handleEvent = ((event: InboxRealtimeEvent) => {
     if (!isOwnWorkspaceEvent(event, workspaceId)) {
       return;
     }
+
+    const now = Date.now();
+    burstStartedAt ??= now;
 
     if (pendingRefresh !== null) {
       clearTimeout(pendingRefresh);
     }
 
+    const remainingMaxWait = Math.max(0, maxWaitMs - (now - burstStartedAt));
+    const delay = Math.min(debounceMs, remainingMaxWait);
+
     pendingRefresh = setTimeout(() => {
       pendingRefresh = null;
+      burstStartedAt = null;
       refresh();
-    }, debounceMs);
+    }, delay);
+  }) as InboxRealtimeHandler;
+
+  handleEvent.cancel = () => {
+    if (pendingRefresh !== null) {
+      clearTimeout(pendingRefresh);
+      pendingRefresh = null;
+    }
+
+    burstStartedAt = null;
   };
+
+  return handleEvent;
 }
 
 /**
@@ -107,30 +145,99 @@ export function subscribeToInboxRealtime(
   supabase: SupabaseClient,
   workspaceId: string,
   refresh: () => void,
+  onStatusChange?: (change: InboxRealtimeStatusChange) => void,
 ): () => void {
   const handleEvent = createInboxRealtimeHandler(workspaceId, refresh);
   const filter = `workspace_id=eq.${workspaceId}`;
+  let disposed = false;
+  let hasSubscribed = false;
+  let connectionWasInterrupted = false;
+
+  onStatusChange?.({ status: "connecting" });
 
   const channel = supabase
     .channel(`inbox-realtime:${workspaceId}`)
     .on(
       "postgres_changes",
-      { event: "INSERT", schema: "public", table: "messages", filter },
+      {
+        event: "INSERT",
+        schema: "public",
+        table: "messages",
+        filter,
+        select: REALTIME_PAYLOAD_COLUMNS,
+      },
       handleEvent,
     )
     .on(
       "postgres_changes",
-      { event: "INSERT", schema: "public", table: "conversations", filter },
+      {
+        event: "INSERT",
+        schema: "public",
+        table: "conversations",
+        filter,
+        select: REALTIME_PAYLOAD_COLUMNS,
+      },
       handleEvent,
     )
     .on(
       "postgres_changes",
-      { event: "UPDATE", schema: "public", table: "conversations", filter },
+      {
+        event: "UPDATE",
+        schema: "public",
+        table: "conversations",
+        filter,
+        select: REALTIME_PAYLOAD_COLUMNS,
+      },
       handleEvent,
     )
-    .subscribe();
+    .subscribe((status, error) => {
+      if (disposed) {
+        return;
+      }
+
+      if (status === REALTIME_SUBSCRIBE_STATES.SUBSCRIBED) {
+        const isReconnect = hasSubscribed || connectionWasInterrupted;
+        hasSubscribed = true;
+        connectionWasInterrupted = false;
+
+        console.info(
+          isReconnect
+            ? "[inbox/realtime] subscription restored; refreshing missed changes"
+            : "[inbox/realtime] subscription active",
+          { workspaceId },
+        );
+        onStatusChange?.({ status: "subscribed" });
+
+        if (isReconnect) {
+          handleEvent.cancel();
+          refresh();
+        }
+
+        return;
+      }
+
+      connectionWasInterrupted = true;
+
+      if (status === REALTIME_SUBSCRIBE_STATES.CHANNEL_ERROR) {
+        console.error("[inbox/realtime] subscription error", {
+          workspaceId,
+          error,
+        });
+        onStatusChange?.({ status: "error", error });
+        return;
+      }
+
+      console.warn("[inbox/realtime] subscription interrupted; waiting for reconnect", {
+        workspaceId,
+        status,
+        error,
+      });
+      onStatusChange?.({ status: "reconnecting", error });
+    });
 
   return () => {
+    disposed = true;
+    handleEvent.cancel();
     void supabase.removeChannel(channel);
   };
 }

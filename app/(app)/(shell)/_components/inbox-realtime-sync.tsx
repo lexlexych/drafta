@@ -4,7 +4,10 @@ import { useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 
 import { createBrowserSupabaseClient } from "@/lib/db/browser";
-import { subscribeToInboxRealtime } from "@/lib/realtime/inbox-sync";
+import {
+  subscribeToInboxRealtime,
+  type InboxRealtimeStatusChange,
+} from "@/lib/realtime/inbox-sync";
 
 /**
  * Realtime-обновления инбокса (docs/epics/epic_02/T-06-realtime-inbox.md).
@@ -39,10 +42,35 @@ export function InboxRealtimeSync({ workspaceId }: { workspaceId: string }) {
   useEffect(() => {
     const supabase = createBrowserSupabaseClient();
 
-    return subscribeToInboxRealtime(supabase, workspaceId, () => {
-      routerRef.current.refresh();
-    });
+    return subscribeToInboxRealtime(
+      supabase,
+      workspaceId,
+      () => {
+        routerRef.current.refresh();
+      },
+      (change) => reportRealtimeStatus(workspaceId, change),
+    );
   }, [workspaceId]);
 
   return null;
+}
+
+function reportRealtimeStatus(
+  workspaceId: string,
+  { status, error }: InboxRealtimeStatusChange,
+) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  window.dispatchEvent(
+    new CustomEvent("drafta:inbox-realtime-status", {
+      detail: {
+        workspaceId,
+        status,
+        error: error?.message ?? null,
+        occurredAt: new Date().toISOString(),
+      },
+    }),
+  );
 }

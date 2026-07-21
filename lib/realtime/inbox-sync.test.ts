@@ -160,6 +160,7 @@ describe("subscribeToInboxRealtime", () => {
         schema: "public",
         table: "messages",
         filter: "workspace_id=eq.wsp_a",
+        select: ["id", "workspace_id"],
       },
       expect.any(Function),
     );
@@ -170,6 +171,7 @@ describe("subscribeToInboxRealtime", () => {
         schema: "public",
         table: "conversations",
         filter: "workspace_id=eq.wsp_a",
+        select: ["id", "workspace_id"],
       },
       expect.any(Function),
     );
@@ -180,6 +182,7 @@ describe("subscribeToInboxRealtime", () => {
         schema: "public",
         table: "conversations",
         filter: "workspace_id=eq.wsp_a",
+        select: ["id", "workspace_id"],
       },
       expect.any(Function),
     );
