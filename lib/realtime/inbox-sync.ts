@@ -1,6 +1,7 @@
 import type {
   RealtimePostgresInsertPayload,
   RealtimePostgresUpdatePayload,
+  RealtimeChannel,
   RealtimeSystemPayload,
   SupabaseClient,
 } from "@supabase/supabase-js";
@@ -152,105 +153,149 @@ export function subscribeToInboxRealtime(
   let disposed = false;
   let hasSubscribed = false;
   let connectionWasInterrupted = false;
+  let channel: RealtimeChannel | null = null;
 
   onStatusChange?.({ status: "connecting" });
 
-  const channel = supabase
-    .channel(`inbox-realtime:${workspaceId}`)
-    .on("system", {}, (payload: RealtimeSystemPayload) => {
-      if (disposed || payload.status !== "error") {
-        return;
+  void authorizeAndSubscribe();
+
+  async function authorizeAndSubscribe() {
+    try {
+      const {
+        data: { session },
+        error: sessionError,
+      } = await supabase.auth.getSession();
+
+      if (sessionError) {
+        throw sessionError;
       }
 
-      connectionWasInterrupted = true;
-      const error = new Error(payload.message);
+      if (!session) {
+        throw new Error("Authenticated Supabase session is missing.");
+      }
 
-      console.error("[inbox/realtime] postgres changes subscription rejected", {
-        workspaceId,
-        extension: payload.extension,
-        channel: payload.channel,
-        error,
-      });
-      onStatusChange?.({ status: "error", error });
-    })
-    .on(
-      "postgres_changes",
-      {
-        event: "INSERT",
-        schema: "public",
-        table: "messages",
-        filter,
-      },
-      handleEvent,
-    )
-    .on(
-      "postgres_changes",
-      {
-        event: "INSERT",
-        schema: "public",
-        table: "conversations",
-        filter,
-      },
-      handleEvent,
-    )
-    .on(
-      "postgres_changes",
-      {
-        event: "UPDATE",
-        schema: "public",
-        table: "conversations",
-        filter,
-      },
-      handleEvent,
-    )
-    .subscribe((status, error) => {
+      // `createBrowserClient` discovers the cookie session asynchronously.
+      // Waiting for it and setting the token explicitly prevents the channel
+      // from joining as `anon`, which makes Realtime reject workspace_id as a
+      // filter column because anon intentionally has no SELECT grant.
+      await supabase.realtime.setAuth(session.access_token);
+
       if (disposed) {
         return;
       }
 
-      if (status === REALTIME_SUBSCRIBE_STATES.SUBSCRIBED) {
-        const isReconnect = hasSubscribed || connectionWasInterrupted;
-        hasSubscribed = true;
-        connectionWasInterrupted = false;
+      channel = supabase
+        .channel(`inbox-realtime:${workspaceId}`)
+        .on("system", {}, (payload: RealtimeSystemPayload) => {
+          if (disposed || payload.status !== "error") {
+            return;
+          }
 
-        console.info(
-          isReconnect
-            ? "[inbox/realtime] subscription restored; refreshing missed changes"
-            : "[inbox/realtime] subscription active",
-          { workspaceId },
-        );
-        onStatusChange?.({ status: "subscribed" });
+          connectionWasInterrupted = true;
+          const error = new Error(payload.message);
 
-        if (isReconnect) {
-          handleEvent.cancel();
-          refresh();
-        }
+          console.error(
+            `[inbox/realtime] postgres changes subscription rejected: ${payload.message}`,
+            {
+              workspaceId,
+              extension: payload.extension,
+              channel: payload.channel,
+            },
+          );
+          onStatusChange?.({ status: "error", error });
+        })
+        .on(
+          "postgres_changes",
+          {
+            event: "INSERT",
+            schema: "public",
+            table: "messages",
+            filter,
+          },
+          handleEvent,
+        )
+        .on(
+          "postgres_changes",
+          {
+            event: "INSERT",
+            schema: "public",
+            table: "conversations",
+            filter,
+          },
+          handleEvent,
+        )
+        .on(
+          "postgres_changes",
+          {
+            event: "UPDATE",
+            schema: "public",
+            table: "conversations",
+            filter,
+          },
+          handleEvent,
+        )
+        .subscribe((status, error) => {
+          if (disposed) {
+            return;
+          }
 
-        return;
-      }
+          if (status === REALTIME_SUBSCRIBE_STATES.SUBSCRIBED) {
+            const isReconnect = hasSubscribed || connectionWasInterrupted;
+            hasSubscribed = true;
+            connectionWasInterrupted = false;
 
-      connectionWasInterrupted = true;
+            console.info(
+              isReconnect
+                ? "[inbox/realtime] subscription restored; refreshing missed changes"
+                : "[inbox/realtime] subscription active with authenticated session",
+              { workspaceId },
+            );
+            onStatusChange?.({ status: "subscribed" });
 
-      if (status === REALTIME_SUBSCRIBE_STATES.CHANNEL_ERROR) {
-        console.error("[inbox/realtime] subscription error", {
-          workspaceId,
-          error,
+            if (isReconnect) {
+              handleEvent.cancel();
+              refresh();
+            }
+
+            return;
+          }
+
+          connectionWasInterrupted = true;
+
+          if (status === REALTIME_SUBSCRIBE_STATES.CHANNEL_ERROR) {
+            console.error("[inbox/realtime] subscription error", {
+              workspaceId,
+              error,
+            });
+            onStatusChange?.({ status: "error", error });
+            return;
+          }
+
+          console.warn(
+            "[inbox/realtime] subscription interrupted; waiting for reconnect",
+            { workspaceId, status, error },
+          );
+          onStatusChange?.({ status: "reconnecting", error });
         });
-        onStatusChange?.({ status: "error", error });
+    } catch (cause) {
+      if (disposed) {
         return;
       }
 
-      console.warn("[inbox/realtime] subscription interrupted; waiting for reconnect", {
+      const error = cause instanceof Error ? cause : new Error(String(cause));
+      console.error(`[inbox/realtime] authentication failed: ${error.message}`, {
         workspaceId,
-        status,
-        error,
       });
-      onStatusChange?.({ status: "reconnecting", error });
-    });
+      onStatusChange?.({ status: "error", error });
+    }
+  }
 
   return () => {
     disposed = true;
     handleEvent.cancel();
-    void supabase.removeChannel(channel);
+
+    if (channel) {
+      void supabase.removeChannel(channel);
+    }
   };
 }
