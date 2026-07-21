@@ -142,13 +142,10 @@ export interface GetConnectUrlInput {
   redirectUrl: string;
   /**
    * Opaque provider-side account-grouping id (Zernio "profile", etc.) to
-   * connect the account under. `null`/omitted → the adapter creates one and
-   * returns it in `GetConnectUrlResult.providerProfileId` for the caller to
-   * persist per workspace.
+   * connect the account under. Zernio requires the profile created during
+   * workspace bootstrap; another provider may define a different lifecycle.
    */
   providerProfileId?: string | null;
-  /** Display name to use if the adapter has to create the provider-side account group (the workspace name). */
-  profileName: string;
 }
 
 /** Result of the optional `getConnectUrl`. */
@@ -156,9 +153,7 @@ export interface GetConnectUrlResult {
   /** The provider's authorization URL to redirect the browser to. */
   url: string;
   /**
-   * The provider-side account-grouping id actually used — either the one
-   * passed in, or a freshly created one the caller must persist for the
-   * workspace so later connects reuse it.
+   * The provider-side account-grouping id actually used.
    */
   providerProfileId: string;
 }

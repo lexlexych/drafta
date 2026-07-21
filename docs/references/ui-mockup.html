@@ -832,7 +832,7 @@ function setDetail(){
   var h='<div class="thead"><button class="backbtn" onclick="App.back()" aria-label="Назад">'+I.back+'</button>'
     +'<div class="who"><b>'+m[0]+'</b></div></div><div class="spane"><div class="inner">';
   if(S.set==='channels'){
-    h+='<p class="desc">Каналов одной платформы может быть несколько — каждому подключению задаётся своё имя. Имя видно в списках, тредах и меню.</p>';
+    h+='<p class="desc">В workspace можно подключить по одному каналу каждой платформы. Имя видно в списках, тредах и меню.</p>';
     h+='<div class="card">';
     [['ch_ig','подключён'],['ch_fb','подключён']].forEach(function(x){
       var c=CH[x[0]];

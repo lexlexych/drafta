@@ -81,7 +81,7 @@ describe("ChannelsPanel", () => {
 
     await waitFor(() =>
       expect(startChannelConnectionAction).toHaveBeenCalledWith({
-        platform: "telegram",
+        platform: "whatsapp",
         name: "WhatsApp Сервис",
       }),
     );
@@ -135,8 +135,17 @@ describe("ChannelsPanel", () => {
     );
 
     expect(
-      screen.getByText("Этот аккаунт уже подключён к рабочему пространству."),
+      screen.getByText("Канал этой платформы уже подключён к рабочему пространству."),
     ).toBeDefined();
+  });
+
+  it("does not offer platforms that already have a connection", () => {
+    render(<ChannelsPanel channels={baseChannels} supportedPlatforms={supportedPlatforms} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "+ Подключить канал" }));
+
+    expect(screen.queryByRole("option", { name: "Telegram" })).toBeNull();
+    expect(screen.getByRole("option", { name: "WhatsApp" })).toBeDefined();
   });
 
   it("renames a channel inline", async () => {

@@ -11,9 +11,8 @@ import type {
 } from "../types";
 import { ChannelOperationNotImplementedError } from "../types";
 import {
-  createZernioProfile,
   getZernioConnectAuthUrl,
-  listZernioProfiles,
+  ZernioApiError,
   type ZernioApiConfig,
 } from "./api";
 import { parseZernioConnectCallback } from "./connect";
@@ -76,8 +75,13 @@ export function createZernioAdapter(
       input: GetConnectUrlInput,
     ): Promise<GetConnectUrlResult> => {
       const config = getApiConfig();
-      const providerProfileId =
-        input.providerProfileId ?? (await resolveZernioProfileId(config, input.profileName));
+      const providerProfileId = input.providerProfileId?.trim();
+
+      if (!providerProfileId) {
+        throw new ZernioApiError(
+          "Workspace has no Zernio profile. Workspace provisioning is incomplete.",
+        );
+      }
 
       const url = await getZernioConnectAuthUrl(config, {
         platform: input.platform,
@@ -90,25 +94,4 @@ export function createZernioAdapter(
   }
 
   return adapter;
-}
-
-/**
- * Resolves the Zernio profile to connect accounts under, on the first connect
- * for a workspace. `ZERNIO_API_KEY` is one account-wide key, so we **reuse an
- * existing profile** (preferring the default) instead of creating a new one on
- * every connect — creating per workspace would clutter the account and hit the
- * plan's profile limit. Only when the account has no profile at all do we
- * create one. The caller persists the returned id per workspace.
- */
-async function resolveZernioProfileId(
-  config: ZernioApiConfig,
-  profileName: string,
-): Promise<string> {
-  const existing = await listZernioProfiles(config);
-  if (existing.length > 0) {
-    const chosen = existing.find((profile) => profile.isDefault) ?? existing[0];
-    return chosen.id;
-  }
-
-  return createZernioProfile(config, { name: profileName });
 }

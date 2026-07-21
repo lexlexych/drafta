@@ -1,24 +1,23 @@
 import type { ChannelPlatform } from "../types";
 
 /**
- * Thin server-side client for the two Zernio REST endpoints the
- * account-connect (OAuth) flow needs. Kept a pure function of its injected
+ * Thin server-side client for the Zernio REST endpoints used by workspace
+ * provisioning and the account-connect (OAuth) flow. Kept a pure function of its injected
  * config (no `process.env`, no `"server-only"` import) so it stays
  * unit-testable by mocking `global.fetch` — the env is read in `./index.ts`,
  * same discipline as the webhook secret.
  *
  * Contract per the official OpenAPI spec (https://docs.zernio.com/api/openapi —
  * operationIds `listProfiles`, `createProfile`, `getConnectUrl`):
- *   - GET  /v1/profiles
- *       -> 200 { profiles: [ { _id, isDefault, … } ] }
  *   - POST /v1/profiles  { name, description }
  *       -> 201 { message, profile: { _id, … } }        (id at profile._id)
+ *   - DELETE /v1/profiles/{profileId}
+ *       -> 200 { message }
  *   - GET  /v1/connect/{platform}  ?profileId&redirect_url
  *       -> 200 { authUrl, state }                       (authUrl at top level)
  * Both authenticate with `Authorization: Bearer <ZERNIO_API_KEY>`. A Zernio
- * "profile" groups connected accounts. `ZERNIO_API_KEY` is one account-wide key,
- * so the adapter reuses an existing profile (preferring the default) rather than
- * creating a new one per connect — see lib/channels/zernio/adapter.ts.
+ * "profile" is the tenant boundary: drafta provisions exactly one per workspace
+ * before the workspace row is created.
  */
 
 /** Zernio REST config — injected into the adapter, read from env in ./index.ts. */
@@ -78,46 +77,9 @@ async function zernioHttpError(
   );
 }
 
-/** A Zernio profile (account group) as returned by GET /v1/profiles. */
-export interface ZernioProfileSummary {
-  id: string;
-  isDefault: boolean;
-}
-
-/**
- * Lists the account's Zernio profiles (GET /v1/profiles). Response per spec:
- * `{ profiles: [ { _id, isDefault, … } ] }`. Used so the adapter can reuse an
- * existing profile (preferring the default) instead of creating a new one on a
- * shared, account-wide API key.
- */
-export async function listZernioProfiles(
-  config: ZernioApiConfig,
-): Promise<ZernioProfileSummary[]> {
-  const response = await fetch(joinUrl(config.apiBaseUrl, "profiles"), {
-    method: "GET",
-    headers: authHeaders(config),
-  });
-
-  if (!response.ok) {
-    throw await zernioHttpError(response, "Zernio profiles list failed");
-  }
-
-  const body = (await readJson(response)) as
-    | { profiles?: Array<{ _id?: unknown; isDefault?: unknown }> }
-    | null;
-  const profiles = Array.isArray(body?.profiles) ? body.profiles : [];
-
-  return profiles
-    .filter(
-      (p): p is { _id: string; isDefault?: unknown } =>
-        typeof p?._id === "string" && p._id.length > 0,
-    )
-    .map((p) => ({ id: p._id, isDefault: p.isDefault === true }));
-}
-
 /**
  * Creates a Zernio profile (account group) and returns its `_id`. drafta
- * creates one lazily per workspace, on the first channel connection.
+ * creates one during workspace bootstrap, before the workspace is persisted.
  */
 export async function createZernioProfile(
   config: ZernioApiConfig,
@@ -144,6 +106,21 @@ export async function createZernioProfile(
   }
 
   return id;
+}
+
+/** Deletes an empty Zernio profile when workspace bootstrap needs compensation. */
+export async function deleteZernioProfile(
+  config: ZernioApiConfig,
+  profileId: string,
+): Promise<void> {
+  const response = await fetch(
+    joinUrl(config.apiBaseUrl, `profiles/${encodeURIComponent(profileId)}`),
+    { method: "DELETE", headers: authHeaders(config) },
+  );
+
+  if (!response.ok) {
+    throw await zernioHttpError(response, "Zernio profile deletion failed");
+  }
 }
 
 /**

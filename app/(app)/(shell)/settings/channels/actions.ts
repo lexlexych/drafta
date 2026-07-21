@@ -23,9 +23,9 @@ import type { ChannelPlatform } from "@/lib/channels/types";
 import { createAdminSupabaseClient } from "@/lib/db/admin";
 import {
   getProviderProfileId,
-  setProviderProfileId,
 } from "@/lib/db/channel-provider-profile";
 import {
+  hasChannelConnectionForPlatform,
   renameChannelConnection,
   setChannelConnectionStatus,
   SUPPORTED_CHANNEL_PLATFORMS,
@@ -67,7 +67,7 @@ export type StartChannelConnectionResult =
   | { ok: false; error: string };
 
 async function requireCurrentWorkspaceId(): Promise<
-  | { ok: true; workspaceId: string; workspaceName: string }
+  | { ok: true; workspaceId: string }
   | { ok: false; error: string }
 > {
   const user = await getAuthenticatedUser();
@@ -82,12 +82,13 @@ async function requireCurrentWorkspaceId(): Promise<
     return { ok: false, error: "Рабочее пространство не найдено." };
   }
 
-  return { ok: true, workspaceId: workspace.id, workspaceName: workspace.name };
+  return { ok: true, workspaceId: workspace.id };
 }
 
 /**
- * Starts connecting a channel: validates the choice, ensures the workspace's
- * provider profile, asks the provider for its authorization URL, and returns
+ * Starts connecting a channel: validates the choice and one-platform limit,
+ * reads the workspace's provisioned provider profile, asks the provider for
+ * its authorization URL, and returns
  * that URL for the client to redirect to. The pending intent is signed and
  * stored in an httpOnly cookie (its nonce is echoed in the redirect_url for a
  * CSRF double-submit). No `channel_connections` row is written yet — the
@@ -141,6 +142,20 @@ export async function startChannelConnectionAction(input: {
   callbackUrl.searchParams.set(CONNECT_STATE_NONCE_PARAM, nonce);
 
   try {
+    const supabase = await createServerSupabaseClient();
+    if (
+      await hasChannelConnectionForPlatform(
+        supabase,
+        workspace.workspaceId,
+        platform,
+      )
+    ) {
+      return {
+        ok: false,
+        error: "Канал этой платформы уже подключён к рабочему пространству.",
+      };
+    }
+
     // System-managed field (provider profile id) → admin client; the caller
     // is already an authorized member of this workspace.
     const admin = createAdminSupabaseClient();
@@ -150,21 +165,11 @@ export async function startChannelConnectionAction(input: {
       CONNECT_PROVIDER,
     );
 
-    const { url, providerProfileId } = await adapter.getConnectUrl({
+    const { url } = await adapter.getConnectUrl({
       platform,
       redirectUrl: callbackUrl.toString(),
       providerProfileId: existingProfileId,
-      profileName: workspace.workspaceName,
     });
-
-    if (providerProfileId !== existingProfileId) {
-      await setProviderProfileId(
-        admin,
-        workspace.workspaceId,
-        CONNECT_PROVIDER,
-        providerProfileId,
-      );
-    }
 
     const state = signConnectState({
       workspaceId: workspace.workspaceId,

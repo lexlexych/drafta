@@ -29,6 +29,9 @@ describe("Zernio adapter registration (lib/channels/zernio/index.ts)", () => {
     expect(indexSource).toContain("getZernioWebhookSecret");
     expect(indexSource).toContain("getZernioApiConfig");
     expect(indexSource).toContain("registerChannelAdapter(zernioAdapter)");
+    expect(indexSource).toContain("createZernioWorkspaceProfile");
+    expect(indexSource).toContain("name: `drafta-${input.workspaceId}`");
+    expect(indexSource).toContain("deleteZernioWorkspaceProfile");
   });
 
   it("keeps the adapter factory itself free of the server-only guard, so it stays unit-testable", () => {

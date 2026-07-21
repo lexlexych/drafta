@@ -9,7 +9,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
  * Stored in the existing `settings` jsonb bag rather than a dedicated column
  * so the core schema stays provider-agnostic (no `zernio_*` columns — same
  * spirit as `channel_connections.provider` being a generic string). One
- * profile per workspace, created lazily on the first channel connection
+ * profile per workspace, created as part of workspace bootstrap
  * (docs/architecture/05-channels.md#подключение-аккаунта-oauth).
  *
  * Callers pass an **admin** client (`lib/db/admin.ts`): this is
@@ -43,7 +43,7 @@ async function readSettings(
   return (data?.settings ?? {}) as WorkspaceSettings;
 }
 
-/** Returns the stored provider profile id for the workspace, or null if none yet. */
+/** Returns the stored provider profile id for the workspace, or null if provisioning is incomplete. */
 export async function getProviderProfileId(
   supabase: SupabaseClient,
   workspaceId: string,

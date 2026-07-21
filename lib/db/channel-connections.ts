@@ -82,6 +82,31 @@ export async function listChannelConnections(
   return (data ?? []) as ChannelConnectionRow[];
 }
 
+/** True when this workspace already owns a connection for the platform. */
+export async function hasChannelConnectionForPlatform(
+  supabase: SupabaseClient,
+  workspaceId: string,
+  platform: ChannelPlatform,
+): Promise<boolean> {
+  const { data, error } = await supabase
+    .from("channel_connections")
+    .select("id")
+    .eq("workspace_id", workspaceId)
+    .eq("platform", platform)
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    console.error(
+      "[settings/channels] failed to check the workspace platform connection",
+      error,
+    );
+    throw new Error("Unable to check channel connection availability.");
+  }
+
+  return data !== null;
+}
+
 export type CreateChannelConnectionInput = {
   /** Resolved from the account-connect callback's `[provider]` route segment. */
   provider: string;
@@ -100,9 +125,8 @@ export type CreateChannelConnectionInput = {
  * `provider`/`externalId` come from the OAuth connect callback
  * (`app/api/channels/[provider]/connect/callback/`), capabilities are filled
  * with the platform's defaults (T-01's `getDefaultChannelCapabilities`).
- * Friendly error on a duplicate (workspace, provider, external_id) — the
- * table's unique constraint
- * (supabase/migrations/20260720103000_create_schema_v1.sql).
+ * Friendly error on a duplicate platform or external account — enforced by
+ * the table's unique constraints.
  */
 export async function createChannelConnection(
   supabase: SupabaseClient,
@@ -146,7 +170,7 @@ export async function createChannelConnection(
     if (isUniqueViolation(error)) {
       return {
         ok: false,
-        error: "Этот аккаунт уже подключён к рабочему пространству.",
+        error: "Канал этой платформы уже подключён к рабочему пространству.",
       };
     }
 

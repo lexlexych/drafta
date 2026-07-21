@@ -86,7 +86,7 @@ cssclass: architecture-doc
 [тесты RLS](14-vibecoding-rules.md)
 
 **Абстракция каналов** — [интерфейс адаптера](05-channels.md) ·
-[несколько именованных подключений](05-channels.md#несколько-каналов-и-имена) ·
+[именованные подключения](05-channels.md#один-канал-каждой-платформы-и-имена) ·
 [`channel_connections` и capabilities](06-data-model.md#channel_connections) ·
 [email как третий адаптер](07-data-flows.md#64-email-этап-после-mvp) ·
 [переезд с Zernio](17-risks.md)

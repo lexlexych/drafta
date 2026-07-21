@@ -4,9 +4,9 @@ import { useRouter } from "next/navigation";
 import { type FormEvent, useState } from "react";
 
 import { defaultAuthenticatedPath } from "@/lib/auth/redirects";
-import { createBrowserSupabaseClient } from "@/lib/db/browser";
 
 import styles from "../../app.module.css";
+import { createWorkspaceAction } from "../actions";
 
 export function WorkspaceForm() {
   const router = useRouter();
@@ -27,14 +27,13 @@ export function WorkspaceForm() {
 
     setIsSubmitting(true);
 
-    const supabase = createBrowserSupabaseClient();
-    const { data, error: rpcError } = await supabase.rpc("create_workspace", {
+    const result = await createWorkspaceAction({
       name: workspaceName,
     });
 
-    if (rpcError || !data) {
+    if (!result.ok) {
       setIsSubmitting(false);
-      setError("Не удалось создать рабочее пространство. Попробуйте ещё раз.");
+      setError(result.error);
       return;
     }
 

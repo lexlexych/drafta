@@ -74,7 +74,7 @@ describe.skipIf(!hasLocalSupabaseConfig)("lib/db/channel-connections", () => {
     return data.id;
   }
 
-  it("creates two connections of the same platform with different external ids, both visible", async () => {
+  it("rejects a second connection of the same platform in one workspace", async () => {
     const workspaceId = await createTestWorkspace();
 
     const first = await createChannelConnection(supabase, workspaceId, {
@@ -91,14 +91,13 @@ describe.skipIf(!hasLocalSupabaseConfig)("lib/db/channel-connections", () => {
     });
 
     expect(first.ok).toBe(true);
-    expect(second.ok).toBe(true);
+    expect(second.ok).toBe(false);
+    if (second.ok) return;
+    expect(second.error).toMatch(/платформы уже подключён/i);
 
     const list = await listChannelConnections(supabase, workspaceId);
-    expect(list).toHaveLength(2);
-    expect(list.map((row) => row.name).sort()).toEqual([
-      "WhatsApp Магазин",
-      "WhatsApp Сервис",
-    ]);
+    expect(list).toHaveLength(1);
+    expect(list[0].name).toBe("WhatsApp Магазин");
   });
 
   it("fills capabilities with the platform's defaults on creation", async () => {

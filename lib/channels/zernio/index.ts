@@ -2,7 +2,11 @@ import "server-only";
 
 import { registerChannelAdapter } from "../registry";
 import { createZernioAdapter } from "./adapter";
-import type { ZernioApiConfig } from "./api";
+import {
+  createZernioProfile,
+  deleteZernioProfile,
+  type ZernioApiConfig,
+} from "./api";
 
 /**
  * Reads `ZERNIO_WEBHOOK_SECRET` from the environment. Kept in this
@@ -31,7 +35,8 @@ function getZernioWebhookSecret(): string {
  * Reads the Zernio REST config used by the account-connect (OAuth) flow —
  * `ZERNIO_API_BASE_URL` (e.g. https://zernio.com/api/v1) and `ZERNIO_API_KEY`
  * (Bearer token). Guarded the same way and read lazily: only starting a
- * connect flow needs these set, not importing the module or handling a webhook.
+ * workspace provisioning/connect flows need these set, not importing the
+ * module or handling a webhook.
  */
 function getZernioApiConfig(): ZernioApiConfig {
   const apiBaseUrl = process.env.ZERNIO_API_BASE_URL;
@@ -60,3 +65,23 @@ export const zernioAdapter = createZernioAdapter(
 );
 
 registerChannelAdapter(zernioAdapter);
+
+/**
+ * Provisions the mandatory, isolated Zernio tenant boundary for one workspace.
+ * The technical name is stable and unique inside the Zernio team; the human
+ * workspace name is kept only as a description.
+ */
+export async function createZernioWorkspaceProfile(input: {
+  workspaceId: string;
+  workspaceName: string;
+}): Promise<string> {
+  return createZernioProfile(getZernioApiConfig(), {
+    name: `drafta-${input.workspaceId}`,
+    description: input.workspaceName,
+  });
+}
+
+/** Best-effort compensation used when DB workspace bootstrap fails. */
+export async function deleteZernioWorkspaceProfile(profileId: string): Promise<void> {
+  await deleteZernioProfile(getZernioApiConfig(), profileId);
+}

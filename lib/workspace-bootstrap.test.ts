@@ -10,32 +10,36 @@ function readSource(...pathParts: string[]): string {
 }
 
 describe("workspace bootstrap boundaries", () => {
-  it("keeps workspace creation in a restricted security-definer RPC", () => {
+  it("keeps workspace creation in a service-role-only security-definer RPC", () => {
     const migration = readSource(
       "supabase",
       "migrations",
-      "20260720130000_create_workspace_rpc.sql",
+      "20260721100000_workspace_zernio_profile_and_channel_platform.sql",
     );
 
-    expect(migration).toContain("create or replace function public.create_workspace(name text)");
+    expect(migration).toContain("create function public.create_workspace(");
     expect(migration).toContain("security definer");
     expect(migration).toContain("set search_path = ''");
-    expect(migration).toContain("current_user_id uuid := auth.uid()");
-    expect(migration).toContain("insert into public.workspaces (name)");
+    expect(migration).toContain("provider_profiles jsonb");
+    expect(migration).toContain("provider_profiles ->> 'zernio'");
+    expect(migration).toContain("insert into public.workspaces (id, name, settings)");
     expect(migration).toContain(
       "insert into public.workspace_members (workspace_id, user_id, role)",
     );
     expect(migration).toContain("insert into public.ai_settings (workspace_id)");
     expect(migration).toContain(
-      "revoke all on function public.create_workspace(text) from public",
+      "revoke all on function public.create_workspace(uuid, uuid, text, jsonb) from public",
     );
     expect(migration).toContain(
-      "grant execute on function public.create_workspace(text) to authenticated",
+      "grant execute on function public.create_workspace(uuid, uuid, text, jsonb) to service_role",
     );
-    expect(migration).not.toContain("public.categories");
+    expect(migration).not.toContain(
+      "grant execute on function public.create_workspace(uuid, uuid, text, jsonb) to authenticated",
+    );
+    expect(migration).toContain("unique (workspace_id, platform)");
   });
 
-  it("uses the RPC from onboarding and keeps the app shell behind both gates", () => {
+  it("uses server-side provider provisioning from onboarding and keeps the app shell behind both gates", () => {
     const appLayout = readSource("app", "(app)", "layout.tsx");
     const onboarding = readSource("app", "(app)", "onboarding", "page.tsx");
     const form = readSource(
@@ -45,6 +49,7 @@ describe("workspace bootstrap boundaries", () => {
       "_components",
       "workspace-form.tsx",
     );
+    const action = readSource("app", "(app)", "onboarding", "actions.ts");
     // T-07: dashboard и остальные разделы живут в группе (shell);
     // второй гейт (наличие workspace) — в её layout.
     const shellLayout = readSource("app", "(app)", "(shell)", "layout.tsx");
@@ -53,8 +58,12 @@ describe("workspace bootstrap boundaries", () => {
     expect(appLayout).toContain('redirect("/login")');
     expect(onboarding).toContain("getCurrentWorkspace");
     expect(onboarding).toContain('redirect("/dashboard")');
-    expect(form).toContain('supabase.rpc("create_workspace"');
+    expect(form).toContain("createWorkspaceAction");
     expect(form).not.toContain('.from("workspaces")');
+    expect(action).toContain("createZernioWorkspaceProfile");
+    expect(action).toContain('admin.rpc("create_workspace"');
+    expect(action).toContain("deleteZernioWorkspaceProfile");
+    expect(action).toContain("provider_profiles: { zernio: profileId }");
     expect(shellLayout).toContain("getCurrentWorkspace");
     expect(shellLayout).toContain('redirect("/onboarding")');
   });

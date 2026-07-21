@@ -55,7 +55,7 @@ const STATUS_LABELS: Record<ChannelConnectionListItem["status"], string> = {
 };
 
 const CONNECT_ERROR_MESSAGES: Record<string, string> = {
-  duplicate: "Этот аккаунт уже подключён к рабочему пространству.",
+  duplicate: "Канал этой платформы уже подключён к рабочему пространству.",
   state: "Сессия подключения истекла или недействительна. Попробуйте снова.",
   provider: "Подключение через этот канал сейчас недоступно.",
   callback: "Провайдер не завершил подключение. Попробуйте снова.",
@@ -78,13 +78,17 @@ export function ChannelsPanel({
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const connectedPlatforms = new Set(channels.map((channel) => channel.platform));
+  const availablePlatforms = supportedPlatforms.filter(
+    (candidate) => !connectedPlatforms.has(candidate),
+  );
 
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
 
   const [isAdding, setIsAdding] = useState(false);
   const [platform, setPlatform] = useState<ChannelPlatform>(
-    supportedPlatforms[0] ?? "telegram",
+    availablePlatforms[0] ?? "telegram",
   );
   const [name, setName] = useState("");
 
@@ -278,7 +282,7 @@ export function ChannelsPanel({
               onChange={(event) => setPlatform(event.target.value as ChannelPlatform)}
               value={platform}
             >
-              {supportedPlatforms.map((option) => (
+              {availablePlatforms.map((option) => (
                 <option key={option} value={option}>
                   {PLATFORM_LABELS[option]}
                 </option>
@@ -317,7 +321,7 @@ export function ChannelsPanel({
             </button>
           </div>
         </form>
-      ) : (
+      ) : availablePlatforms.length > 0 ? (
         <button
           className={`${uiStyles.button} ${uiStyles.buttonPrimary} ${uiStyles.buttonSelfStart}`}
           onClick={() => {
@@ -328,6 +332,10 @@ export function ChannelsPanel({
         >
           + Подключить канал
         </button>
+      ) : (
+        <p className={setStyles.description}>
+          Все поддерживаемые платформы уже подключены.
+        </p>
       )}
     </>
   );

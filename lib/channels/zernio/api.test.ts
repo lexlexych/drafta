@@ -2,8 +2,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   createZernioProfile,
+  deleteZernioProfile,
   getZernioConnectAuthUrl,
-  listZernioProfiles,
   ZernioApiError,
 } from "./api";
 
@@ -65,38 +65,23 @@ describe("createZernioProfile", () => {
   });
 });
 
-describe("listZernioProfiles", () => {
-  it("GETs /profiles and maps { profiles: [{ _id, isDefault }] }", async () => {
-    const fetchMock = mockFetch({
-      ok: true,
-      json: {
-        profiles: [
-          { _id: "prof_default", name: "Personal Brand", isDefault: true },
-          { _id: "prof_other", name: "Second", isDefault: false },
-        ],
-      },
-    });
+describe("deleteZernioProfile", () => {
+  it("DELETEs the profile with Bearer auth", async () => {
+    const fetchMock = mockFetch({ ok: true, json: { message: "deleted" } });
 
-    const profiles = await listZernioProfiles(config);
+    await deleteZernioProfile(config, "prof_abc123");
 
-    expect(profiles).toEqual([
-      { id: "prof_default", isDefault: true },
-      { id: "prof_other", isDefault: false },
-    ]);
     const [url, init] = fetchMock.mock.calls[0];
-    expect(url).toBe("https://zernio.com/api/v1/profiles");
-    expect(init.method).toBe("GET");
+    expect(url).toBe("https://zernio.com/api/v1/profiles/prof_abc123");
+    expect(init.method).toBe("DELETE");
     expect(init.headers.Authorization).toBe("Bearer zk_test_123");
   });
 
-  it("returns an empty array when the account has no profiles", async () => {
-    mockFetch({ ok: true, json: { profiles: [] } });
-    expect(await listZernioProfiles(config)).toEqual([]);
-  });
-
-  it("throws ZernioApiError on a non-2xx response", async () => {
-    mockFetch({ ok: false, status: 401, text: "unauthorized" });
-    await expect(listZernioProfiles(config)).rejects.toThrow(ZernioApiError);
+  it("throws ZernioApiError when compensation fails", async () => {
+    mockFetch({ ok: false, status: 400, text: "profile has active accounts" });
+    await expect(deleteZernioProfile(config, "prof_1")).rejects.toThrow(
+      ZernioApiError,
+    );
   });
 });
 
