@@ -7,12 +7,14 @@ import type { ChannelPlatform } from "../types";
  * unit-testable by mocking `global.fetch` — the env is read in `./index.ts`,
  * same discipline as the webhook secret.
  *
- * Real contract (https://docs.zernio.com/guides/connecting-accounts,
- * /profiles/list-profiles):
- *   - POST /v1/profiles           { name, description } -> { _id, … }
- *   - GET  /v1/connect/{platform}  ?profileId&redirect_url -> { authUrl, … }
+ * Contract per the official OpenAPI spec (https://docs.zernio.com/api/openapi —
+ * operationIds `createProfile`, `getConnectUrl`):
+ *   - POST /v1/profiles  { name, description }
+ *       -> 201 { message, profile: { _id, … } }        (id at profile._id)
+ *   - GET  /v1/connect/{platform}  ?profileId&redirect_url
+ *       -> 200 { authUrl, state }                       (authUrl at top level)
  * Both authenticate with `Authorization: Bearer <ZERNIO_API_KEY>`. A Zernio
- * "profile" (`_id`) groups connected accounts — drafta keeps one per
+ * "profile" (`profile._id`) groups connected accounts — drafta keeps one per
  * workspace (see lib/db/channel-provider-profile.ts).
  */
 
@@ -72,10 +74,14 @@ export async function createZernioProfile(
     );
   }
 
-  const body = (await readJson(response)) as { _id?: unknown } | null;
-  const id = body?._id;
+  // Per the spec the 201 body is { message, profile: { _id, … } } — the id is
+  // at profile._id, not top-level.
+  const body = (await readJson(response)) as
+    | { profile?: { _id?: unknown } }
+    | null;
+  const id = body?.profile?._id;
   if (typeof id !== "string" || id.length === 0) {
-    throw new ZernioApiError("Zernio profile response is missing `_id`.");
+    throw new ZernioApiError("Zernio profile response is missing `profile._id`.");
   }
 
   return id;

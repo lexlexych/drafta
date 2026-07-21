@@ -23,8 +23,12 @@ afterEach(() => {
 });
 
 describe("createZernioProfile", () => {
-  it("POSTs to /profiles with Bearer auth and returns the _id", async () => {
-    const fetchMock = mockFetch({ ok: true, json: { _id: "prof_abc123" } });
+  it("POSTs to /profiles with Bearer auth and returns profile._id", async () => {
+    const fetchMock = mockFetch({
+      ok: true,
+      status: 201,
+      json: { message: "Profile created successfully", profile: { _id: "prof_abc123" } },
+    });
 
     const id = await createZernioProfile(config, { name: "Acme" });
 
@@ -44,8 +48,8 @@ describe("createZernioProfile", () => {
     );
   });
 
-  it("throws when the response is missing _id", async () => {
-    mockFetch({ ok: true, json: {} });
+  it("throws when the response has no profile._id", async () => {
+    mockFetch({ ok: true, status: 201, json: { message: "ok", profile: {} } });
 
     await expect(createZernioProfile(config, { name: "Acme" })).rejects.toThrow(
       ZernioApiError,
