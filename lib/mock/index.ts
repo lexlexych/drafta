@@ -206,6 +206,7 @@ export type SettingsSectionId =
   | "channels"
   | "categories"
   | "ai"
+  | "knowledge"
   | "team"
   | "notifications"
   | "privacy";
@@ -955,6 +956,11 @@ export const SETTINGS_SECTIONS: SettingsSectionView[] = [
     description: "Правила классификации входящих",
   },
   { id: "ai", title: "AI", description: "Тон, язык, дебаунс, авто-генерация" },
+  {
+    id: "knowledge",
+    title: "База знаний",
+    description: "Markdown-файлы для AI-ответов",
+  },
   { id: "team", title: "Команда", description: "Участники и приглашения" },
   { id: "notifications", title: "Уведомления", description: "Частота push" },
   {

@@ -15,6 +15,10 @@ import {
   SUPPORTED_CHANNEL_PLATFORMS,
   listChannelConnections,
 } from "@/lib/db/channel-connections";
+import {
+  listKnowledgeFiles,
+  type KnowledgeFileRow,
+} from "@/lib/db/knowledge-base";
 import { createServerSupabaseClient } from "@/lib/db/server";
 import { getAuthenticatedUser, getCurrentWorkspace } from "@/lib/db/workspace";
 
@@ -27,6 +31,10 @@ import {
   type ChannelConnectionListItem,
   type ChannelConnectResult,
 } from "./channels/channels-panel";
+import {
+  KnowledgeBasePanel,
+  type KnowledgeFileListItem,
+} from "./knowledge/knowledge-base-panel";
 import setStyles from "./settings.module.css";
 import styles from "../_components/panes.module.css";
 import uiStyles from "../_components/ui.module.css";
@@ -67,6 +75,34 @@ async function loadChannelsSectionData(): Promise<ChannelConnectionListItem[]> {
   }));
 }
 
+async function loadKnowledgeSectionData(): Promise<KnowledgeFileListItem[]> {
+  const user = await getAuthenticatedUser();
+
+  if (!user) {
+    return [];
+  }
+
+  const workspace = await getCurrentWorkspace(user.id);
+
+  if (!workspace) {
+    return [];
+  }
+
+  const supabase = await createServerSupabaseClient();
+  const rows = await listKnowledgeFiles(supabase, workspace.id);
+
+  return rows.map(
+    (row: KnowledgeFileRow): KnowledgeFileListItem => ({
+      id: row.id,
+      name: row.name,
+      content: row.content,
+      sort_order: row.sort_order,
+      is_enabled: row.is_enabled,
+      updated_at: row.updated_at,
+    }),
+  );
+}
+
 /**
  * Reads the account-connect result the callback route
  * (app/api/channels/[provider]/connect/callback/) appends to the redirect,
@@ -100,6 +136,8 @@ export default async function SettingsPage({
   const section = SETTINGS_SECTIONS.find((entry) => entry.id === sectionId);
   const channels =
     sectionId === "channels" ? await loadChannelsSectionData() : null;
+  const knowledgeFiles =
+    sectionId === "knowledge" ? await loadKnowledgeSectionData() : null;
   const connectResult =
     sectionId === "channels" ? readConnectResult(params) : null;
 
@@ -148,6 +186,7 @@ export default async function SettingsPage({
               sectionId={sectionId}
               channels={channels}
               connectResult={connectResult}
+              knowledgeFiles={knowledgeFiles}
             />
           </div>
         </div>
@@ -160,10 +199,12 @@ function SectionDetail({
   sectionId,
   channels,
   connectResult,
+  knowledgeFiles,
 }: {
   sectionId: SettingsSectionId;
   channels: ChannelConnectionListItem[] | null;
   connectResult: ChannelConnectResult | null;
+  knowledgeFiles: KnowledgeFileListItem[] | null;
 }) {
   switch (sectionId) {
     case "channels":
@@ -174,6 +215,16 @@ function SectionDetail({
       return <CategoriesSection />;
     case "ai":
       return <AiSection />;
+    case "knowledge":
+      return (
+        <>
+          <p className={setStyles.description}>
+            Активные файлы добавляются в системный промпт в указанном порядке.
+            При превышении бюджета токенов часть файлов не попадёт в контекст.
+          </p>
+          <KnowledgeBasePanel files={knowledgeFiles ?? []} />
+        </>
+      );
     case "team":
       return <TeamSection />;
     case "notifications":

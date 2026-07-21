@@ -83,6 +83,23 @@ vi.mock("@/lib/db/channel-connections", () => ({
   listChannelConnections: async () => INBOX_CHANNELS,
 }));
 
+const KNOWLEDGE_FILES = [
+  {
+    id: "kbf_price",
+    workspace_id: "wsp_tonwerk",
+    name: "02-прайс.md",
+    content: "# Прайс\n\nЧашка — 24 €.",
+    sort_order: 1,
+    is_enabled: true,
+    created_at: "2026-07-20T10:00:00.000Z",
+    updated_at: "2026-07-21T10:00:00.000Z",
+  },
+];
+
+vi.mock("@/lib/db/knowledge-base", () => ({
+  listKnowledgeFiles: async () => KNOWLEDGE_FILES,
+}));
+
 const INBOX_LIST_ITEMS = [
   {
     id: "cnv_dm_anna_ig",
@@ -341,13 +358,20 @@ describe("settings page", () => {
     ).toBeDefined();
   });
 
-  it("does not contain the knowledge base section (stage 4)", async () => {
-    render(await SettingsPage({ searchParams: searchParams() }));
+  it("renders the real knowledge base section", async () => {
+    render(
+      await SettingsPage({
+        searchParams: searchParams({ section: "knowledge" }),
+      }),
+    );
 
-    expect(screen.queryByText("База знаний")).toBeNull();
+    expect(screen.getAllByText("База знаний").length).toBeGreaterThan(0);
     expect(
       SETTINGS_SECTIONS.some((section) => section.title === "База знаний"),
-    ).toBe(false);
+    ).toBe(true);
+    expect(screen.getByRole("button", { name: "02-прайс.md" })).toBeDefined();
+    expect(screen.getByRole("button", { name: "+ Новый файл" })).toBeDefined();
+    expect(screen.getByText(/Бюджет токенов/)).toBeDefined();
   });
 });
 
