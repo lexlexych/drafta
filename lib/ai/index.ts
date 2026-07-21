@@ -15,3 +15,13 @@ export type {
   MaskedEntityKind,
   MaskedResult,
 } from "./masking";
+export { buildDraftPrompt, logPromptIfEnabled } from "./prompt";
+export type {
+  MaskedPromptMessage,
+  PromptAiSettings,
+  PromptCategory,
+  PromptInput,
+  PromptKnowledgeBase,
+  PromptLogger,
+  PromptLogOptions,
+} from "./prompt";
