@@ -1,10 +1,10 @@
 ---
 id: E-003
 title: "AI-черновики с дебаунсом: Inngest + Mistral, generate-draft, панель черновика"
-status: todo
+status: in_progress
 source: "этап 2 плана внедрения (docs/architecture/16-rollout-plan.md)"
 created: 2026-07-19
-updated: 2026-07-19
+updated: 2026-07-21
 ---
 
 # E-003. AI-черновики с дебаунсом: Inngest + Mistral, generate-draft, панель черновика
@@ -80,7 +80,7 @@ email, IBAN, карты) маскируются плейсхолдерами с 
 
 | # | Тикет | Тип | Зависит от | Статус |
 |---|---|---|---|---|
-| T-01 | [Inngest-контур: serve-роут, типизация событий, локальный dev](T-01-inngest-serve.md) | dev | — | todo |
+| T-01 | [Inngest-контур: serve-роут, типизация событий, локальный dev](T-01-inngest-serve.md) | dev | — | rework |
 | T-02 | [Клиент LLM в lib/ai: Mistral с fallback на OpenRouter](T-02-ai-client.md) | dev | — | todo |
 | T-03 | [Маскирование идентификаторов lib/ai/masking.ts + юнит-тесты](T-03-masking.md) | dev | — | todo |
 | T-04 | [Сборка промпта по структуре §8 и debug-лог](T-04-prompt-builder.md) | dev | T-02, T-03 | todo |

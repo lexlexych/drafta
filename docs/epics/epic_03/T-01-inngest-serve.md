@@ -3,7 +3,7 @@ id: T-01
 epic: E-003
 title: "Inngest-контур: serve-роут, типизация событий, локальный dev"
 type: dev
-status: in_progress
+status: rework
 depends_on: []
 created: 2026-07-19
 updated: 2026-07-21
@@ -146,5 +146,32 @@ Dev Server видны событие `interaction/received` и успешный 
 
 ## 🔍 Ревью
 
-_Заполняется агентом-ревьюером: вердикт APPROVED / CHANGES_REQUESTED,
-замечания, что прогнано и с каким результатом._
+**Вердикт: CHANGES_REQUESTED**
+
+1. Не выполнены критерий приёмки и ручная часть Definition of Done: сквозной
+   прогон `POST /api/webhooks/zernio` → `interaction/received` → успешный запуск
+   `generate-draft` в Inngest Dev Server не проводился. По этой же причине не
+   подтверждён на реальном роуте критерий ответа 200 при выключенном Dev Server
+   (юнит-тест проверяет только поглощение ошибки helper-функцией). Нужно провести
+   оба сценария в окружении с работающим Docker/Supabase и зафиксировать результат
+   в отчёте. Повторная проверка ревьюером `npx.cmd supabase status` не дошла до
+   запуска: Docker Desktop Linux Engine недоступен.
+2. Команда Definition of Done `npm.cmd test` завершается с кодом 1: 2 теста в
+   `lib/realtime/inbox-sync.test.ts` падают из-за отсутствующего в mock
+   `supabase.auth.getSession` (33 файла прошли, 4 пропущены, 1 упал; 179 тестов
+   прошли, 27 пропущены, 2 упали). Падения не вызваны diff T-01, но заявленный
+   DoD требует успешного выполнения всей команды. Нужно восстановить зелёный
+   общий сьют либо согласованно изменить критерий DoD до повторного ревью.
+
+Проверено ревьюером:
+
+- `npm.cmd run lint` — успешно;
+- `npm.cmd run build` — успешно, маршрут `/api/inngest` присутствует;
+- `npx.cmd vitest run lib/inngest/events.test.ts app/api/inngest/route.test.ts`
+  — успешно, 2 файла / 6 тестов;
+- `npm.cmd test` — ошибка, результат приведён выше;
+- фактический diff и прилегающий webhook-код — скоуп соблюдён, payload обоих
+  событий содержит только ID, fail-safe helper сохранён; нарушений применимых
+  правил вайбкодинга не обнаружено;
+- API SDK v4 (`eventType` + `staticSchema`, typed `.create()`, `serve()` с
+  `GET`/`POST`/`PUT`) соответствует актуальной официальной документации Inngest.
