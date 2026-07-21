@@ -3,7 +3,7 @@ id: T-04
 epic: E-003
 title: "Сборка промпта по структуре §8 и debug-лог"
 type: dev
-status: todo
+status: done
 depends_on: [T-02, T-03]
 created: 2026-07-19
 updated: 2026-07-22
