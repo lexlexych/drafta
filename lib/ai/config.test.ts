@@ -1,0 +1,54 @@
+import { describe, expect, it } from "vitest";
+
+import {
+  AiConfigurationError,
+  DEFAULT_MISTRAL_MODEL,
+  MISTRAL_BASE_URL,
+  OPENROUTER_BASE_URL,
+  resolveProvider,
+} from "./config";
+
+describe("resolveProvider", () => {
+  it("prioritizes Mistral when both provider keys are configured", () => {
+    expect(
+      resolveProvider({
+        MISTRAL_API_KEY: "mistral-secret",
+        OPENROUTER_API_KEY: "openrouter-secret",
+        OPENROUTER_MODEL: "vendor/fallback-model",
+      }),
+    ).toEqual({
+      provider: "mistral",
+      baseURL: MISTRAL_BASE_URL,
+      apiKey: "mistral-secret",
+      defaultModel: DEFAULT_MISTRAL_MODEL,
+    });
+  });
+
+  it("uses OpenRouter and its configured model when Mistral is absent", () => {
+    expect(
+      resolveProvider({
+        OPENROUTER_API_KEY: "openrouter-secret",
+        OPENROUTER_MODEL: "vendor/fallback-model",
+      }),
+    ).toEqual({
+      provider: "openrouter",
+      baseURL: OPENROUTER_BASE_URL,
+      apiKey: "openrouter-secret",
+      defaultModel: "vendor/fallback-model",
+    });
+  });
+
+  it("requires OPENROUTER_MODEL with an OpenRouter key", () => {
+    expect(() =>
+      resolveProvider({ OPENROUTER_API_KEY: "openrouter-secret" }),
+    ).toThrowError(
+      new AiConfigurationError(
+        "OPENROUTER_MODEL must be set when OPENROUTER_API_KEY is configured.",
+      ),
+    );
+  });
+
+  it("fails only when provider configuration is resolved", () => {
+    expect(() => resolveProvider({})).toThrowError(AiConfigurationError);
+  });
+});
