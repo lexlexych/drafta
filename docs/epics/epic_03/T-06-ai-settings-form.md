@@ -3,7 +3,7 @@ id: T-06
 epic: E-003
 title: "Настройки → AI: форма реальных ai_settings"
 type: dev
-status: in_progress
+status: done
 depends_on: []
 created: 2026-07-19
 updated: 2026-07-22

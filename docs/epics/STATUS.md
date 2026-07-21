@@ -13,7 +13,7 @@
 |---|---|---|---|---|---|
 | [E-001](epic_01/_index.md) | Фундамент: Next.js + Supabase Auth, схема БД v1, RLS | done | 7/8 | 2026-07-19 | 2026-07-20 |
 | [E-002](epic_02/_index.md) | Zernio-контур: адаптер, вебхук, Realtime-инбокс «Сообщения» | done | 6/7 | 2026-07-19 | 2026-07-20 |
-| [E-003](epic_03/_index.md) | AI-черновики с дебаунсом: Inngest + Mistral, generate-draft, панель черновика | in_progress | 5/8 | 2026-07-19 | — |
+| [E-003](epic_03/_index.md) | AI-черновики с дебаунсом: Inngest + Mistral, generate-draft, панель черновика | in_progress | 6/8 | 2026-07-19 | — |
 
 ## E-001. Фундамент: Next.js + Supabase Auth, схема БД v1, RLS
 
@@ -55,6 +55,6 @@
 | T-03 | [Маскирование идентификаторов lib/ai/masking.ts + юнит-тесты](epic_03/T-03-masking.md) | dev | done |
 | T-04 | [Сборка промпта по структуре §8 и debug-лог](epic_03/T-04-prompt-builder.md) | dev | done |
 | T-05 | [generate-draft: дебаунс, пайплайн, supersede, регенерация](epic_03/T-05-generate-draft.md) | dev | done |
-| T-06 | [Настройки → AI: форма реальных ai_settings](epic_03/T-06-ai-settings-form.md) | dev | todo |
+| T-06 | [Настройки → AI: форма реальных ai_settings](epic_03/T-06-ai-settings-form.md) | dev | done |
 | T-07 | [Панель черновика в треде: реальные drafts + Realtime](epic_03/T-07-draft-panel.md) | dev | todo |
 | T-08 | [Executive summary — ручные шаги](epic_03/T-08-executive-summary.md) | manual | todo |
