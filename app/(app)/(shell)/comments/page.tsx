@@ -1,22 +1,23 @@
 import Link from "next/link";
 
 import {
-  getCategoryFilterOptions,
-  getChannelFilters,
-  getConversationList,
-  getPostThread,
-} from "@/lib/mock";
+  getCommentsChannelFiltersView,
+  getPostListView,
+  getPostThreadView,
+  listChannelConnections,
+} from "@/lib/db/comments-inbox";
+import { createServerSupabaseClient } from "@/lib/db/server";
+import { getAuthenticatedUser, getCurrentWorkspace } from "@/lib/db/workspace";
 
 import { Avatar } from "../_components/avatar";
-import { CategoryFilter } from "../_components/category-filter";
-import { CategoryChip, ChannelChip } from "../_components/chips";
-import { MockComposer } from "../_components/composer";
+import { ChannelChip } from "../_components/chips";
 import { DraftPanel } from "../_components/draft-panel";
 import { FilterChips } from "../_components/filter-chips";
 import { BackIcon, CommentsIcon, ExternalIcon } from "../_components/icons";
 import { QUERY_KEYS, buildHref, firstParam } from "../_components/navigation";
 import styles from "../_components/panes.module.css";
 import uiStyles from "../_components/ui.module.css";
+import { MarkThreadRead } from "../inbox/mark-thread-read";
 
 const PATHNAME = "/comments";
 
@@ -29,18 +30,36 @@ export default async function CommentsPage({
 }) {
   const params = await searchParams;
   const channelId = firstParam(params[QUERY_KEYS.channel]);
-  const categoryId = firstParam(params[QUERY_KEYS.category]);
   const conversationId = firstParam(params[QUERY_KEYS.conversation]);
 
-  const list = getConversationList("comments", { channelId, categoryId });
+  const user = await getAuthenticatedUser();
+  const workspace = user ? await getCurrentWorkspace(user.id) : null;
+
+  if (!workspace) {
+    // The shell layout redirects before this can render for a real request —
+    // a safety net for this component in isolation (e.g. tests).
+    return null;
+  }
+
+  const supabase = await createServerSupabaseClient();
+  const channels = await listChannelConnections(supabase, workspace.id);
+  const commentCapableChannels = channels.filter(
+    (channel) => channel.capabilities.comments === true,
+  );
+  const hasCommentChannels = commentCapableChannels.length > 0;
+
+  const [list, filterChannels] = await Promise.all([
+    getPostListView(supabase, workspace.id, channels, { channelId }),
+    getCommentsChannelFiltersView(supabase, workspace.id, channels),
+  ]);
+
   const openedId = conversationId ?? list.items[0]?.id ?? null;
-  const post = openedId ? getPostThread(openedId) : null;
+  const post = openedId
+    ? await getPostThreadView(supabase, workspace.id, channels, openedId)
+    : null;
   const isDetail = conversationId !== null;
 
-  const listParams = {
-    [QUERY_KEYS.channel]: channelId,
-    [QUERY_KEYS.category]: categoryId,
-  };
+  const listParams = { [QUERY_KEYS.channel]: channelId };
 
   return (
     <div className={styles.panes} data-detail={isDetail}>
@@ -48,22 +67,32 @@ export default async function CommentsPage({
         <div className={styles.paneHead}>
           <div className={styles.paneHeadRow}>
             <h2>{list.title}</h2>
-            <CategoryFilter categories={getCategoryFilterOptions()} />
           </div>
           <span className={styles.paneSubtitle}>{list.subtitle}</span>
         </div>
 
         <FilterChips
           pathname={PATHNAME}
-          channels={getChannelFilters("comments")}
+          channels={filterChannels}
           activeChannelId={channelId}
-          extraParams={{ [QUERY_KEYS.category]: categoryId }}
         />
 
         <div className={styles.list}>
-          {list.items.length === 0 ? (
+          {!hasCommentChannels ? (
             <div className={styles.empty}>
-              Нет постов с комментариями этой категории
+              <p>Нет каналов с поддержкой комментариев.</p>
+              <Link
+                className={`${uiStyles.button} ${uiStyles.buttonPrimary} ${uiStyles.buttonSmall}`}
+                href={buildHref("/settings", { [QUERY_KEYS.section]: "channels" })}
+              >
+                Настройки → Каналы
+              </Link>
+            </div>
+          ) : list.items.length === 0 ? (
+            <div className={styles.empty}>
+              {channelId
+                ? "Нет постов с комментариями в этом канале."
+                : "Нет постов — комментарии появятся здесь, когда придёт первый."}
             </div>
           ) : null}
           {list.items.map((item) => (
@@ -107,6 +136,7 @@ export default async function CommentsPage({
       <section className={styles.paneDetail}>
         {post ? (
           <>
+            <MarkThreadRead conversationId={post.conversationId} />
             <div className={styles.threadHead}>
               <Link
                 className={styles.backButton}
@@ -126,77 +156,78 @@ export default async function CommentsPage({
             <div className={styles.postCard}>
               <div className={styles.postCardTop}>
                 <ChannelChip channel={post.channel} />
-                <span className={styles.postLink}>
-                  пост <ExternalIcon />
-                </span>
+                {post.postUrl ? (
+                  <a
+                    className={styles.postLink}
+                    href={post.postUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    пост <ExternalIcon />
+                  </a>
+                ) : null}
               </div>
               <div className={styles.postText}>{post.postText}</div>
               <div className={styles.postMeta}>{post.postMeta}</div>
             </div>
 
             <div className={`${styles.messages} ${styles.commentsList}`}>
+              {post.comments.length === 0 ? (
+                <div className={styles.empty}>Пока нет комментариев.</div>
+              ) : null}
               {post.comments.map((comment) => (
-                <div
-                  key={comment.id}
-                  className={[
-                    styles.comment,
-                    comment.isReply ? styles.commentReply : "",
-                    comment.isDraftTarget ? styles.commentTarget : "",
-                    comment.isMuted ? styles.commentMuted : "",
-                    comment.isOurs ? styles.commentOurs : "",
-                  ]
-                    .filter(Boolean)
-                    .join(" ")}
-                >
-                  {comment.isOurs ? (
-                    <span
-                      className={`${uiStyles.avatar} ${uiStyles.avatarSm} ${styles.ourAvatar}`}
-                      aria-hidden="true"
-                    >
-                      {comment.authorName.slice(0, 1)}
-                    </span>
-                  ) : comment.avatar ? (
-                    <Avatar avatar={comment.avatar} size="sm" />
-                  ) : null}
-                  <div className={styles.commentBody}>
-                    <div className={styles.commentHead}>
-                      <b>{comment.authorName}</b>
-                      {comment.authorHandle ? (
-                        <span className={styles.commentHandle}>
-                          {comment.authorHandle}
-                        </span>
-                      ) : null}
-                      <span className={`${styles.commentHandle} ${uiStyles.num}`}>
-                        {comment.time}
+                <div key={comment.id} className={styles.commentRow}>
+                  <div
+                    className={[
+                      styles.comment,
+                      comment.isReply ? styles.commentReply : "",
+                      comment.draft ? styles.commentTarget : "",
+                      comment.isOurs ? styles.commentOurs : "",
+                    ]
+                      .filter(Boolean)
+                      .join(" ")}
+                  >
+                    {comment.isOurs ? (
+                      <span
+                        className={`${uiStyles.avatar} ${uiStyles.avatarSm} ${styles.ourAvatar}`}
+                        aria-hidden="true"
+                      >
+                        {comment.authorName.slice(0, 1)}
                       </span>
-                    </div>
-                    <div className={styles.commentText}>{comment.text}</div>
-                    {!comment.isOurs ? (
-                      <div className={styles.commentChips}>
-                        {comment.category ? (
-                          <CategoryChip category={comment.category} />
-                        ) : null}
-                        {comment.noDraftNote ? (
-                          <span className={styles.noDraftNote}>
-                            черновик не создаётся
+                    ) : comment.avatar ? (
+                      <Avatar avatar={comment.avatar} size="sm" />
+                    ) : null}
+                    <div className={styles.commentBody}>
+                      <div className={styles.commentHead}>
+                        <b>{comment.authorName}</b>
+                        {comment.authorHandle ? (
+                          <span className={styles.commentHandle}>
+                            {comment.authorHandle}
                           </span>
                         ) : null}
+                        <span className={`${styles.commentHandle} ${uiStyles.num}`}>
+                          {comment.time}
+                          {comment.deliveryLabel ? ` · ${comment.deliveryLabel}` : ""}
+                        </span>
                       </div>
-                    ) : null}
+                      <div className={styles.commentText}>{comment.text}</div>
+                    </div>
                   </div>
+
+                  {/* One draft per comment, rendered right under it (stage 5). */}
+                  {comment.draft ? (
+                    <div className={styles.commentDraft}>
+                      <DraftPanel
+                        key={`${comment.id}:${comment.draft.id}:${comment.draft.updatedAt}`}
+                        draft={comment.draft}
+                        workspaceId={workspace.id}
+                        conversationId={post.conversationId}
+                        targetMessageId={comment.id}
+                      />
+                    </div>
+                  ) : null}
                 </div>
               ))}
-            </div>
-
-            <div className={styles.draftWrap}>
-              {post.draft ? (
-                <DraftPanel
-                  key={post.conversationId}
-                  draft={post.draft}
-                  channelName={post.channel.name}
-                />
-              ) : null}
-              <MockComposer placeholder="Ответить на комментарий вручную…" />
             </div>
           </>
         ) : null}

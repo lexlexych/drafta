@@ -1,6 +1,7 @@
 import { Suspense, type ReactNode } from "react";
 import { redirect } from "next/navigation";
 
+import { getCommentsNavigationCounters } from "@/lib/db/comments-inbox";
 import { getInboxNavigationCounters, listChannelConnections } from "@/lib/db/inbox";
 import { createServerSupabaseClient } from "@/lib/db/server";
 import { getAuthenticatedUser, getCurrentWorkspace } from "@/lib/db/workspace";
@@ -41,11 +42,10 @@ export default async function ShellLayout({
   const counters = getNavigationCounters();
   const supabase = await createServerSupabaseClient();
   const channels = await listChannelConnections(supabase, workspace.id);
-  const messagesCounters = await getInboxNavigationCounters(
-    supabase,
-    workspace.id,
-    channels,
-  );
+  const [messagesCounters, commentsCounters] = await Promise.all([
+    getInboxNavigationCounters(supabase, workspace.id, channels),
+    getCommentsNavigationCounters(supabase, workspace.id, channels),
+  ]);
   const userName = user.email?.split("@")[0] ?? "Пользователь";
 
   return (
@@ -57,12 +57,16 @@ export default async function ShellLayout({
           userRole={workspace.role}
           counters={counters}
           messagesCounters={messagesCounters}
+          commentsCounters={commentsCounters}
           settingsSections={SETTINGS_SECTIONS}
         />
       </Suspense>
       <div className={styles.main}>{children}</div>
       <Suspense>
-        <Tabbar counters={counters} messagesCounters={messagesCounters} />
+        <Tabbar
+          messagesCounters={messagesCounters}
+          commentsCounters={commentsCounters}
+        />
       </Suspense>
       <InboxRealtimeSync workspaceId={workspace.id} />
       <Toast />

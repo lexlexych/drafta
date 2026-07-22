@@ -5,8 +5,6 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-import type { NavigationCountersView } from "@/lib/mock";
-
 import {
   CommentsIcon,
   ContactsIcon,
@@ -32,12 +30,13 @@ const SECTION_ICONS: Record<SectionId, typeof DashboardIcon> = {
 };
 
 export function Tabbar({
-  counters,
   messagesCounters,
+  commentsCounters,
 }: {
-  counters: NavigationCountersView;
   /** Real total DM unread (T-05) — see `SidebarProps.messagesCounters`. */
   messagesCounters: InboxNavCounters;
+  /** Real total comment unread (stage 5) — see `SidebarProps.commentsCounters`. */
+  commentsCounters: InboxNavCounters;
 }) {
   const pathname = usePathname();
   const activeSection = sectionIdForPathname(pathname);
@@ -45,7 +44,7 @@ export function Tabbar({
   const sectionCounts: Record<SectionId, number> = {
     dashboard: 0,
     inbox: messagesCounters.totalUnread,
-    comments: counters.commentsUnread,
+    comments: commentsCounters.totalUnread,
     contacts: 0,
     settings: 0,
   };

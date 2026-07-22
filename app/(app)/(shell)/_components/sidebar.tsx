@@ -52,6 +52,12 @@ export type SidebarProps = {
    * скоупа").
    */
   messagesCounters: InboxNavCounters;
+  /**
+   * Real per-channel comment unread counts (stage 5,
+   * `lib/db/comments-inbox.ts`'s `getCommentsNavigationCounters`) — drives the
+   * "Комментарии" nav item and its channel expand.
+   */
+  commentsCounters: InboxNavCounters;
   settingsSections: SettingsSectionView[];
 };
 
@@ -68,6 +74,7 @@ export function Sidebar({
   userRole,
   counters,
   messagesCounters,
+  commentsCounters,
   settingsSections,
 }: SidebarProps) {
   const pathname = usePathname();
@@ -90,7 +97,7 @@ export function Sidebar({
   const sectionCounts: Record<SectionId, number> = {
     dashboard: 0,
     inbox: messagesCounters.totalUnread,
-    comments: counters.commentsUnread,
+    comments: commentsCounters.totalUnread,
     contacts: 0,
     settings: 0,
   };
@@ -102,16 +109,23 @@ export function Sidebar({
       return 0;
     }
 
-    if (sectionId === "comments") {
-      return channel.commentsUnread;
-    }
-
+    // Only "Контакты" still reads mock per-channel counts; inbox and comments
+    // use their real counters in `subListChannelsFor`.
     return channel.contactCount;
   }
 
   function subListChannelsFor(sectionId: SectionId): SubListChannel[] {
     if (sectionId === "inbox") {
       return messagesCounters.channels.map((channel) => ({
+        id: channel.id,
+        name: channel.name,
+        platform: channel.platform,
+        count: channel.unreadCount,
+      }));
+    }
+
+    if (sectionId === "comments") {
+      return commentsCounters.channels.map((channel) => ({
         id: channel.id,
         name: channel.name,
         platform: channel.platform,

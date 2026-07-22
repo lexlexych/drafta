@@ -515,7 +515,11 @@ export type MarkConversationReadResult =
   | { ok: true }
   | { ok: false; error: string };
 
-/** Opening a thread resets its unread counter (ticket step 3). */
+/**
+ * Opening a thread resets its unread counter (ticket step 3). Kind-agnostic:
+ * shared by the "Сообщения" and "Комментарии" screens (stage 5) — the
+ * workspace + conversation scope is the ownership check.
+ */
 export async function markConversationRead(
   supabase: SupabaseClient,
   workspaceId: string,
@@ -526,7 +530,6 @@ export async function markConversationRead(
     .update({ unread_count: 0 })
     .eq("workspace_id", workspaceId)
     .eq("id", conversationId)
-    .eq("kind", "dm")
     .select("id")
     .maybeSingle();
 
