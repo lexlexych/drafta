@@ -2,34 +2,30 @@
   "id": "wh_evt_01HZXINSTAGRAMCMT01",
   "event": "comment.received",
   "timestamp": "2026-07-21T11:02:47.552Z",
-  "account": {
-    "id": "acct_ig_55014",
-    "platform": "instagram"
-  },
-  "conversation": {
-    "id": "ig_post_thread_88401",
-    "platformConversationId": "88401",
-    "status": "active"
+  "comment": {
+    "id": "ig_comment_66120",
+    "postId": null,
+    "platformPostId": "ig_post_88401",
+    "platform": "instagram",
+    "text": "Сколько стоит доставка по Берлину?",
+    "author": {
+      "id": "ig_user_31220",
+      "username": "lena.fischer",
+      "name": "Lena Fischer",
+      "picture": null
+    },
+    "createdAt": "2026-07-21T11:02:47.000Z",
+    "isReply": false,
+    "parentCommentId": null
   },
   "post": {
-    "id": "ig_post_88401",
-    "text": "Осенняя коллекция уже в продаже — заходите за новинками!",
-    "permalink": "https://instagram.com/p/ig_post_88401"
+    "id": null,
+    "platformPostId": "ig_post_88401"
   },
-  "message": {
-    "id": "ig_comment_66120",
-    "conversationId": "ig_post_thread_88401",
+  "account": {
+    "id": "acct_ig_55014",
+    "accountId": "acct_ig_55014",
     "platform": "instagram",
-    "platformMessageId": "66120",
-    "direction": "incoming",
-    "text": "Сколько стоит доставка по Берлину?",
-    "attachments": [],
-    "parentId": null,
-    "sender": {
-      "id": "ig_user_31220",
-      "name": "Lena Fischer"
-    },
-    "sentAt": "2026-07-21T11:02:47.000Z",
-    "isRead": false
+    "username": "tonwerk.keramik"
   }
 }

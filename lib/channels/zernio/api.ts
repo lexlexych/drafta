@@ -171,26 +171,38 @@ export async function sendZernioInboxMessage(
 }
 
 /**
- * Publishes a reply to a specific comment (`sendCommentReply`) — stage 5's
+ * Publishes a reply to a specific comment (`replyToInboxPost`) — stage 5's
  * outgoing path (docs/architecture/07-data-flows.md#63-отправка-ответа: «для
- * комментария — как ответ на конкретный комментарий»). `parentCommentId` is
- * the provider ID of the comment being answered — `messages.parent_external_id`
- * of the outgoing reply. Returns the provider's ID of the published reply
- * (`data.commentId`), which becomes the outgoing `messages.external_id`.
+ * комментария — как ответ на конкретный комментарий»). Per the OpenAPI spec
+ * (POST /v1/inbox/comments/{postId}) the reply is addressed to the post
+ * (`postExternalId` — the post's `platformPostId`, which `conversations.external_id`
+ * stores) with `commentId` naming the specific comment being answered
+ * (`messages.parent_external_id` of the outgoing reply). Returns the provider's
+ * ID of the published reply (`data.commentId`), which becomes the outgoing
+ * `messages.external_id`.
  */
 export async function sendZernioCommentReply(
   config: ZernioApiConfig,
-  input: { accountId: string; parentCommentId: string; text: string },
+  input: {
+    accountId: string;
+    postExternalId: string;
+    commentId: string;
+    text: string;
+  },
 ): Promise<string> {
   const response = await fetch(
     joinUrl(
       config.apiBaseUrl,
-      `inbox/comments/${encodeURIComponent(input.parentCommentId)}/replies`,
+      `inbox/comments/${encodeURIComponent(input.postExternalId)}`,
     ),
     {
       method: "POST",
       headers: { ...authHeaders(config), "Content-Type": "application/json" },
-      body: JSON.stringify({ accountId: input.accountId, message: input.text }),
+      body: JSON.stringify({
+        accountId: input.accountId,
+        message: input.text,
+        commentId: input.commentId,
+      }),
     },
   );
 

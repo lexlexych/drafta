@@ -114,7 +114,7 @@ describe("createZernioAdapter", () => {
     const result = await adapter.sendMessage({
       channelConnectionId: "conn_1",
       externalAccountId: "acct_ig_55014",
-      conversationExternalId: "ig_post_thread_88401",
+      conversationExternalId: "ig_post_88401",
       text: "Доставка по Берлину — 4,90 €.",
       interactionKind: "comment",
       parentExternalId: "ig_comment_66120",
@@ -122,12 +122,11 @@ describe("createZernioAdapter", () => {
 
     expect(result).toEqual({ providerMessageId: "zc_88" });
     const [url, init] = fetchMock.mock.calls[0];
-    expect(url).toBe(
-      "https://zernio.com/api/v1/inbox/comments/ig_comment_66120/replies",
-    );
+    expect(url).toBe("https://zernio.com/api/v1/inbox/comments/ig_post_88401");
     expect(JSON.parse(init.body)).toEqual({
       accountId: "acct_ig_55014",
       message: "Доставка по Берлину — 4,90 €.",
+      commentId: "ig_comment_66120",
     });
   });
 
