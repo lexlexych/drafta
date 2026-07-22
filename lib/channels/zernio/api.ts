@@ -18,6 +18,8 @@ import type { ChannelPlatform } from "../types";
  *       -> 200 { authUrl, state }                       (authUrl at top level)
  *   - POST /v1/inbox/conversations/{conversationId}/messages  { accountId, message }
  *       -> 200 { success, data: { messageId } }        (id at data.messageId)
+ *   - POST /v1/inbox/comments/{commentId}/replies  { accountId, message }
+ *       -> 200 { success, data: { commentId } }         (id at data.commentId)
  * Both authenticate with `Authorization: Bearer <ZERNIO_API_KEY>`. A Zernio
  * "profile" is the tenant boundary: drafta provisions exactly one per workspace
  * before the workspace row is created.
@@ -166,6 +168,47 @@ export async function sendZernioInboxMessage(
   }
 
   return messageId;
+}
+
+/**
+ * Publishes a reply to a specific comment (`sendCommentReply`) — stage 5's
+ * outgoing path (docs/architecture/07-data-flows.md#63-отправка-ответа: «для
+ * комментария — как ответ на конкретный комментарий»). `parentCommentId` is
+ * the provider ID of the comment being answered — `messages.parent_external_id`
+ * of the outgoing reply. Returns the provider's ID of the published reply
+ * (`data.commentId`), which becomes the outgoing `messages.external_id`.
+ */
+export async function sendZernioCommentReply(
+  config: ZernioApiConfig,
+  input: { accountId: string; parentCommentId: string; text: string },
+): Promise<string> {
+  const response = await fetch(
+    joinUrl(
+      config.apiBaseUrl,
+      `inbox/comments/${encodeURIComponent(input.parentCommentId)}/replies`,
+    ),
+    {
+      method: "POST",
+      headers: { ...authHeaders(config), "Content-Type": "application/json" },
+      body: JSON.stringify({ accountId: input.accountId, message: input.text }),
+    },
+  );
+
+  if (!response.ok) {
+    throw await zernioHttpError(response, "Zernio comment reply failed");
+  }
+
+  const body = (await readJson(response)) as
+    | { data?: { commentId?: unknown } }
+    | null;
+  const commentId = body?.data?.commentId;
+  if (typeof commentId !== "string" || commentId.length === 0) {
+    throw new ZernioApiError(
+      "Zernio comment reply response is missing `data.commentId`.",
+    );
+  }
+
+  return commentId;
 }
 
 /**

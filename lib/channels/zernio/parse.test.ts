@@ -40,6 +40,40 @@ describe("parseZernioWebhook", () => {
     expect(events[0]).toEqual(expected);
   });
 
+  it("maps an Instagram comment.received fixture to a normalized comment event", () => {
+    const rawBody = readFixture("instagram-comment.json");
+
+    const events = parseZernioWebhook({ rawBody, headers: {} });
+
+    expect(events).toHaveLength(1);
+    const expected: NormalizedEvent = {
+      type: "comment.received",
+      providerEventId: "wh_evt_01HZXINSTAGRAMCMT01",
+      provider: "zernio",
+      platform: "instagram",
+      externalAccountId: "acct_ig_55014",
+      interactionKind: "comment",
+      conversation: {
+        externalId: "ig_post_thread_88401",
+        postMetadata: {
+          externalId: "ig_post_88401",
+          text: "Осенняя коллекция уже в продаже — заходите за новинками!",
+          permalink: "https://instagram.com/p/ig_post_88401",
+          platform: "instagram",
+        },
+      },
+      message: {
+        externalId: "ig_comment_66120",
+        text: "Сколько стоит доставка по Берлину?",
+        attachments: [],
+        sender: { externalId: "ig_user_31220", displayName: "Lena Fischer" },
+      },
+      rawMetadata: JSON.parse(rawBody),
+    };
+
+    expect(events[0]).toEqual(expected);
+  });
+
   it("maps a WhatsApp DM message.received fixture to a normalized event, field for field", () => {
     const rawBody = readFixture("whatsapp-dm.json");
 

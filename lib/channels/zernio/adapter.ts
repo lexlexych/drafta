@@ -13,6 +13,7 @@ import type {
 import { ChannelOperationNotImplementedError } from "../types";
 import {
   getZernioConnectAuthUrl,
+  sendZernioCommentReply,
   sendZernioInboxMessage,
   ZernioApiError,
   type ZernioApiConfig,
@@ -64,10 +65,34 @@ export function createZernioAdapter(
      * (mirroring the inbound metadata-only scope) — only `text` is sent.
      * Without the REST config (webhook-only adapter in tests) the operation
      * remains the explicit NotImplemented stub the interface requires.
+     *
+     * Stage 5: a comment reply (`interactionKind === "comment"`) is published
+     * against the specific parent comment (`parentExternalId`) rather than
+     * into the DM conversation thread.
      */
     async sendMessage(input: SendMessageInput): Promise<SendMessageResult> {
       if (!getApiConfig) {
         throw new ChannelOperationNotImplementedError(PROVIDER, "sendMessage");
+      }
+
+      if (input.interactionKind === "comment") {
+        const parentCommentId = input.parentExternalId?.trim();
+        if (!parentCommentId) {
+          // A comment reply must target a specific comment. Missing here means
+          // the outgoing row lost its `parent_external_id` — a bug, not a
+          // transient failure, so it surfaces rather than sending a stray DM.
+          throw new ZernioApiError(
+            "Comment reply is missing the parent comment id to reply to.",
+          );
+        }
+
+        const providerCommentId = await sendZernioCommentReply(getApiConfig(), {
+          accountId: input.externalAccountId,
+          parentCommentId,
+          text: input.text,
+        });
+
+        return { providerMessageId: providerCommentId };
       }
 
       const providerMessageId = await sendZernioInboxMessage(getApiConfig(), {
