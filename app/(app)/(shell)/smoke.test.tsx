@@ -13,7 +13,7 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { SETTINGS_SECTIONS, getNavigationCounters } from "@/lib/mock";
+import { SETTINGS_SECTIONS } from "@/lib/mock";
 
 import CommentsPage from "./comments/page";
 import ContactsPage from "./contacts/page";
@@ -264,6 +264,127 @@ vi.mock("./inbox/actions", () => ({
   markConversationReadAction: async () => ({ ok: true }),
 }));
 
+const CONTACT_LIST_ALL = [
+  {
+    id: "con_sofia",
+    name: "Sofia Marchetti",
+    avatar: { initials: "SM", hue: 200 },
+    handles: "@sofia.ceramics",
+    platforms: ["instagram"],
+    tag: "VIP",
+  },
+  {
+    id: "con_anna",
+    name: "Anna Weber",
+    avatar: { initials: "AW", hue: 120 },
+    handles: "Anna Weber",
+    platforms: ["facebook", "instagram"],
+    tag: null,
+  },
+];
+
+const CONTACT_LIST_FACEBOOK = [CONTACT_LIST_ALL[1]];
+
+const CONTACT_CARDS: Record<string, unknown> = {
+  con_sofia: {
+    id: "con_sofia",
+    name: "Sofia Marchetti",
+    avatar: { initials: "SM", hue: 200 },
+    tags: ["VIP"],
+    notes: "Постоянный клиент, любит матовую глазурь.",
+    identities: [
+      {
+        id: "cid_sofia_ig",
+        platform: "instagram",
+        platformLabel: "Instagram",
+        handle: "@sofia.ceramics",
+        channelName: "Instagram Магазин",
+      },
+    ],
+    history: [
+      {
+        conversationId: "cnv_dm_sofia_ig",
+        kind: "dm",
+        label: "Переписка · Instagram Магазин",
+        time: "12:41",
+      },
+    ],
+  },
+  con_anna: {
+    id: "con_anna",
+    name: "Anna Weber",
+    avatar: { initials: "AW", hue: 120 },
+    tags: [],
+    notes: "",
+    identities: [
+      {
+        id: "cid_anna_fb",
+        platform: "facebook",
+        platformLabel: "Facebook",
+        handle: "Anna Weber",
+        channelName: "Facebook Страница",
+      },
+    ],
+    history: [
+      {
+        conversationId: "cnv_dm_anna_fb",
+        kind: "dm",
+        label: "Переписка · Facebook Страница",
+        time: "11:05",
+      },
+    ],
+  },
+};
+
+vi.mock("@/lib/db/contacts", () => ({
+  listChannelConnections: async () => INBOX_CHANNELS,
+  getContactChannelFilters: async () => [
+    { id: "chc_instagram_shop", name: "Instagram Магазин", platform: "instagram", count: 2 },
+    { id: "chc_facebook_page", name: "Facebook Страница", platform: "facebook", count: 1 },
+  ],
+  getContactNavigationCounters: async () => ({
+    channels: [
+      { id: "chc_instagram_shop", name: "Instagram Магазин", platform: "instagram", contactCount: 2 },
+      { id: "chc_facebook_page", name: "Facebook Страница", platform: "facebook", contactCount: 1 },
+    ],
+  }),
+  getContactListView: async (
+    _supabase: unknown,
+    _workspaceId: string,
+    _channels: unknown,
+    filter: { channelId?: string | null } = {},
+  ) => {
+    const channelId = filter.channelId ?? null;
+    const items = channelId ? CONTACT_LIST_FACEBOOK : CONTACT_LIST_ALL;
+
+    return {
+      title: channelId ? "Facebook Страница" : "Контакты",
+      subtitle: `${channelId ? "контакты канала" : "все каналы"} · ${items.length} контакта`,
+      items,
+    };
+  },
+  getContactCardView: async (
+    _supabase: unknown,
+    _workspaceId: string,
+    _channels: unknown,
+    contactId: string,
+  ) => CONTACT_CARDS[contactId] ?? null,
+  listMergeCandidates: async (
+    _supabase: unknown,
+    _workspaceId: string,
+    contactId: string,
+  ) =>
+    Object.values(CONTACT_CARDS)
+      .map((card) => card as { id: string; name: string })
+      .filter((card) => card.id !== contactId)
+      .map((card) => ({ id: card.id, name: card.name })),
+}));
+
+vi.mock("./contacts/actions", () => ({
+  updateContactNotesAction: async () => ({ ok: true, data: null }),
+  mergeContactsAction: async () => ({ ok: true, data: null }),
+}));
+
 afterEach(cleanup);
 
 function searchParams(params: Record<string, string> = {}) {
@@ -402,9 +523,7 @@ describe("settings page", () => {
   });
 });
 
-// Real per-channel unread (T-05) — deliberately distinct from mock's
-// `getNavigationCounters().dmUnread` below so a test asserting on this value
-// actually proves the real prop drives the badge, not the mock one.
+// Real per-channel unread (T-05).
 const messagesCounters = {
   totalUnread: 4,
   channels: [
@@ -421,6 +540,14 @@ const commentsCounters = {
   ],
 };
 
+// Real per-channel contact counts (этап 7).
+const contactsCounters = {
+  channels: [
+    { id: "chc_instagram_shop", name: "Instagram Магазин", platform: "instagram" as const, contactCount: 2 },
+    { id: "chc_facebook_page", name: "Facebook Страница", platform: "facebook" as const, contactCount: 1 },
+  ],
+};
+
 describe("shell navigation", () => {
   it("renders sidebar sections with counters and no knowledge base", () => {
     render(
@@ -428,9 +555,9 @@ describe("shell navigation", () => {
         workspaceName="Tonwerk Keramik"
         userName="Алексей"
         userRole="owner"
-        counters={getNavigationCounters()}
         messagesCounters={messagesCounters}
         commentsCounters={commentsCounters}
+        contactsCounters={contactsCounters}
         settingsSections={SETTINGS_SECTIONS}
       />,
     );

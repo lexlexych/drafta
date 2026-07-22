@@ -23,6 +23,23 @@ export type InboxNavCounters = {
   channels: InboxNavChannelCounter[];
 };
 
+/**
+ * Real per-channel contact counts for the "Контакты" nav item (этап 7,
+ * `lib/db/contacts.ts`'s `getContactNavigationCounters`). Same client-side
+ * parallel-type convention as `InboxNavCounters` above — no cross-boundary
+ * import of the `"server-only"` module.
+ */
+export type ContactsNavChannelCounter = {
+  id: string;
+  name: string;
+  platform: ChannelPlatform;
+  contactCount: number;
+};
+
+export type ContactsNavCounters = {
+  channels: ContactsNavChannelCounter[];
+};
+
 export type SectionId =
   | "dashboard"
   | "inbox"

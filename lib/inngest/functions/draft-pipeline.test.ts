@@ -68,6 +68,7 @@ function context(
     messages,
     batchMessages: [messages[1]!],
     postText: "",
+    contactNotes: "",
     channelCapabilities: {
       responseWindowHours: null,
       supportsAttachments: true,
