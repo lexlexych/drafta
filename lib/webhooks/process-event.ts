@@ -7,11 +7,12 @@ import { emitInteractionReceived } from "@/lib/inngest/events";
  * One normalized event → the DB side of §6.1's pipeline
  * (docs/architecture/07-data-flows.md#61-входящее-dm-или-комментарий):
  * `webhook_events` idempotency write, `channel_connection` resolution,
- * `message.received` (`kind = dm`) → upsert contact/contact_identity,
- * conversation, insert message, emit `interaction/received`; delivery
- * statuses update an existing message; anything else is journaled and
- * skipped. Called once per event returned by the adapter's `parseWebhook`
- * — see `app/api/webhooks/[provider]/route.ts`.
+ * `message.received` (`kind = dm`) and `comment.received` (`kind = comments`,
+ * with `post_metadata` and the comment's parent) → upsert
+ * contact/contact_identity, conversation, insert message, emit
+ * `interaction/received`; delivery statuses update an existing message;
+ * anything else is journaled and skipped. Called once per event returned by
+ * the adapter's `parseWebhook` — see `app/api/webhooks/[provider]/route.ts`.
  *
  * `supabase` is untyped (`SupabaseClient` without a generated `Database`
  * generic) because this repo has no generated types yet — same as every
@@ -135,9 +136,27 @@ export async function processInboundEvent(
   }
 
   if (event.type === "message.received" && event.interactionKind === "dm") {
-    await processIncomingDirectMessage({
+    await processIncomingInteraction({
       supabase,
       event,
+      kind: "dm",
+      channelConnectionId: channelConnection.id,
+      workspaceId: channelConnection.workspace_id,
+      markProcessed,
+      markUnprocessedWithError,
+    });
+    return;
+  }
+
+  if (event.type === "comment.received" && event.interactionKind === "comment") {
+    // Stage 5 (docs/architecture/16-rollout-plan.md#этап-5--комментарии):
+    // same pipeline as a DM, but the conversation is the post
+    // (`kind = comments`, `post_metadata`) and the message carries its parent
+    // comment id.
+    await processIncomingInteraction({
+      supabase,
+      event,
+      kind: "comments",
       channelConnectionId: channelConnection.id,
       workspaceId: channelConnection.workspace_id,
       markProcessed,
@@ -159,10 +178,9 @@ export async function processInboundEvent(
     return;
   }
 
-  // A real, well-formed normalized event this route doesn't handle at this
-  // stage (e.g. `comment.received` — declared in the normalized type union
-  // per docs/architecture/05-channels.md, out of scope until stage 5 per
-  // docs/epics/epic_02/_index.md "Вне скоупа"). Journaled, not an error.
+  // A real, well-formed normalized event this route doesn't handle (e.g.
+  // reactions, if a future adapter emits them into the normalized union).
+  // Journaled, not an error.
   await markProcessed(
     `Event type "${event.type}" (kind=${event.interactionKind}) is not processed at this stage`,
   );
@@ -179,9 +197,10 @@ const DELIVERY_STATUS_BY_EVENT_TYPE: Partial<
 type MarkProcessed = (processingError: string | null) => Promise<void>;
 type MarkUnprocessedWithError = (processingError: string) => Promise<void>;
 
-async function processIncomingDirectMessage(params: {
+async function processIncomingInteraction(params: {
   supabase: SupabaseClient;
   event: NormalizedEvent;
+  kind: "dm" | "comments";
   channelConnectionId: string;
   workspaceId: string;
   markProcessed: MarkProcessed;
@@ -190,6 +209,7 @@ async function processIncomingDirectMessage(params: {
   const {
     supabase,
     event,
+    kind,
     channelConnectionId,
     workspaceId,
     markProcessed,
@@ -197,6 +217,9 @@ async function processIncomingDirectMessage(params: {
   } = params;
 
   try {
+    // A comment thread has many different authors (docs/architecture/06-data-model.md#messages):
+    // each new sender becomes its own identity/contact, same as a DM's single
+    // author does — the shared `upsertContactIdentity` handles both.
     const { contactIdentityId, contactId } = await upsertContactIdentity(
       supabase,
       workspaceId,
@@ -207,7 +230,10 @@ async function processIncomingDirectMessage(params: {
       supabase,
       workspaceId,
       channelConnectionId,
-      contactId,
+      // A comment conversation is the post itself, not a single contact — it
+      // has no owning contact (authors vary per comment). DM keeps its contact.
+      kind === "comments" ? null : contactId,
+      kind,
       event,
     );
 
@@ -222,11 +248,13 @@ async function processIncomingDirectMessage(params: {
     await markProcessed(null);
 
     // Fail-safe by design (docs/architecture/14-vibecoding-rules.md#7) —
-    // never allowed to turn a persisted message into a failed webhook.
+    // never allowed to turn a persisted message into a failed webhook. The
+    // event payload is IDs-only and kind-agnostic (generate-draft discovers
+    // the conversation kind itself).
     await emitInteractionReceived({ messageId, conversationId, workspaceId });
   } catch (error) {
     console.error(
-      "[webhooks] failed to process incoming direct message",
+      `[webhooks] failed to process incoming ${kind === "comments" ? "comment" : "direct message"}`,
       error,
     );
     await markUnprocessedWithError(describeError(error));
@@ -303,7 +331,8 @@ async function upsertConversation(
   supabase: SupabaseClient,
   workspaceId: string,
   channelConnectionId: string,
-  contactId: string,
+  contactId: string | null,
+  kind: "dm" | "comments",
   event: NormalizedEvent,
 ): Promise<string> {
   const externalId = event.conversation.externalId;
@@ -323,8 +352,12 @@ async function upsertConversation(
       workspace_id: workspaceId,
       channel_connection_id: channelConnectionId,
       contact_id: contactId,
-      kind: "dm",
+      kind,
       external_id: externalId,
+      // Post identity/preview for a comment thread; null for a DM
+      // (docs/architecture/06-data-model.md#conversations).
+      post_metadata:
+        kind === "comments" ? (event.conversation.postMetadata ?? null) : null,
       status: "open",
     })
     .select("id")
@@ -361,6 +394,9 @@ async function insertIncomingMessage(
       conversation_id: conversationId,
       contact_identity_id: contactIdentityId,
       external_id: event.message.externalId,
+      // Set for a comment that replies to another comment; null otherwise
+      // (docs/architecture/06-data-model.md#messages).
+      parent_external_id: event.message.parentExternalId ?? null,
       direction: "incoming",
       text: event.message.text,
       attachments: event.message.attachments,
