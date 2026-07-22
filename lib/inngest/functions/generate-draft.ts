@@ -95,6 +95,9 @@ export const regenerateDraft = inngest.createFunction(
         cleanupGeneratingDrafts({
           workspaceId: original.workspaceId!,
           conversationId: original.conversationId!,
+          // Comment regeneration targets one comment — only clean up that
+          // comment's generating draft, not its siblings'.
+          lastMessageId: isId(original.messageId) ? original.messageId : undefined,
         }),
       );
     },

@@ -413,6 +413,14 @@ const messagesCounters = {
   ],
 };
 
+// Real per-channel comment unread (stage 5).
+const commentsCounters = {
+  totalUnread: 2,
+  channels: [
+    { id: "chc_instagram_shop", name: "Instagram Магазин", platform: "instagram" as const, unreadCount: 2 },
+  ],
+};
+
 describe("shell navigation", () => {
   it("renders sidebar sections with counters and no knowledge base", () => {
     render(
@@ -422,6 +430,7 @@ describe("shell navigation", () => {
         userRole="owner"
         counters={getNavigationCounters()}
         messagesCounters={messagesCounters}
+        commentsCounters={commentsCounters}
         settingsSections={SETTINGS_SECTIONS}
       />,
     );
@@ -439,9 +448,12 @@ describe("shell navigation", () => {
   });
 
   it("renders the mobile tabbar with unread badges", () => {
-    const counters = getNavigationCounters();
-
-    render(<Tabbar counters={counters} messagesCounters={messagesCounters} />);
+    render(
+      <Tabbar
+        messagesCounters={messagesCounters}
+        commentsCounters={commentsCounters}
+      />,
+    );
 
     expect(screen.getAllByRole("link")).toHaveLength(5);
     expect(screen.getByText(String(messagesCounters.totalUnread))).toBeDefined();

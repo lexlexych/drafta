@@ -10,6 +10,7 @@ export type DraftRealtimeRow = {
   text?: string | null;
   model?: string | null;
   kb_file_ids?: unknown;
+  last_message_id?: string | null;
   created_at?: string | null;
   updated_at?: string | null;
 };
@@ -50,6 +51,10 @@ function asActiveDraft(
     // postgres_changes contains IDs, not joined kb_files. Preserve resolved
     // names for updates to the same draft; router.refresh resolves new ones.
     kbFileNames: current?.id === row.id ? current.kbFileNames : [],
+    lastMessageId:
+      row.last_message_id ??
+      (current?.id === row.id ? current.lastMessageId : null) ??
+      null,
     createdAt: row.created_at,
     updatedAt: row.updated_at ?? row.created_at,
   };
@@ -61,12 +66,24 @@ export function reduceActiveDraft(
   event: DraftRealtimeEvent,
   workspaceId: string,
   conversationId: string,
+  // Comment threads render one panel per comment; the panel only reacts to
+  // draft rows answering its own comment (stage 5). Omitted for DM (one panel
+  // per conversation reacts to every draft change).
+  targetMessageId?: string,
 ): ActiveDraftView | null {
   const row = event.new;
 
   if (
     row.workspace_id !== workspaceId ||
     row.conversation_id !== conversationId
+  ) {
+    return current;
+  }
+
+  if (
+    targetMessageId &&
+    typeof row.last_message_id === "string" &&
+    row.last_message_id !== targetMessageId
   ) {
     return current;
   }

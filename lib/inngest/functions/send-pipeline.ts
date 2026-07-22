@@ -47,6 +47,10 @@ export type LoadedSendContext = {
   externalAccountId: string;
   /** conversations.external_id — the provider-side conversation/thread ID. */
   conversationExternalId: string;
+  /** DM vs comment reply (stage 5) — decides which provider endpoint is used. */
+  interactionKind: "dm" | "comments";
+  /** For a comment reply: the parent comment's provider id (messages.parent_external_id). */
+  parentExternalId: string | null;
 };
 
 export type LoadSendContextResult =
@@ -82,7 +86,7 @@ async function loadContext(
 
   const { data: message, error: messageError } = await supabase
     .from("messages")
-    .select("id, direction, external_id, delivery_status, text")
+    .select("id, direction, external_id, delivery_status, text, parent_external_id")
     .eq("workspace_id", input.workspaceId)
     .eq("conversation_id", input.conversationId)
     .eq("id", input.messageId)
@@ -107,7 +111,7 @@ async function loadContext(
 
   const { data: conversation, error: conversationError } = await supabase
     .from("conversations")
-    .select("external_id, channel_connection_id")
+    .select("external_id, channel_connection_id, kind")
     .eq("workspace_id", input.workspaceId)
     .eq("id", input.conversationId)
     .maybeSingle();
@@ -116,6 +120,9 @@ async function loadContext(
   if (!conversation) {
     throw new Error("The outgoing message's conversation is unavailable.");
   }
+
+  const interactionKind =
+    conversation.kind === "comments" ? "comments" : "dm";
 
   const { data: connection, error: connectionError } = await supabase
     .from("channel_connections")
@@ -142,6 +149,8 @@ async function loadContext(
       channelConnectionId: connection.id,
       externalAccountId: connection.external_id,
       conversationExternalId: conversation.external_id,
+      interactionKind,
+      parentExternalId: message.parent_external_id ?? null,
     },
   };
 }
@@ -153,6 +162,9 @@ async function sendViaAdapter(context: LoadedSendContext): Promise<string> {
     externalAccountId: context.externalAccountId,
     conversationExternalId: context.conversationExternalId,
     text: context.text,
+    // A comment reply is posted against its parent comment; DM is unchanged.
+    interactionKind: context.interactionKind === "comments" ? "comment" : "dm",
+    parentExternalId: context.parentExternalId,
   });
 
   return result.providerMessageId;

@@ -101,6 +101,54 @@ describe("createZernioAdapter", () => {
     });
   });
 
+  it("sendMessage posts a comment reply to the parent comment endpoint (stage 5)", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({ success: true, data: { commentId: "zc_88" } }),
+      text: async () => "",
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const adapter = createZernioAdapter(() => "secret", () => apiConfig);
+    const result = await adapter.sendMessage({
+      channelConnectionId: "conn_1",
+      externalAccountId: "acct_ig_55014",
+      conversationExternalId: "ig_post_thread_88401",
+      text: "Доставка по Берлину — 4,90 €.",
+      interactionKind: "comment",
+      parentExternalId: "ig_comment_66120",
+    });
+
+    expect(result).toEqual({ providerMessageId: "zc_88" });
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe(
+      "https://zernio.com/api/v1/inbox/comments/ig_comment_66120/replies",
+    );
+    expect(JSON.parse(init.body)).toEqual({
+      accountId: "acct_ig_55014",
+      message: "Доставка по Берлину — 4,90 €.",
+    });
+  });
+
+  it("sendMessage rejects a comment reply that has no parent comment id", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    const adapter = createZernioAdapter(() => "secret", () => apiConfig);
+    await expect(
+      adapter.sendMessage({
+        channelConnectionId: "conn_1",
+        externalAccountId: "acct_ig_55014",
+        conversationExternalId: "ig_post_thread_88401",
+        text: "hi",
+        interactionKind: "comment",
+        parentExternalId: null,
+      }),
+    ).rejects.toThrow(/parent comment/i);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("exposes getConnectUrl only when the API config is injected", () => {
     expect(createZernioAdapter(() => "secret").getConnectUrl).toBeUndefined();
     expect(

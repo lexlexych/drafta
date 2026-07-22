@@ -33,6 +33,8 @@ type DraftPanelProps =
       draft: ActiveDraftView | null;
       workspaceId: string;
       conversationId: string;
+      /** Comment thread: the comment this draft answers (stage 5). Omitted for DM. */
+      targetMessageId?: string;
     };
 
 /** Existing mock panel remains available to the stage-5 comments screen. */
@@ -48,10 +50,12 @@ function WorkspaceDraftPanel({
   draft,
   workspaceId,
   conversationId,
+  targetMessageId,
 }: {
   draft: ActiveDraftView | null;
   workspaceId: string;
   conversationId: string;
+  targetMessageId?: string;
 }) {
   const [activeDraft, setActiveDraft] = useState(draft);
   const [isEditing, setIsEditing] = useState(false);
@@ -64,13 +68,19 @@ function WorkspaceDraftPanel({
     const handleDraftChange = (rawEvent: Event) => {
       const event = rawEvent as CustomEvent<DraftRealtimeEvent>;
       setActiveDraft((current) =>
-        reduceActiveDraft(current, event.detail, workspaceId, conversationId),
+        reduceActiveDraft(
+          current,
+          event.detail,
+          workspaceId,
+          conversationId,
+          targetMessageId,
+        ),
       );
     };
 
     window.addEventListener(DRAFT_REALTIME_EVENT, handleDraftChange);
     return () => window.removeEventListener(DRAFT_REALTIME_EVENT, handleDraftChange);
-  }, [conversationId, workspaceId]);
+  }, [conversationId, workspaceId, targetMessageId]);
 
   if (!activeDraft) {
     return null;
@@ -112,7 +122,7 @@ function WorkspaceDraftPanel({
 
   const regenerate = async () => {
     setPendingAction("regenerate");
-    const result = await regenerateDraftAction(conversationId);
+    const result = await regenerateDraftAction(conversationId, targetMessageId);
     setPendingAction(null);
 
     showToast(

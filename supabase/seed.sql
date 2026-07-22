@@ -671,3 +671,143 @@ set
   external_event_id = excluded.external_event_id,
   payload = excluded.payload,
   updated_at = now();
+
+-- ---------------------------------------------------------------------------
+-- Stage 5 — comments: a post with a comment thread on Workspace A's Instagram
+-- channel (capabilities {"comments":true}). A comment conversation is the post
+-- itself (kind = 'comments', post_metadata), its messages are comments from
+-- several different authors, and each incoming comment gets its own draft.
+-- ---------------------------------------------------------------------------
+
+insert into public.contacts (id, workspace_id, display_name, notes, tags)
+values
+  (
+    'a0000000-0000-4000-8000-000000000210',
+    'a0000000-0000-4000-8000-000000000001',
+    'Lena Fischer',
+    '',
+    array['instagram']
+  ),
+  (
+    'a0000000-0000-4000-8000-000000000211',
+    'a0000000-0000-4000-8000-000000000001',
+    'Marco Ziegler',
+    '',
+    array['instagram']
+  )
+on conflict (id) do update
+set display_name = excluded.display_name, updated_at = now();
+
+insert into public.contact_identities (
+  id,
+  workspace_id,
+  contact_id,
+  platform,
+  external_id,
+  display_name
+)
+values
+  (
+    'a0000000-0000-4000-8000-000000000310',
+    'a0000000-0000-4000-8000-000000000001',
+    'a0000000-0000-4000-8000-000000000210',
+    'instagram',
+    'ig_user_lena_fischer',
+    'Lena Fischer'
+  ),
+  (
+    'a0000000-0000-4000-8000-000000000311',
+    'a0000000-0000-4000-8000-000000000001',
+    'a0000000-0000-4000-8000-000000000211',
+    'instagram',
+    'ig_user_marco_ziegler',
+    'Marco Ziegler'
+  )
+on conflict (id) do update
+set platform = excluded.platform,
+    external_id = excluded.external_id,
+    display_name = excluded.display_name,
+    updated_at = now();
+
+insert into public.conversations (
+  id,
+  workspace_id,
+  channel_connection_id,
+  contact_id,
+  kind,
+  external_id,
+  post_metadata,
+  status,
+  last_incoming_at,
+  unread_count
+)
+values
+  (
+    'a0000000-0000-4000-8000-000000000410',
+    'a0000000-0000-4000-8000-000000000001',
+    'a0000000-0000-4000-8000-000000000102',
+    null,
+    'comments',
+    'seed-a-instagram-post-autumn',
+    '{"externalId":"ig_post_autumn","text":"Осенняя коллекция уже в продаже — заходите за новинками!","permalink":"https://instagram.com/p/ig_post_autumn","platform":"instagram"}'::jsonb,
+    'open',
+    now() - interval '8 minutes',
+    2
+  )
+on conflict (id) do update
+set
+  channel_connection_id = excluded.channel_connection_id,
+  kind = excluded.kind,
+  external_id = excluded.external_id,
+  post_metadata = excluded.post_metadata,
+  status = excluded.status,
+  last_incoming_at = excluded.last_incoming_at,
+  unread_count = excluded.unread_count,
+  updated_at = now();
+
+insert into public.messages (
+  id,
+  workspace_id,
+  conversation_id,
+  contact_identity_id,
+  external_id,
+  parent_external_id,
+  direction,
+  text,
+  delivery_status,
+  sent_at
+)
+values
+  (
+    'a0000000-0000-4000-8000-000000000510',
+    'a0000000-0000-4000-8000-000000000001',
+    'a0000000-0000-4000-8000-000000000410',
+    'a0000000-0000-4000-8000-000000000310',
+    'ig_comment_lena_1',
+    null,
+    'incoming',
+    'Сколько стоит доставка по Берлину?',
+    'received',
+    null
+  ),
+  (
+    'a0000000-0000-4000-8000-000000000511',
+    'a0000000-0000-4000-8000-000000000001',
+    'a0000000-0000-4000-8000-000000000410',
+    'a0000000-0000-4000-8000-000000000311',
+    'ig_comment_marco_1',
+    null,
+    'incoming',
+    'Красивая коллекция! А есть в наличии синий свитер?',
+    'received',
+    null
+  )
+on conflict (id) do update
+set
+  contact_identity_id = excluded.contact_identity_id,
+  external_id = excluded.external_id,
+  parent_external_id = excluded.parent_external_id,
+  direction = excluded.direction,
+  text = excluded.text,
+  delivery_status = excluded.delivery_status,
+  updated_at = now();

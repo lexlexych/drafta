@@ -30,6 +30,17 @@ import {
 } from "@/lib/inngest/events";
 
 /**
+ * A conversation is either a DM ("/inbox") or a comment thread ("/comments"),
+ * and these actions are shared by both screens (stage 5). Revalidating both
+ * paths is cheap and keeps whichever screen is open in sync — the conversation
+ * only exists on one of them.
+ */
+function revalidateInboxViews() {
+  revalidatePath("/inbox");
+  revalidatePath("/comments");
+}
+
+/**
  * Server action behind "opening a thread resets its unread counter"
  * (docs/epics/epic_02/T-05-inbox-messages.md, step 3) — same thin-wrapper
  * shape as `settings/channels/actions.ts` (T-04): resolve the *authenticated
@@ -62,7 +73,7 @@ export async function markConversationReadAction(
   const result = await markConversationRead(supabase, workspace.id, conversationId);
 
   if (result.ok) {
-    revalidatePath("/inbox");
+    revalidateInboxViews();
   }
 
   return result;
@@ -114,7 +125,7 @@ export async function editDraftAction(
   );
 
   if (result.ok) {
-    revalidatePath("/inbox");
+    revalidateInboxViews();
   }
 
   return result;
@@ -138,7 +149,7 @@ export async function discardDraftAction(
   );
 
   if (result.ok) {
-    revalidatePath("/inbox");
+    revalidateInboxViews();
   }
 
   return result;
@@ -171,14 +182,14 @@ async function requestMessageSend(
       context.workspace.id,
       messageId,
     );
-    revalidatePath("/inbox");
+    revalidateInboxViews();
     return {
       ok: false,
       error: "Не удалось запустить отправку — нажмите «Повторить» у сообщения.",
     };
   }
 
-  revalidatePath("/inbox");
+  revalidateInboxViews();
   return { ok: true, messageId };
 }
 
@@ -257,7 +268,12 @@ export async function retrySendMessageAction(
   return requestMessageSend(context, conversationId, messageId);
 }
 
-export async function regenerateDraftAction(conversationId: string) {
+export async function regenerateDraftAction(
+  conversationId: string,
+  // For a comment thread the caller passes the comment being regenerated
+  // (stage 5): one draft per comment. Omitted for DM.
+  messageId?: string,
+) {
   const context = await getDraftActionContext();
 
   if ("error" in context) {
@@ -278,6 +294,7 @@ export async function regenerateDraftAction(conversationId: string) {
     await emitDraftRegenerateRequested({
       conversationId,
       workspaceId: context.workspace.id,
+      ...(messageId ? { messageId } : {}),
     });
     return { ok: true as const };
   } catch (error) {

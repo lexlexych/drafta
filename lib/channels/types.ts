@@ -61,6 +61,13 @@ export interface NormalizedMessage {
   text: string;
   attachments: NormalizedAttachment[];
   sender: NormalizedSender;
+  /**
+   * For comment events: external ID of the parent comment this one replies to
+   * (a reply-to-a-reply), when the provider reports one. Absent for DM and for
+   * top-level comments. Stored as `messages.parent_external_id`
+   * (docs/architecture/06-data-model.md#messages).
+   */
+  parentExternalId?: string;
 }
 
 /** Reference to the DM thread, or to the post a comment belongs to. */
@@ -130,6 +137,20 @@ export interface SendMessageInput {
   conversationExternalId: string;
   text: string;
   attachments?: NormalizedAttachment[];
+  /**
+   * DM vs comment reply (stage 5). Defaults to `"dm"` when omitted so existing
+   * callers keep the same behavior. For `"comment"` the adapter posts a reply
+   * to a specific comment rather than into a DM thread.
+   */
+  interactionKind?: InteractionKind;
+  /**
+   * External ID of the comment being replied to — required when
+   * `interactionKind === "comment"`. Comes from
+   * `messages.parent_external_id` of the outgoing reply
+   * (docs/architecture/07-data-flows.md#63-отправка-ответа: «для комментария —
+   * как ответ на конкретный комментарий»).
+   */
+  parentExternalId?: string | null;
 }
 
 export interface SendMessageResult {
