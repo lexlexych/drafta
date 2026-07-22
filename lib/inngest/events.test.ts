@@ -17,7 +17,9 @@ const {
   draftRegenerateRequestedEvent,
   emitDraftRegenerateRequested,
   emitInteractionReceived,
+  emitMessageSendRequested,
   interactionReceivedEvent,
+  messageSendRequestedEvent,
 } = await import("./events");
 
 describe("Inngest event schemas", () => {
@@ -62,6 +64,14 @@ describe("Inngest event schemas", () => {
       workspaceId: "ws-1",
       // @ts-expect-error Rule 7: names must never enter an Inngest payload.
       contactName: "Personal Name",
+    });
+
+    messageSendRequestedEvent.create({
+      messageId: "msg-1",
+      conversationId: "conv-1",
+      workspaceId: "ws-1",
+      // @ts-expect-error Rule 7: outgoing text must never enter an Inngest payload.
+      text: "reply text",
     });
   });
 });
@@ -133,5 +143,44 @@ describe("emitDraftRegenerateRequested", () => {
       data: { conversationId: "conv-1", workspaceId: "ws-1" },
     });
     expect(Object.keys(sent.data).sort()).toEqual(["conversationId", "workspaceId"]);
+  });
+});
+
+describe("emitMessageSendRequested", () => {
+  beforeEach(() => {
+    sendMock.mockReset();
+  });
+
+  it("sends message/send with exactly the three ID fields (rule 7)", async () => {
+    sendMock.mockResolvedValueOnce(undefined);
+
+    await emitMessageSendRequested({
+      messageId: "msg-1",
+      conversationId: "conv-1",
+      workspaceId: "ws-1",
+    });
+
+    const sent = sendMock.mock.calls[0][0];
+    expect(sent).toMatchObject({
+      name: "message/send",
+      data: { messageId: "msg-1", conversationId: "conv-1", workspaceId: "ws-1" },
+    });
+    expect(Object.keys(sent.data).sort()).toEqual([
+      "conversationId",
+      "messageId",
+      "workspaceId",
+    ]);
+  });
+
+  it("throws on a send() rejection so the caller can mark the message failed", async () => {
+    sendMock.mockRejectedValueOnce(new Error("network unreachable"));
+
+    await expect(
+      emitMessageSendRequested({
+        messageId: "msg-1",
+        conversationId: "conv-1",
+        workspaceId: "ws-1",
+      }),
+    ).rejects.toThrow("network unreachable");
   });
 });

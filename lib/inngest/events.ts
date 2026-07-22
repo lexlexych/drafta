@@ -24,6 +24,18 @@ export type DraftRegenerateRequestedEvent = {
 };
 
 /**
+ * Payload for the `message/send` Inngest event
+ * (docs/architecture/07-data-flows.md#63-отправка-ответа) — the outgoing
+ * message is already persisted as `pending`; the event carries IDs only
+ * (vibecoding rule 7), the send-message function reloads the text itself.
+ */
+export type MessageSendRequestedEvent = {
+  messageId: string;
+  conversationId: string;
+  workspaceId: string;
+};
+
+/**
  * Inngest SDK v4 event definitions. `staticSchema` provides compile-time
  * validation without adding a runtime validation dependency; payload fields
  * remain an explicit allow-list of pseudonymous IDs (vibecoding rule 7).
@@ -38,6 +50,10 @@ export const draftRegenerateRequestedEvent = eventType(
     schema: staticSchema<DraftRegenerateRequestedEvent>(),
   },
 );
+
+export const messageSendRequestedEvent = eventType("message/send", {
+  schema: staticSchema<MessageSendRequestedEvent>(),
+});
 
 /**
  * Emits `interaction/received`, fail-safe — see
@@ -72,4 +88,18 @@ export async function emitDraftRegenerateRequested(
   payload: DraftRegenerateRequestedEvent,
 ): Promise<void> {
   await inngest.send(draftRegenerateRequestedEvent.create(payload));
+}
+
+/**
+ * Emits `message/send`. Deliberately throwing (unlike the fail-safe
+ * `emitInteractionReceived`): the caller is a server action that just
+ * persisted a `pending` outgoing message — if the event never reaches
+ * Inngest nothing will ever send it, so the action must learn about the
+ * failure, mark the message `failed`, and surface the retry button
+ * (docs/architecture/07-data-flows.md#63-отправка-ответа).
+ */
+export async function emitMessageSendRequested(
+  payload: MessageSendRequestedEvent,
+): Promise<void> {
+  await inngest.send(messageSendRequestedEvent.create(payload));
 }
