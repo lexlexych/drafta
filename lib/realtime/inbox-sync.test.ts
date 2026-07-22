@@ -155,7 +155,7 @@ describe("subscribeToInboxRealtime", () => {
     };
   }
 
-  it("authenticates, opens one workspace-scoped channel and subscribes to INSERT messages + INSERT/UPDATE conversations", async () => {
+  it("authenticates and subscribes to workspace-scoped inbox and draft changes", async () => {
     const { channel, supabase } = createFakeSupabase();
 
     subscribeToInboxRealtime(supabase as never, "wsp_a", vi.fn());
@@ -167,7 +167,7 @@ describe("subscribeToInboxRealtime", () => {
     expect(supabase.auth.getSession).toHaveBeenCalledTimes(1);
     expect(supabase.realtime.setAuth).toHaveBeenCalledWith("test-access-token");
     expect(supabase.channel).toHaveBeenCalledWith("inbox-realtime:wsp_a");
-    expect(channel.on).toHaveBeenCalledTimes(4);
+    expect(channel.on).toHaveBeenCalledTimes(6);
     expect(channel.on).toHaveBeenCalledWith("system", {}, expect.any(Function));
     expect(channel.on).toHaveBeenCalledWith(
       "postgres_changes",
@@ -175,6 +175,26 @@ describe("subscribeToInboxRealtime", () => {
         event: "INSERT",
         schema: "public",
         table: "messages",
+        filter: "workspace_id=eq.wsp_a",
+      },
+      expect.any(Function),
+    );
+    expect(channel.on).toHaveBeenCalledWith(
+      "postgres_changes",
+      {
+        event: "INSERT",
+        schema: "public",
+        table: "drafts",
+        filter: "workspace_id=eq.wsp_a",
+      },
+      expect.any(Function),
+    );
+    expect(channel.on).toHaveBeenCalledWith(
+      "postgres_changes",
+      {
+        event: "UPDATE",
+        schema: "public",
+        table: "drafts",
         filter: "workspace_id=eq.wsp_a",
       },
       expect.any(Function),

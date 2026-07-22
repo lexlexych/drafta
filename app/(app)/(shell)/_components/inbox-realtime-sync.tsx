@@ -8,6 +8,10 @@ import {
   subscribeToInboxRealtime,
   type InboxRealtimeStatusChange,
 } from "@/lib/realtime/inbox-sync";
+import {
+  DRAFT_REALTIME_EVENT,
+  type DraftRealtimeEvent,
+} from "@/lib/realtime/draft-panel";
 
 /**
  * Realtime-обновления инбокса (docs/epics/epic_02/T-06-realtime-inbox.md).
@@ -49,10 +53,19 @@ export function InboxRealtimeSync({ workspaceId }: { workspaceId: string }) {
         routerRef.current.refresh();
       },
       (change) => reportRealtimeStatus(workspaceId, change),
+      (event) => reportDraftChange(event),
     );
   }, [workspaceId]);
 
   return null;
+}
+
+function reportDraftChange(event: DraftRealtimeEvent) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  window.dispatchEvent(new CustomEvent(DRAFT_REALTIME_EVENT, { detail: event }));
 }
 
 function reportRealtimeStatus(

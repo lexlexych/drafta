@@ -7,11 +7,13 @@ import type {
 } from "@supabase/supabase-js";
 import { REALTIME_SUBSCRIBE_STATES } from "@supabase/supabase-js";
 
+import type { DraftRealtimeEvent } from "@/lib/realtime/draft-panel";
+
 /**
  * Client-side glue behind "Realtime-обновления инбокса"
  * (docs/epics/epic_02/T-06-realtime-inbox.md): open a Postgres Changes
- * subscription for `messages` (insert) and `conversations`
- * (insert/update) of the current workspace, and react to it.
+ * subscription for `messages`, `conversations`, and `drafts` of the current
+ * workspace, and react to it.
  *
  * Deliberately **not** `"server-only"` — this runs in the browser, alongside
  * `lib/db/browser.ts`'s `createBrowserSupabaseClient()` (the
@@ -147,6 +149,7 @@ export function subscribeToInboxRealtime(
   workspaceId: string,
   refresh: () => void,
   onStatusChange?: (change: InboxRealtimeStatusChange) => void,
+  onDraftChange?: (event: DraftRealtimeEvent) => void,
 ): () => void {
   const handleEvent = createInboxRealtimeHandler(workspaceId, refresh);
   const filter = `workspace_id=eq.${workspaceId}`;
@@ -233,6 +236,36 @@ export function subscribeToInboxRealtime(
             filter,
           },
           handleEvent,
+        )
+        .on(
+          "postgres_changes",
+          {
+            event: "INSERT",
+            schema: "public",
+            table: "drafts",
+            filter,
+          },
+          (event) => {
+            if (isOwnWorkspaceEvent(event, workspaceId)) {
+              onDraftChange?.(event as DraftRealtimeEvent);
+            }
+            handleEvent(event);
+          },
+        )
+        .on(
+          "postgres_changes",
+          {
+            event: "UPDATE",
+            schema: "public",
+            table: "drafts",
+            filter,
+          },
+          (event) => {
+            if (isOwnWorkspaceEvent(event, workspaceId)) {
+              onDraftChange?.(event as DraftRealtimeEvent);
+            }
+            handleEvent(event);
+          },
         )
         .subscribe((status, error) => {
           if (disposed) {

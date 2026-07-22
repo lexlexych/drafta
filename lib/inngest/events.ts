@@ -66,3 +66,10 @@ export async function emitInteractionReceived(
     );
   }
 }
+
+/** Emits the user-requested regeneration event; its allow-list contains IDs only. */
+export async function emitDraftRegenerateRequested(
+  payload: DraftRegenerateRequestedEvent,
+): Promise<void> {
+  await inngest.send(draftRegenerateRequestedEvent.create(payload));
+}

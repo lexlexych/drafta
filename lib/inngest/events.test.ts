@@ -15,6 +15,7 @@ vi.mock("./client", () => ({
 
 const {
   draftRegenerateRequestedEvent,
+  emitDraftRegenerateRequested,
   emitInteractionReceived,
   interactionReceivedEvent,
 } = await import("./events");
@@ -113,5 +114,24 @@ describe("emitInteractionReceived", () => {
 
     expect(consoleErrorSpy).toHaveBeenCalledTimes(1);
     consoleErrorSpy.mockRestore();
+  });
+});
+
+describe("emitDraftRegenerateRequested", () => {
+  it("sends exactly the two ID fields", async () => {
+    sendMock.mockReset();
+    sendMock.mockResolvedValueOnce(undefined);
+
+    await emitDraftRegenerateRequested({
+      conversationId: "conv-1",
+      workspaceId: "ws-1",
+    });
+
+    const sent = sendMock.mock.calls[0][0];
+    expect(sent).toMatchObject({
+      name: "draft/regenerate.requested",
+      data: { conversationId: "conv-1", workspaceId: "ws-1" },
+    });
+    expect(Object.keys(sent.data).sort()).toEqual(["conversationId", "workspaceId"]);
   });
 });

@@ -3,10 +3,10 @@ id: T-07
 epic: E-003
 title: "Панель черновика в треде: реальные drafts + Realtime"
 type: dev
-status: todo
+status: in_progress
 depends_on: [T-05]
 created: 2026-07-19
-updated: 2026-07-19
+updated: 2026-07-21
 ---
 
 # T-07. Панель черновика в треде: реальные drafts + Realtime
@@ -103,8 +103,60 @@ npm test
 
 ## 🔧 Отчёт разработчика
 
-_Заполняется агентом-разработчиком: что сделано (файлы), как проверено
-(команды и результат), отклонения, «вне скоупа», вопросы._
+### Что сделано
+
+- `supabase/migrations/20260722110000_enable_drafts_realtime.sql` добавляет
+  `public.drafts` в `supabase_realtime`. `REPLICA IDENTITY FULL` не включён:
+  панель использует полный `payload.new` INSERT/UPDATE, а старые значения и DELETE
+  ей не нужны.
+- `lib/db/drafts.ts`, `lib/drafts/types.ts`, `lib/db/inbox.ts` загружают вместе с
+  DM-тредом последний workspace-scoped `generating`/`ready`/`edited` draft,
+  сохраняют `kb_file_ids` и разрешают их в имена существующих `kb_files`.
+  `discarded`/`superseded`/`sent` в активную панель не попадают.
+- `app/(app)/(shell)/inbox/actions.ts` реализует RLS-scoped правку (`edited`),
+  отклонение (`discarded`) и регенерацию. `lib/inngest/events.ts` эмитит
+  `draft/regenerate.requested` только с `conversationId` и `workspaceId`; перед
+  эмиссией диалог проверяется в workspace текущей пользовательской сессии.
+- `lib/realtime/inbox-sync.ts` и
+  `app/(app)/(shell)/_components/inbox-realtime-sync.tsx` расширяют существующий
+  authenticated Realtime-канал подписками INSERT/UPDATE `drafts` с фильтром
+  `workspace_id`; `lib/realtime/draft-panel.ts` дополнительно отсекает чужой
+  workspace/conversation и сводит ready/generating/edited/terminal события в
+  состояние открытой панели. После reconnect сохраняется штатный `router.refresh()`.
+- `app/(app)/(shell)/_components/draft-panel.tsx` и inbox page переведены с DM mock
+  на реальные данные: нет draft — панель скрыта, generating — индикатор, ready/edited
+  — текст, модель, KB-файлы и действия. «Принять» явно disabled с пометкой
+  «этап 3». Существующий mock-режим той же панели для «Комментариев» сохранён.
+- Добавлены unit/smoke-контракты reducer, Realtime wiring, server actions,
+  ID-only event, миграции и рендера состояний; устаревший inbox smoke теперь
+  проверяет скрытую панель при отсутствии активного draft.
+
+### Проверки
+
+- Targeted: `npm.cmd test -- lib/realtime/draft-panel.test.ts
+  lib/realtime/inbox-sync.test.ts app/(app)/(shell)/_components/draft-panel.test.tsx
+  app/(app)/(shell)/inbox/actions.test.ts lib/inngest/events.test.ts
+  lib/draft-panel-migration.test.ts` — **6 файлов, 27 тестов прошли**.
+- `npm.cmd run lint` — **успешно, 0 ошибок**.
+- `npm.cmd run build` — первый прогон выявил TypeScript narrowing ошибки в toast;
+  после исправления повторный прогон **успешен**, production build и typecheck прошли.
+- `npm.cmd test` — полный прогон завершился с двумя smoke-падениями: устаревшее
+  ожидание mock-панели inbox исправлено этим тикетом после прогона; второе —
+  существующий `settings page > renders the ai section with switches` использует
+  общий mock Supabase без `.from()` и не относится к T-07. Остальные тесты прогона,
+  включая новые T-07, прошли. По указанию оркестратора повторный полный прогон не
+  выполнялся.
+- `supabase db reset`, живой Inngest/Docker и ручной сквозной сценарий не запускались
+  по явному решению пользователя. Миграция проверена статическим contract-тестом;
+  изоляция live-handler покрыта отрицательными unit-кейсами чужого workspace и
+  conversation.
+
+### Отклонения и вне скоупа
+
+- Отправка принятого черновика не реализована: кнопка остаётся явной заглушкой этапа 3.
+- Comments продолжают работать на mock-данных, как требует этап 5.
+- Новых внешних сервисов, ручных шагов и изменений grounded pipeline T-05
+  (`categories`, `kb_files`, `kb_file_ids`, выбор Mistral/OpenRouter) нет.
 
 ## 🔍 Ревью
 

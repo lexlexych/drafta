@@ -7,6 +7,8 @@ import {
   listChannelConnections,
   type ChannelConnectionRow,
 } from "@/lib/db/channel-connections";
+import { getActiveConversationDraft } from "@/lib/db/drafts";
+import type { ActiveDraftView } from "@/lib/drafts/types";
 import {
   avatarFor,
   countWithNoun,
@@ -91,6 +93,10 @@ type MessageRow = {
   attachments: unknown;
   delivery_status: string;
   created_at: string;
+};
+
+export type InboxThreadView = Omit<ThreadView, "draft"> & {
+  draft: ActiveDraftView | null;
 };
 
 const DELIVERY_LABELS: Record<string, string | null> = {
@@ -415,7 +421,7 @@ export async function getThreadView(
   workspaceId: string,
   channels: ChannelConnectionRow[],
   conversationId: string,
-): Promise<ThreadView | null> {
+): Promise<InboxThreadView | null> {
   const { data: conversation, error: conversationError } = await supabase
     .from("conversations")
     .select("id, channel_connection_id, contact_id, kind, last_incoming_at")
@@ -447,11 +453,12 @@ export async function getThreadView(
     return null;
   }
 
-  const [contact, messages] = await Promise.all([
+  const [contact, messages, draft] = await Promise.all([
     conversation.contact_id
       ? loadContactById(supabase, workspaceId, conversation.contact_id)
       : Promise.resolve(null),
     listMessagesForConversation(supabase, workspaceId, conversation.id),
+    getActiveConversationDraft(supabase, workspaceId, conversation.id),
   ]);
 
   const name = contact?.display_name ?? "Без контакта";
@@ -479,11 +486,8 @@ export async function getThreadView(
       deliveryLabel: DELIVERY_LABELS[message.delivery_status] ?? null,
       attachmentName: attachmentIndicatorLabel(message.attachments),
     })),
-    // Debounce/drafts have no real data at this stage — see this module's
-    // docstring and the ticket's "Существенные факты" (панель черновика
-    // остаётся mock-заглушкой, поле draft здесь всегда пусто).
     debounceNote: null,
-    draft: null,
+    draft,
   };
 }
 

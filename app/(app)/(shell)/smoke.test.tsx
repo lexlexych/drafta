@@ -283,15 +283,12 @@ describe("dashboard page", () => {
 });
 
 describe("inbox page", () => {
-  it("renders the dialog list and the first thread with a draft panel", async () => {
+  it("renders the dialog list and hides the panel when no active draft exists", async () => {
     render(await InboxPage({ searchParams: searchParams() }));
 
     expect(screen.getByRole("heading", { name: "Сообщения" })).toBeDefined();
     expect(screen.getAllByText("Anna Weber").length).toBeGreaterThan(0);
-    expect(screen.getByText("AI-черновик")).toBeDefined();
-    expect(screen.getByRole("button", { name: "Принять и отправить" })).toBeDefined();
-    expect(screen.getByRole("button", { name: "Править" })).toBeDefined();
-    expect(screen.getByRole("button", { name: "Отклонить" })).toBeDefined();
+    expect(screen.queryByText("AI-черновик")).toBeNull();
     expect(screen.getByLabelText("Ответ")).toBeDefined();
   });
 

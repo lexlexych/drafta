@@ -1,6 +1,5 @@
 import Link from "next/link";
 
-import type { DraftView } from "@/lib/mock";
 import {
   getChannelFiltersView,
   getConversationListView,
@@ -22,27 +21,6 @@ import uiStyles from "../_components/ui.module.css";
 import { MarkThreadRead } from "./mark-thread-read";
 
 const PATHNAME = "/inbox";
-
-/**
- * Neutral stand-in shown for every real thread — real AI drafts land in
- * stage 2 (epic E-002 "Вне скоупа"; ticket's "Существенные факты": "Панель
- * черновика не подключать… панель остаётся mock-заглушкой из E-001/T-07").
- * Unlike E-001/T-07's mock data, this isn't per-conversation authored text
- * pretending to be a generated reply — the same interactive stub component
- * (accept/edit/reject/regenerate still all work as local-only UI, exactly
- * as before this ticket), just with generic copy so nobody mistakes it for
- * a real answer to a real customer message.
- */
-const MOCK_DRAFT_STUB: DraftView = {
-  id: "stub-draft",
-  status: "ready",
-  text: "Здесь появится сгенерированный AI-черновик ответа — генерация подключается на следующем этапе.",
-  alternativeText:
-    "Здесь появится альтернативный вариант черновика после повторной генерации.",
-  caption: "Черновики подключаются на следующем этапе",
-  referenceText: null,
-  kbFileNames: [],
-};
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
@@ -214,9 +192,10 @@ export default async function InboxPage({
 
             <div className={styles.draftWrap}>
               <DraftPanel
-                key={thread.conversationId}
-                draft={MOCK_DRAFT_STUB}
-                channelName={thread.channel.name}
+                key={`${thread.conversationId}:${thread.draft?.id ?? "none"}:${thread.draft?.updatedAt ?? "none"}`}
+                draft={thread.draft}
+                workspaceId={workspace.id}
+                conversationId={thread.conversationId}
               />
               <Composer placeholder="Написать ответ вручную…" />
             </div>
