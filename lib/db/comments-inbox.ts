@@ -249,9 +249,11 @@ async function listChannelUnreadCounts(
   }
 
   // Only channels that actually support comments belong on this screen
-  // (docs/architecture/05-channels.md#capabilities-канала).
+  // (docs/architecture/05-channels.md#capabilities-канала). `supportsComments`
+  // is the canonical ChannelCapabilities key written on connect
+  // (lib/channels/capabilities.ts) — the same key the draft pipeline reads.
   return channels
-    .filter((channel) => channel.capabilities.comments === true)
+    .filter((channel) => channel.capabilities.supportsComments === true)
     .map((channel) => ({
       id: channel.id,
       name: channel.name,
