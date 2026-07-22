@@ -30,6 +30,8 @@ function context(overrides: Partial<LoadedSendContext> = {}): LoadedSendContext 
     channelConnectionId: "connection-1",
     externalAccountId: "acct_tg_98213",
     conversationExternalId: "chat_42",
+    interactionKind: "dm",
+    parentExternalId: null,
     ...overrides,
   };
 }
