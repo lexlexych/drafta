@@ -7,6 +7,7 @@ import {
   MISTRAL_BASE_URL,
   OPENROUTER_BASE_URL,
   resolveProvider,
+  selectProviderModel,
 } from "./config";
 
 describe("resolveProvider", () => {
@@ -77,5 +78,35 @@ describe("getAiModelOptions", () => {
         label: "OpenRouter · vendor/fallback-model",
       },
     ]);
+  });
+});
+
+describe("selectProviderModel", () => {
+  it("allows a workspace model override for Mistral", () => {
+    expect(
+      selectProviderModel(
+        {
+          provider: "mistral",
+          baseURL: MISTRAL_BASE_URL,
+          apiKey: "mistral-secret",
+          defaultModel: DEFAULT_MISTRAL_MODEL,
+        },
+        "mistral-large-latest",
+      ),
+    ).toBe("mistral-large-latest");
+  });
+
+  it("always uses OPENROUTER_MODEL and ignores the workspace model", () => {
+    expect(
+      selectProviderModel(
+        {
+          provider: "openrouter",
+          baseURL: OPENROUTER_BASE_URL,
+          apiKey: "openrouter-secret",
+          defaultModel: "mistralai/mistral-small-2603",
+        },
+        "mistral-large-latest",
+      ),
+    ).toBe("mistralai/mistral-small-2603");
   });
 });

@@ -5,6 +5,7 @@ import {
   generateCompletion,
   logPromptIfEnabled,
   maskMessages,
+  resolveGenerationModel,
   unmaskText,
   type AiMessage,
   type MaskedEntity,
@@ -121,6 +122,7 @@ export type DraftPipelineDependencies = {
   createGeneratingDraft(input: {
     context: LoadedDraftContext;
   }): Promise<string>;
+  resolveModel(requestedModel: string): string;
   generate(
     prompt: readonly AiMessage[],
     options: { model: string; maxTokens: number },
@@ -595,6 +597,7 @@ export const draftPipelineDependencies: DraftPipelineDependencies = {
   isLatestIncoming,
   loadContext,
   createGeneratingDraft,
+  resolveModel: resolveGenerationModel,
   generate: (prompt, options) =>
     generateCompletion(prompt, {
       model: options.model,
@@ -663,6 +666,7 @@ export async function runDraftPipeline(
     return { status: "skipped", reason: stopReason };
   }
 
+  const generationModel = dependencies.resolveModel(context.aiSettings.model);
   const maskedContext = await steps.run("mask", () => maskContext(context));
   const draftId = await steps.run("create-generating", () =>
     dependencies.createGeneratingDraft({ context }),
@@ -682,7 +686,7 @@ export async function runDraftPipeline(
     logPromptIfEnabled(prompt, logger ? { logger } : undefined);
 
     return dependencies.generate(prompt, {
-      model: context.aiSettings.model,
+      model: generationModel,
       maxTokens: DEFAULT_DRAFT_MAX_TOKENS,
     });
   });
@@ -695,7 +699,7 @@ export async function runDraftPipeline(
       workspaceId: input.workspaceId,
       draftId,
       text: restoredText,
-      model: context.aiSettings.model,
+      model: generationModel,
       supersedeEdited: input.regenerate,
     }),
   );

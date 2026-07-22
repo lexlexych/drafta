@@ -7,7 +7,11 @@ export type {
   AiMessage,
   GenerateCompletionOptions,
 } from "./client";
-export { AiConfigurationError } from "./config";
+export {
+  AiConfigurationError,
+  resolveGenerationModel,
+  selectProviderModel,
+} from "./config";
 export type { AiProvider } from "./config";
 export { maskMessages, maskText, unmaskText } from "./masking";
 export type {

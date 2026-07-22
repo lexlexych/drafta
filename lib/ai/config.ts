@@ -21,6 +21,24 @@ export type AiProviderConfig = {
   defaultModel: string;
 };
 
+/**
+ * Resolves the model that may be sent to the selected provider.
+ *
+ * Workspace model settings belong to the primary Mistral provider. When the
+ * process is configured for OpenRouter, OPENROUTER_MODEL is authoritative and
+ * a persisted Mistral model must never override it.
+ */
+export function selectProviderModel(
+  config: AiProviderConfig,
+  requestedModel?: string,
+): string {
+  if (config.provider === "openrouter") {
+    return config.defaultModel;
+  }
+
+  return requestedModel?.trim() || config.defaultModel;
+}
+
 type AiEnvironment = Partial<
   Record<
     "MISTRAL_API_KEY" | "OPENROUTER_API_KEY" | "OPENROUTER_MODEL",
@@ -124,4 +142,8 @@ export function resolveProvider(
   throw new AiConfigurationError(
     "Configure MISTRAL_API_KEY or OPENROUTER_API_KEY with OPENROUTER_MODEL before calling the AI client.",
   );
+}
+
+export function resolveGenerationModel(requestedModel?: string): string {
+  return selectProviderModel(resolveProvider(), requestedModel);
 }

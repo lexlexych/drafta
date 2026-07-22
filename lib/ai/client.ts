@@ -3,7 +3,11 @@ import "server-only";
 import OpenAI from "openai";
 import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
 
-import { resolveProvider, type AiProvider } from "./config";
+import {
+  resolveProvider,
+  selectProviderModel,
+  type AiProvider,
+} from "./config";
 
 export const AI_REQUEST_TIMEOUT_MS = 30_000;
 
@@ -78,6 +82,7 @@ export async function generateCompletion(
   options: GenerateCompletionOptions = {},
 ): Promise<string> {
   const config = resolveProvider();
+  const model = selectProviderModel(config, options.model);
   const client = new OpenAI({
     apiKey: config.apiKey,
     baseURL: config.baseURL,
@@ -87,7 +92,7 @@ export async function generateCompletion(
 
   try {
     const completion = await client.chat.completions.create({
-      model: options.model?.trim() || config.defaultModel,
+      model,
       messages: [...messages],
       ...(options.temperature === undefined
         ? {}

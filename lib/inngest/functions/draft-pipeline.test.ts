@@ -103,6 +103,7 @@ function dependencies(
     isLatestIncoming: vi.fn().mockResolvedValue(true),
     loadContext: vi.fn().mockResolvedValue(context()),
     createGeneratingDraft: vi.fn().mockResolvedValue("draft-1"),
+    resolveModel: vi.fn((requestedModel: string) => requestedModel),
     generate: vi.fn().mockResolvedValue("We will call {{PHONE_1}}."),
     finalizeDraft: vi.fn().mockResolvedValue(undefined),
     cleanupGeneratingDrafts: vi.fn().mockResolvedValue(undefined),
@@ -165,6 +166,34 @@ describe("draft pipeline", () => {
       model: "mistral-large-latest",
       supersedeEdited: false,
     });
+  });
+
+  it("uses and persists the provider-resolved model instead of ai_settings.model", async () => {
+    const generate = vi.fn().mockResolvedValue("Generated response");
+    const finalizeDraft = vi.fn().mockResolvedValue(undefined);
+
+    await runDraftPipeline(
+      {
+        workspaceId: "workspace-1",
+        conversationId: "conversation-1",
+        messageId: "m1",
+        regenerate: false,
+      },
+      new TestSteps(),
+      dependencies({
+        resolveModel: vi.fn().mockReturnValue("mistralai/mistral-small-2603"),
+        generate,
+        finalizeDraft,
+      }),
+    );
+
+    expect(generate).toHaveBeenCalledWith(
+      expect.any(Array),
+      expect.objectContaining({ model: "mistralai/mistral-small-2603" }),
+    );
+    expect(finalizeDraft).toHaveBeenCalledWith(
+      expect.objectContaining({ model: "mistralai/mistral-small-2603" }),
+    );
   });
 
   it("lets only the last of three debounced events create a draft", async () => {

@@ -79,6 +79,20 @@ describe("generateCompletion", () => {
     );
   });
 
+  it("ignores the workspace model when OpenRouter is selected", async () => {
+    vi.stubEnv("MISTRAL_API_KEY", "");
+    vi.stubEnv("OPENROUTER_API_KEY", "openrouter-secret");
+    vi.stubEnv("OPENROUTER_MODEL", "mistralai/mistral-small-2603");
+
+    await generateCompletion(messages, { model: "mistral-large-latest" });
+
+    expect(openAiMock.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        model: "mistralai/mistral-small-2603",
+      }),
+    );
+  });
+
   it("does not switch to OpenRouter after a Mistral request failure", async () => {
     vi.stubEnv("OPENROUTER_API_KEY", "openrouter-secret");
     vi.stubEnv("OPENROUTER_MODEL", "vendor/fallback-model");
