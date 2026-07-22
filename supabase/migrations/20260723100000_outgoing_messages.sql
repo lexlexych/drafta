@@ -35,6 +35,10 @@ create unique index messages_conversation_external_id_key
 -- TODO(stage 3+): a draft still 'generating' at accept time is finalized to
 -- 'ready' later and will target an already-answered batch — pre-existing race,
 -- out of scope here (same window exists between generation and manual sends).
+-- For a draft send (target_draft_id set) the outgoing text is the draft's own
+-- current text, captured inside the same transaction — the client never
+-- supplies it, so an accepted draft can't be swapped mid-flight. For a manual
+-- send (target_draft_id null) reply_text is the composer input.
 create function public.accept_reply_for_send(
   target_workspace_id uuid,
   target_conversation_id uuid,
@@ -48,11 +52,8 @@ set search_path = ''
 as $$
 declare
   outgoing_message_id uuid;
+  outgoing_text text := nullif(trim(coalesce(reply_text, '')), '');
 begin
-  if reply_text is null or length(trim(reply_text)) = 0 then
-    return null;
-  end if;
-
   perform 1
   from public.conversations as conversation
   where conversation.workspace_id = target_workspace_id
@@ -70,11 +71,16 @@ begin
     where draft.workspace_id = target_workspace_id
       and draft.conversation_id = target_conversation_id
       and draft.id = target_draft_id
-      and draft.status in ('ready', 'edited');
+      and draft.status in ('ready', 'edited')
+    returning nullif(trim(draft.text), '') into outgoing_text;
 
     if not found then
       return null;
     end if;
+  end if;
+
+  if outgoing_text is null then
+    return null;
   end if;
 
   update public.drafts as draft
@@ -98,7 +104,7 @@ begin
     target_conversation_id,
     null,
     'outgoing',
-    trim(reply_text),
+    outgoing_text,
     'pending'
   )
   returning id into outgoing_message_id;

@@ -44,6 +44,13 @@ describe("outgoing messages migration contract", () => {
     expect(migration).toContain("status = 'superseded'");
   });
 
+  it("takes a draft's outgoing text from the draft row, not the caller", () => {
+    expect(migration).toContain(
+      "returning nullif(trim(draft.text), '') into outgoing_text",
+    );
+    expect(migration).toContain("if outgoing_text is null then");
+  });
+
   it("creates the outgoing message pending, without a provider ID yet", () => {
     expect(migration).toContain("'outgoing'");
     expect(migration).toContain("'pending'");

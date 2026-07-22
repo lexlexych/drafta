@@ -11,9 +11,23 @@ import {
   discardConversationDraft,
   editConversationDraft,
 } from "@/lib/db/drafts";
+import {
+  acceptDraftForSend,
+  createManualOutgoingMessage,
+  markOutgoingMessageFailedAfterEmit,
+  retryFailedOutgoingMessage,
+  type OutgoingSendResult,
+} from "@/lib/db/outgoing";
 import { createServerSupabaseClient } from "@/lib/db/server";
-import { getAuthenticatedUser, getCurrentWorkspace } from "@/lib/db/workspace";
-import { emitDraftRegenerateRequested } from "@/lib/inngest/events";
+import {
+  getAuthenticatedUser,
+  getCurrentWorkspace,
+  type CurrentWorkspace,
+} from "@/lib/db/workspace";
+import {
+  emitDraftRegenerateRequested,
+  emitMessageSendRequested,
+} from "@/lib/inngest/events";
 
 /**
  * Server action behind "opening a thread resets its unread counter"
@@ -54,7 +68,14 @@ export async function markConversationReadAction(
   return result;
 }
 
-async function getDraftActionContext() {
+type DraftActionContext =
+  | { error: string }
+  | {
+      workspace: CurrentWorkspace;
+      supabase: Awaited<ReturnType<typeof createServerSupabaseClient>>;
+    };
+
+async function getDraftActionContext(): Promise<DraftActionContext> {
   const user = await getAuthenticatedUser();
 
   if (!user) {
@@ -121,6 +142,119 @@ export async function discardDraftAction(
   }
 
   return result;
+}
+
+/**
+ * Shared tail of every send action (stage 3,
+ * docs/architecture/07-data-flows.md#63-отправка-ответа): the outgoing
+ * message is already persisted as `pending` — emit the ID-only
+ * `message/send` event; the actual provider call happens in the
+ * `send-message` Inngest function with retries (vibecoding rule 8), never
+ * inside this request. If even the emit fails, compensate to `failed` so
+ * the thread shows the retry button instead of a forever-pending bubble.
+ */
+async function requestMessageSend(
+  context: Exclude<DraftActionContext, { error: string }>,
+  conversationId: string,
+  messageId: string,
+): Promise<OutgoingSendResult> {
+  try {
+    await emitMessageSendRequested({
+      messageId,
+      conversationId,
+      workspaceId: context.workspace.id,
+    });
+  } catch (error) {
+    console.error("[outgoing] failed to emit message/send", error);
+    await markOutgoingMessageFailedAfterEmit(
+      context.supabase,
+      context.workspace.id,
+      messageId,
+    );
+    revalidatePath("/inbox");
+    return {
+      ok: false,
+      error: "Не удалось запустить отправку — нажмите «Повторить» у сообщения.",
+    };
+  }
+
+  revalidatePath("/inbox");
+  return { ok: true, messageId };
+}
+
+/** «Принять и отправить» in the draft panel. */
+export async function sendDraftAction(
+  conversationId: string,
+  draftId: string,
+): Promise<OutgoingSendResult> {
+  const context = await getDraftActionContext();
+
+  if ("error" in context) {
+    return { ok: false, error: context.error };
+  }
+
+  const accepted = await acceptDraftForSend(
+    context.supabase,
+    context.workspace.id,
+    conversationId,
+    draftId,
+  );
+
+  if (!accepted.ok) {
+    return accepted;
+  }
+
+  return requestMessageSend(context, conversationId, accepted.messageId);
+}
+
+/** Manual reply from the thread composer. */
+export async function sendManualMessageAction(
+  conversationId: string,
+  text: string,
+): Promise<OutgoingSendResult> {
+  const context = await getDraftActionContext();
+
+  if ("error" in context) {
+    return { ok: false, error: context.error };
+  }
+
+  const created = await createManualOutgoingMessage(
+    context.supabase,
+    context.workspace.id,
+    conversationId,
+    text,
+  );
+
+  if (!created.ok) {
+    return created;
+  }
+
+  return requestMessageSend(context, conversationId, created.messageId);
+}
+
+/** «Повторить» on a failed outgoing bubble: failed → pending → re-emit. */
+export async function retrySendMessageAction(
+  conversationId: string,
+  messageId: string,
+): Promise<OutgoingSendResult> {
+  const context = await getDraftActionContext();
+
+  if ("error" in context) {
+    return { ok: false, error: context.error };
+  }
+
+  const reset = await retryFailedOutgoingMessage(
+    context.supabase,
+    context.workspace.id,
+    conversationId,
+    messageId,
+  );
+
+  if (!reset.ok) {
+    return reset;
+  }
+
+  return requestMessageSend(context, conversationId, messageId);
 }
 
 export async function regenerateDraftAction(conversationId: string) {
