@@ -4,6 +4,7 @@ import {
   createZernioProfile,
   deleteZernioProfile,
   getZernioConnectAuthUrl,
+  sendZernioInboxMessage,
   ZernioApiError,
 } from "./api";
 
@@ -82,6 +83,61 @@ describe("deleteZernioProfile", () => {
     await expect(deleteZernioProfile(config, "prof_1")).rejects.toThrow(
       ZernioApiError,
     );
+  });
+});
+
+describe("sendZernioInboxMessage", () => {
+  it("POSTs the text into the conversation and returns data.messageId", async () => {
+    const fetchMock = mockFetch({
+      ok: true,
+      json: { success: true, data: { messageId: "zmsg_991" } },
+    });
+
+    const messageId = await sendZernioInboxMessage(config, {
+      accountId: "acct_tg_98213",
+      conversationExternalId: "chat 42",
+      text: "Добрый день!",
+    });
+
+    expect(messageId).toBe("zmsg_991");
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe(
+      "https://zernio.com/api/v1/inbox/conversations/chat%2042/messages",
+    );
+    expect(init.method).toBe("POST");
+    expect(init.headers.Authorization).toBe("Bearer zk_test_123");
+    expect(JSON.parse(init.body)).toEqual({
+      accountId: "acct_tg_98213",
+      message: "Добрый день!",
+    });
+  });
+
+  it("throws ZernioApiError with status and body on a non-2xx response", async () => {
+    mockFetch({ ok: false, status: 422, text: '{"error":"Message window closed"}' });
+
+    await expect(
+      sendZernioInboxMessage(config, {
+        accountId: "acct_1",
+        conversationExternalId: "chat_1",
+        text: "hi",
+      }),
+    ).rejects.toMatchObject({
+      name: "ZernioApiError",
+      status: 422,
+      message: expect.stringMatching(/HTTP 422.*Message window closed/),
+    });
+  });
+
+  it("throws when the response has no data.messageId", async () => {
+    mockFetch({ ok: true, json: { success: true, data: {} } });
+
+    await expect(
+      sendZernioInboxMessage(config, {
+        accountId: "acct_1",
+        conversationExternalId: "chat_1",
+        text: "hi",
+      }),
+    ).rejects.toThrow(ZernioApiError);
   });
 });
 

@@ -117,9 +117,16 @@ export interface ParseWebhookInput {
   headers: Record<string, string>;
 }
 
-/** Input to `sendMessage` — see docs/architecture/05-channels.md; implemented starting stage 3 of the rollout plan. */
+/** Input to `sendMessage` — see docs/architecture/05-channels.md (stage 3 of the rollout plan). */
 export interface SendMessageInput {
   channelConnectionId: string;
+  /**
+   * External ID of the connected social account at the provider — the same
+   * value as `NormalizedEvent.externalAccountId` / the `channel_connections`
+   * row's `external_id`. Passed in by the caller because adapters never read
+   * the database (vibecoding rule 4).
+   */
+  externalAccountId: string;
   conversationExternalId: string;
   text: string;
   attachments?: NormalizedAttachment[];
@@ -224,10 +231,9 @@ export interface ChannelAdapter {
   ): NormalizedEvent[] | Promise<NormalizedEvent[]>;
 
   /**
-   * Send an outgoing message. Declared now so the adapter contract is
-   * complete, but not implemented before stage 3 of the rollout plan —
-   * adapters must reject with `ChannelOperationNotImplementedError` until
-   * then (see docs/architecture/16-rollout-plan.md).
+   * Send an outgoing message through the provider (stage 3 of the rollout
+   * plan). Adapters whose send path is not configured/implemented reject
+   * with `ChannelOperationNotImplementedError`.
    */
   sendMessage(input: SendMessageInput): Promise<SendMessageResult>;
 
@@ -252,8 +258,8 @@ export interface ChannelAdapter {
 
 /**
  * Thrown by adapter operations that are declared by the interface but not
- * implemented yet for a given provider (currently only `sendMessage`, before
- * stage 3 — see docs/architecture/16-rollout-plan.md).
+ * implemented (or not configured) for a given provider — e.g. `sendMessage`
+ * on an adapter built without its REST config.
  */
 export class ChannelOperationNotImplementedError extends Error {
   constructor(provider: ChannelProvider, operation: string) {

@@ -60,16 +60,45 @@ describe("createZernioAdapter", () => {
     expect(events[0].provider).toBe("zernio");
   });
 
-  it("sendMessage is an explicit NotImplemented stub (outgoing sends are stage 3)", async () => {
+  it("sendMessage stays a NotImplemented stub without the REST config", async () => {
     const adapter = createZernioAdapter(() => "secret");
 
     await expect(
       adapter.sendMessage({
         channelConnectionId: "conn_1",
+        externalAccountId: "acct_1",
         conversationExternalId: "chat_1",
         text: "hi",
       }),
     ).rejects.toThrow(ChannelOperationNotImplementedError);
+  });
+
+  it("sendMessage posts through the Zernio inbox API and maps the provider id", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({ success: true, data: { messageId: "zmsg_17" } }),
+      text: async () => "",
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const adapter = createZernioAdapter(() => "secret", () => apiConfig);
+    const result = await adapter.sendMessage({
+      channelConnectionId: "conn_1",
+      externalAccountId: "acct_tg_98213",
+      conversationExternalId: "chat_42",
+      text: "Добрый день!",
+    });
+
+    expect(result).toEqual({ providerMessageId: "zmsg_17" });
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe(
+      "https://zernio.com/api/v1/inbox/conversations/chat_42/messages",
+    );
+    expect(JSON.parse(init.body)).toEqual({
+      accountId: "acct_tg_98213",
+      message: "Добрый день!",
+    });
   });
 
   it("exposes getConnectUrl only when the API config is injected", () => {

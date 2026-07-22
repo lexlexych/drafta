@@ -6,12 +6,14 @@ import type {
   NormalizedEvent,
   ParseConnectCallbackInput,
   ParseWebhookInput,
+  SendMessageInput,
   SendMessageResult,
   VerifyWebhookInput,
 } from "../types";
 import { ChannelOperationNotImplementedError } from "../types";
 import {
   getZernioConnectAuthUrl,
+  sendZernioInboxMessage,
   ZernioApiError,
   type ZernioApiConfig,
 } from "./api";
@@ -56,13 +58,25 @@ export function createZernioAdapter(
     },
 
     /**
-     * Outgoing sends are stage 3 of the rollout plan
-     * (docs/architecture/16-rollout-plan.md) — this is the explicit stub the
-     * adapter interface requires until then
-     * (docs/epics/epic_02/T-01-channels-core.md).
+     * Stage 3 of the rollout plan (docs/architecture/16-rollout-plan.md,
+     * docs/architecture/07-data-flows.md#63-отправка-ответа): send the text
+     * through Zernio's inbox API. Attachments stay out of the MVP send path
+     * (mirroring the inbound metadata-only scope) — only `text` is sent.
+     * Without the REST config (webhook-only adapter in tests) the operation
+     * remains the explicit NotImplemented stub the interface requires.
      */
-    async sendMessage(): Promise<SendMessageResult> {
-      throw new ChannelOperationNotImplementedError(PROVIDER, "sendMessage");
+    async sendMessage(input: SendMessageInput): Promise<SendMessageResult> {
+      if (!getApiConfig) {
+        throw new ChannelOperationNotImplementedError(PROVIDER, "sendMessage");
+      }
+
+      const providerMessageId = await sendZernioInboxMessage(getApiConfig(), {
+        accountId: input.externalAccountId,
+        conversationExternalId: input.conversationExternalId,
+        text: input.text,
+      });
+
+      return { providerMessageId };
     },
 
     parseConnectCallback(input: ParseConnectCallbackInput): ConnectCallbackResult {

@@ -8,13 +8,16 @@ import type { ChannelPlatform } from "../types";
  * same discipline as the webhook secret.
  *
  * Contract per the official OpenAPI spec (https://docs.zernio.com/api/openapi —
- * operationIds `listProfiles`, `createProfile`, `getConnectUrl`):
+ * operationIds `listProfiles`, `createProfile`, `getConnectUrl`,
+ * `sendInboxMessage`):
  *   - POST /v1/profiles  { name, description }
  *       -> 201 { message, profile: { _id, … } }        (id at profile._id)
  *   - DELETE /v1/profiles/{profileId}
  *       -> 200 { message }
  *   - GET  /v1/connect/{platform}  ?profileId&redirect_url
  *       -> 200 { authUrl, state }                       (authUrl at top level)
+ *   - POST /v1/inbox/conversations/{conversationId}/messages  { accountId, message }
+ *       -> 200 { success, data: { messageId } }        (id at data.messageId)
  * Both authenticate with `Authorization: Bearer <ZERNIO_API_KEY>`. A Zernio
  * "profile" is the tenant boundary: drafta provisions exactly one per workspace
  * before the workspace row is created.
@@ -121,6 +124,48 @@ export async function deleteZernioProfile(
   if (!response.ok) {
     throw await zernioHttpError(response, "Zernio profile deletion failed");
   }
+}
+
+/**
+ * Sends a text message into an existing inbox conversation
+ * (`sendInboxMessage`). `conversationExternalId` is Zernio's own
+ * platform-specific conversation ID — the value inbound webhooks report and
+ * `conversations.external_id` stores. Returns the provider's ID of the sent
+ * message (`data.messageId`; per the spec it is present for every platform
+ * drafta supports), which becomes `messages.external_id` so later
+ * delivered/read/failed webhooks match the row.
+ */
+export async function sendZernioInboxMessage(
+  config: ZernioApiConfig,
+  input: { accountId: string; conversationExternalId: string; text: string },
+): Promise<string> {
+  const response = await fetch(
+    joinUrl(
+      config.apiBaseUrl,
+      `inbox/conversations/${encodeURIComponent(input.conversationExternalId)}/messages`,
+    ),
+    {
+      method: "POST",
+      headers: { ...authHeaders(config), "Content-Type": "application/json" },
+      body: JSON.stringify({ accountId: input.accountId, message: input.text }),
+    },
+  );
+
+  if (!response.ok) {
+    throw await zernioHttpError(response, "Zernio message send failed");
+  }
+
+  const body = (await readJson(response)) as
+    | { data?: { messageId?: unknown } }
+    | null;
+  const messageId = body?.data?.messageId;
+  if (typeof messageId !== "string" || messageId.length === 0) {
+    throw new ZernioApiError(
+      "Zernio send response is missing `data.messageId`.",
+    );
+  }
+
+  return messageId;
 }
 
 /**
