@@ -21,6 +21,12 @@ export type InteractionReceivedEvent = {
 export type DraftRegenerateRequestedEvent = {
   conversationId: string;
   workspaceId: string;
+  /**
+   * The specific comment to regenerate for (stage 5): comment threads keep one
+   * draft per comment, so regeneration targets that comment. Omitted for DM,
+   * where regeneration answers the whole conversation. IDs-only (rule 7).
+   */
+  messageId?: string;
 };
 
 /**
