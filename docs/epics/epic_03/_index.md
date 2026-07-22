@@ -1,7 +1,7 @@
 ---
 id: E-003
 title: "AI-черновики с дебаунсом: Inngest + Mistral, generate-draft, панель черновика"
-status: in_progress
+status: manual_steps
 source: "этап 2 плана внедрения (docs/architecture/16-rollout-plan.md)"
 created: 2026-07-19
 updated: 2026-07-22
