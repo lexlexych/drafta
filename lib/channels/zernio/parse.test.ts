@@ -54,11 +54,10 @@ describe("parseZernioWebhook", () => {
       externalAccountId: "acct_ig_55014",
       interactionKind: "comment",
       conversation: {
-        externalId: "ig_post_thread_88401",
+        externalId: "ig_post_88401",
         postMetadata: {
-          externalId: "ig_post_88401",
-          text: "Осенняя коллекция уже в продаже — заходите за новинками!",
-          permalink: "https://instagram.com/p/ig_post_88401",
+          platformPostId: "ig_post_88401",
+          postId: null,
           platform: "instagram",
         },
       },
@@ -72,6 +71,31 @@ describe("parseZernioWebhook", () => {
     };
 
     expect(events[0]).toEqual(expected);
+  });
+
+  it("maps a comment reply (parentCommentId) to parentExternalId", () => {
+    const rawBody = JSON.stringify({
+      id: "wh_evt_reply",
+      event: "comment.received",
+      comment: {
+        id: "ig_comment_reply_1",
+        postId: null,
+        platformPostId: "ig_post_88401",
+        platform: "instagram",
+        text: "Спасибо!",
+        author: { id: "ig_user_99", username: "kunde" },
+        isReply: true,
+        parentCommentId: "ig_comment_66120",
+      },
+      post: { id: null, platformPostId: "ig_post_88401" },
+      account: { id: "acct_ig_55014", platform: "instagram", username: "shop" },
+    });
+
+    const [event] = parseZernioWebhook({ rawBody, headers: {} });
+
+    expect(event?.interactionKind).toBe("comment");
+    expect(event?.conversation.externalId).toBe("ig_post_88401");
+    expect(event?.message.parentExternalId).toBe("ig_comment_66120");
   });
 
   it("maps a WhatsApp DM message.received fixture to a normalized event, field for field", () => {

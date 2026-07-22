@@ -76,8 +76,8 @@ export function createZernioAdapter(
       }
 
       if (input.interactionKind === "comment") {
-        const parentCommentId = input.parentExternalId?.trim();
-        if (!parentCommentId) {
+        const commentId = input.parentExternalId?.trim();
+        if (!commentId) {
           // A comment reply must target a specific comment. Missing here means
           // the outgoing row lost its `parent_external_id` — a bug, not a
           // transient failure, so it surfaces rather than sending a stray DM.
@@ -88,7 +88,10 @@ export function createZernioAdapter(
 
         const providerCommentId = await sendZernioCommentReply(getApiConfig(), {
           accountId: input.externalAccountId,
-          parentCommentId,
+          // conversations.external_id for a comment thread is the post's
+          // platformPostId — the {postId} the reply endpoint addresses.
+          postExternalId: input.conversationExternalId,
+          commentId,
           text: input.text,
         });
 

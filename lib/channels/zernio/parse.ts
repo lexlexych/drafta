@@ -35,12 +35,12 @@ import type {
  * why this adapter picks the internal one).
  *
  * Stage 5 (docs/architecture/16-rollout-plan.md#этап-5--комментарии) adds
- * `comment.received`: the same envelope shape plus a top-level `post`
- * (`InboxWebhookPost` — the post the comment belongs to) and an optional
- * `message.parentId` (the parent comment for a reply-to-a-reply). Comments of
- * one post share the envelope's `conversation.id`, so they group into a single
- * `kind = comments` conversation; the post's identity/preview is normalized
- * into `conversation.postMetadata`.
+ * `comment.received` — a *different* envelope shape (`WebhookPayloadComment`):
+ * a top-level `comment` (with its own `author`, not a DM `sender`) and `post`,
+ * and no `message`/`conversation`. Comments of one post share the post's
+ * `platformPostId`, so they group into a single `kind = comments` conversation;
+ * a reply-to-a-reply carries `comment.parentCommentId`. The webhook does not
+ * include the post caption/permalink — only ids. See `buildCommentEvent`.
  *
  * `InboxWebhookMessage.attachments[]` only carries `type`, `url`, and an
  * opaque `payload` object ("additional attachment metadata", undocumented
@@ -72,16 +72,41 @@ interface ZernioRawConversation {
 }
 
 /**
- * The post a `comment.received` event belongs to — Zernio's `InboxWebhookPost`
- * schema (id + a preview of the caption and a permalink). For comments the
- * "conversation" is the post; this maps to `conversations.post_metadata`
- * (docs/architecture/06-data-model.md#conversations). Only present on comment
- * envelopes.
+ * The post a `comment.received` event belongs to — Zernio's `WebhookPayloadComment.post`
+ * (confirmed against docs.zernio.com/api/openapi). Only `platformPostId` is
+ * guaranteed: the internal `id` is null for posts not published through Zernio
+ * (the common case for organic posts users comment on). The webhook does NOT
+ * carry the post's caption text or a permalink — those need a separate fetch.
  */
 interface ZernioRawPost {
+  id?: string | null;
+  platformPostId: string;
+}
+
+interface ZernioRawCommentAuthor {
   id: string;
+  username?: string;
+  name?: string | null;
+  picture?: string | null;
+}
+
+/**
+ * A comment from a `comment.received` webhook — Zernio's `WebhookPayloadComment.comment`
+ * (docs.zernio.com/api/openapi). Note this is a *sibling* of `post`/`account`
+ * on the envelope, NOT the DM `message` shape: the author is `author` (not
+ * `sender`), the post is keyed by `platformPostId` (internal `postId` may be
+ * null), and a reply carries `parentCommentId`.
+ */
+interface ZernioRawComment {
+  id: string;
+  postId?: string | null;
+  platformPostId: string;
+  platform: string;
   text?: string | null;
-  permalink?: string | null;
+  author: ZernioRawCommentAuthor;
+  createdAt?: string;
+  isReply?: boolean;
+  parentCommentId?: string | null;
 }
 
 interface ZernioRawAttachment {
@@ -101,17 +126,19 @@ interface ZernioRawMessage {
   text?: string | null;
   attachments?: ZernioRawAttachment[];
   sender: ZernioRawSender;
-  /** For a `comment.received` reply-to-a-reply: the parent comment's ID. Absent on DM and top-level comments. */
-  parentId?: string | null;
 }
 
 interface ZernioWebhookEnvelope {
   id: string;
   event: string;
   account: ZernioRawAccount;
+  /** Present on DM events (`message.*`). */
   message?: ZernioRawMessage;
+  /** Present on DM events — the thread the message belongs to. */
   conversation?: ZernioRawConversation;
-  /** Present only on `comment.received` envelopes — the post the comment is under. */
+  /** Present on `comment.received` — the comment itself. */
+  comment?: ZernioRawComment;
+  /** Present on `comment.received` — the post the comment is under. */
   post?: ZernioRawPost;
   metadata?: Record<string, unknown> | null;
   timestamp?: string;
@@ -132,10 +159,11 @@ const DM_EVENT_TYPES: Readonly<Record<string, NormalizedEventType>> = {
 };
 
 /**
- * Comment event Zernio delivers on the same envelope shape (stage 5 —
- * docs/architecture/16-rollout-plan.md#этап-5--комментарии). Its envelope
- * additionally carries a top-level `post` (the post the comment is under);
- * `message.parentId` is set when the comment replies to another comment.
+ * Comment event Zernio delivers (stage 5 —
+ * docs/architecture/16-rollout-plan.md#этап-5--комментарии). Unlike a DM, its
+ * envelope carries `comment` + `post` (and no `message`/`conversation`): the
+ * comment thread is keyed by the post's `platformPostId`, and a reply-to-a-reply
+ * sets `comment.parentCommentId`.
  */
 const COMMENT_EVENT = "comment.received" as const;
 
@@ -195,12 +223,22 @@ function isZernioConversation(value: unknown): value is ZernioRawConversation {
   return typeof candidate.id === "string";
 }
 
-function isZernioPost(value: unknown): value is ZernioRawPost {
+function isZernioComment(value: unknown): value is ZernioRawComment {
   if (typeof value !== "object" || value === null) {
     return false;
   }
 
-  return typeof (value as Record<string, unknown>).id === "string";
+  const candidate = value as Record<string, unknown>;
+  const author = candidate.author as Record<string, unknown> | undefined;
+
+  return (
+    typeof candidate.id === "string" &&
+    typeof candidate.platformPostId === "string" &&
+    typeof candidate.platform === "string" &&
+    typeof author === "object" &&
+    author !== null &&
+    typeof author.id === "string"
+  );
 }
 
 /**
@@ -227,21 +265,35 @@ function parseSingleEnvelope(raw: unknown): NormalizedEvent | null {
     return null;
   }
 
-  const isComment = raw.event === COMMENT_EVENT;
-  const normalizedType: NormalizedEventType | undefined = isComment
-    ? "comment.received"
-    : DM_EVENT_TYPES[raw.event];
-
-  if (!normalizedType) {
-    // Reactions, account lifecycle, calls, etc. — real Zernio event types
-    // this adapter does not map. Not an error: skip and keep processing the
-    // rest of the batch.
+  if (!isKnownPlatform(raw.account.platform)) {
     console.warn(
-      `[zernio] skipping unsupported event type "${raw.event}" (event id: ${raw.id})`,
+      `[zernio] skipping event for unsupported platform "${raw.account.platform}" (event id: ${raw.id})`,
     );
     return null;
   }
 
+  if (raw.event === COMMENT_EVENT) {
+    return buildCommentEvent(raw, raw.account.platform);
+  }
+
+  const dmType = DM_EVENT_TYPES[raw.event];
+  if (dmType) {
+    return buildDmEvent(raw, dmType, raw.account.platform);
+  }
+
+  // Reactions, account lifecycle, calls, etc. — real Zernio event types this
+  // adapter does not map. Not an error: skip and keep processing the batch.
+  console.warn(
+    `[zernio] skipping unsupported event type "${raw.event}" (event id: ${raw.id})`,
+  );
+  return null;
+}
+
+function buildDmEvent(
+  raw: ZernioWebhookEnvelope,
+  type: NormalizedEventType,
+  platform: ChannelPlatform,
+): NormalizedEvent | null {
   if (!isZernioMessage(raw.message)) {
     console.warn(
       `[zernio] skipping "${raw.event}" event with no usable message payload (event id: ${raw.id})`,
@@ -256,52 +308,18 @@ function parseSingleEnvelope(raw: unknown): NormalizedEvent | null {
     return null;
   }
 
-  if (isComment && !isZernioPost(raw.post)) {
-    // A comment without its post can't be grouped under a post thread
-    // (docs/architecture/06-data-model.md#conversations) — skip, don't guess.
-    console.warn(
-      `[zernio] skipping "comment.received" event with no usable post payload (event id: ${raw.id})`,
-    );
-    return null;
-  }
-
-  if (!isKnownPlatform(raw.account.platform)) {
-    console.warn(
-      `[zernio] skipping event for unsupported platform "${raw.account.platform}" (event id: ${raw.id})`,
-    );
-    return null;
-  }
-
-  const platform = raw.account.platform;
-
   return {
-    type: normalizedType,
+    type,
     providerEventId: raw.id,
     provider: "zernio",
     platform,
     externalAccountId: raw.account.id,
-    interactionKind: isComment ? "comment" : "dm",
+    interactionKind: "dm",
     // `conversation.id` (Zernio's internal conversation ID) rather than
-    // `conversation.platformConversationId`: same choice as `message.id`
-    // below (Zernio's internal message ID, not `platformMessageId`) — this
-    // adapter consistently keys on Zernio's own IDs, which is what
-    // `webhook_events`/`messages` idempotency needs (the provider in
-    // §5's terms is Zernio, not the underlying platform). For comments this
-    // id groups every comment of one post into a single conversation (post
-    // thread); the post's own identity/preview travels in `postMetadata`.
-    conversation: {
-      externalId: raw.conversation.id,
-      ...(isComment && raw.post
-        ? {
-            postMetadata: {
-              externalId: raw.post.id,
-              text: raw.post.text ?? "",
-              permalink: raw.post.permalink ?? null,
-              platform,
-            },
-          }
-        : {}),
-    },
+    // `conversation.platformConversationId`: this adapter consistently keys on
+    // Zernio's own IDs, which is what `webhook_events`/`messages` idempotency
+    // needs (the provider in §5's terms is Zernio, not the underlying platform).
+    conversation: { externalId: raw.conversation.id },
     message: {
       externalId: raw.message.id,
       text: raw.message.text ?? "",
@@ -310,12 +328,61 @@ function parseSingleEnvelope(raw: unknown): NormalizedEvent | null {
         externalId: raw.message.sender.id,
         displayName: raw.message.sender.name ?? undefined,
       },
-      ...(isComment && raw.message.parentId
-        ? { parentExternalId: raw.message.parentId }
+    },
+    // Kept in full per docs/architecture/05-channels.md#нормализованное-событие.
+    rawMetadata: raw as unknown as Record<string, unknown>,
+  };
+}
+
+function buildCommentEvent(
+  raw: ZernioWebhookEnvelope,
+  platform: ChannelPlatform,
+): NormalizedEvent | null {
+  if (!isZernioComment(raw.comment)) {
+    console.warn(
+      `[zernio] skipping "comment.received" event with no usable comment payload (event id: ${raw.id})`,
+    );
+    return null;
+  }
+
+  const comment = raw.comment;
+  // The comment thread is grouped by the post. `platformPostId` is always
+  // present; the internal `postId` is null for posts not published through
+  // Zernio, so it can't be the grouping key. This is also the value Zernio's
+  // reply endpoint (POST /v1/inbox/comments/{postId}) accepts.
+  const postExternalId = comment.platformPostId;
+
+  return {
+    type: "comment.received",
+    providerEventId: raw.id,
+    provider: "zernio",
+    platform,
+    externalAccountId: raw.account.id,
+    interactionKind: "comment",
+    conversation: {
+      externalId: postExternalId,
+      // The webhook does not carry the post caption or permalink — only ids.
+      // Post text (used in the draft prompt / list title) is a later fetch.
+      postMetadata: {
+        platformPostId: comment.platformPostId,
+        postId: comment.postId ?? raw.post?.id ?? null,
+        platform,
+      },
+    },
+    message: {
+      externalId: comment.id,
+      text: comment.text ?? "",
+      attachments: [],
+      sender: {
+        externalId: comment.author.id,
+        displayName:
+          comment.author.name ?? comment.author.username ?? undefined,
+      },
+      ...(comment.parentCommentId
+        ? { parentExternalId: comment.parentCommentId }
         : {}),
     },
-    // Kept in full per docs/architecture/05-channels.md#нормализованное-событие
-    // — nothing is lost even where the assumed shape above is wrong.
+    // Kept in full per docs/architecture/05-channels.md#нормализованное-событие.
     rawMetadata: raw as unknown as Record<string, unknown>,
   };
 }
