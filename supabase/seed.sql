@@ -210,7 +210,7 @@ values
     'zernio',
     'telegram',
     'seed-a-telegram',
-    '{"dm":true,"comments":false}'::jsonb,
+    '{"responseWindowHours":null,"supportsAttachments":true,"supportsReadReceipts":true,"maxMessageLength":4096,"threadingStyle":"flat","supportsComments":false}'::jsonb,
     'active'
   ),
   (
@@ -220,7 +220,7 @@ values
     'zernio',
     'instagram',
     'seed-a-instagram',
-    '{"dm":true,"comments":true}'::jsonb,
+    '{"responseWindowHours":24,"supportsAttachments":true,"supportsReadReceipts":true,"maxMessageLength":1000,"threadingStyle":"parent","supportsComments":true}'::jsonb,
     'active'
   ),
   (
@@ -234,7 +234,7 @@ values
     'zernio',
     'telegram',
     'seed-a-telegram-support',
-    '{"dm":true,"comments":false}'::jsonb,
+    '{"responseWindowHours":null,"supportsAttachments":true,"supportsReadReceipts":true,"maxMessageLength":4096,"threadingStyle":"flat","supportsComments":false}'::jsonb,
     'active'
   ),
   (
@@ -244,7 +244,7 @@ values
     'zernio',
     'telegram',
     'seed-b-telegram',
-    '{"dm":true,"comments":false}'::jsonb,
+    '{"responseWindowHours":null,"supportsAttachments":true,"supportsReadReceipts":true,"maxMessageLength":4096,"threadingStyle":"flat","supportsComments":false}'::jsonb,
     'active'
   ),
   (
@@ -254,7 +254,7 @@ values
     'zernio',
     'instagram',
     'seed-b-instagram',
-    '{"dm":true,"comments":true}'::jsonb,
+    '{"responseWindowHours":24,"supportsAttachments":true,"supportsReadReceipts":true,"maxMessageLength":1000,"threadingStyle":"parent","supportsComments":true}'::jsonb,
     'active'
   )
 on conflict (id) do update

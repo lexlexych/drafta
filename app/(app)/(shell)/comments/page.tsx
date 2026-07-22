@@ -44,7 +44,7 @@ export default async function CommentsPage({
   const supabase = await createServerSupabaseClient();
   const channels = await listChannelConnections(supabase, workspace.id);
   const commentCapableChannels = channels.filter(
-    (channel) => channel.capabilities.comments === true,
+    (channel) => channel.capabilities.supportsComments === true,
   );
   const hasCommentChannels = commentCapableChannels.length > 0;
 
