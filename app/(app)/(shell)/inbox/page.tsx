@@ -16,6 +16,7 @@ import { DraftPanel } from "../_components/draft-panel";
 import { FilterChips } from "../_components/filter-chips";
 import { BackIcon, ClockIcon, PictureIcon } from "../_components/icons";
 import { QUERY_KEYS, buildHref, firstParam } from "../_components/navigation";
+import { RetrySendButton } from "../_components/retry-send-button";
 import styles from "../_components/panes.module.css";
 import uiStyles from "../_components/ui.module.css";
 import { MarkThreadRead } from "./mark-thread-read";
@@ -186,6 +187,12 @@ export default async function InboxPage({
                     {message.time}
                     {message.deliveryLabel ? ` · ${message.deliveryLabel}` : ""}
                   </time>
+                  {message.canRetrySend ? (
+                    <RetrySendButton
+                      conversationId={thread.conversationId}
+                      messageId={message.id}
+                    />
+                  ) : null}
                 </div>
               ))}
             </div>
@@ -197,7 +204,11 @@ export default async function InboxPage({
                 workspaceId={workspace.id}
                 conversationId={thread.conversationId}
               />
-              <Composer placeholder="Написать ответ вручную…" />
+              <Composer
+                conversationId={thread.conversationId}
+                placeholder="Написать ответ вручную…"
+                replyWindowWarning={thread.replyWindowWarning}
+              />
             </div>
           </>
         ) : null}

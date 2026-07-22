@@ -497,6 +497,26 @@
   background: var(--accent-hov);
 }
 
+.sendButton:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.composerWarning {
+  font-size: 12px;
+  color: var(--ink2);
+  background: var(--surface2);
+  border: 1px solid var(--line2);
+  border-radius: 10px;
+  padding: 6px 10px;
+  margin-bottom: 6px;
+}
+
+.retrySend {
+  margin-top: 4px;
+  align-self: flex-start;
+}
+
 /* ---------- мобильная компоновка ---------- */
 
 @media (max-width: 899px) {

@@ -14,6 +14,7 @@ import {
   discardDraftAction,
   editDraftAction,
   regenerateDraftAction,
+  sendDraftAction,
 } from "../inbox/actions";
 import { RegenerateIcon, SparkIcon } from "./icons";
 import { showToast } from "./stub";
@@ -56,7 +57,7 @@ function WorkspaceDraftPanel({
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState(draft?.text ?? "");
   const [pendingAction, setPendingAction] = useState<
-    "edit" | "discard" | "regenerate" | null
+    "edit" | "discard" | "regenerate" | "send" | null
   >(null);
 
   useEffect(() => {
@@ -121,6 +122,22 @@ function WorkspaceDraftPanel({
     );
   };
 
+  const send = async () => {
+    setPendingAction("send");
+    const result = await sendDraftAction(conversationId, activeDraft.id);
+    setPendingAction(null);
+
+    if (!result.ok) {
+      showToast(result.error);
+      return;
+    }
+
+    // The realtime reducer will also drop the panel once the draft row's
+    // `sent` status arrives — clearing here just makes the UI immediate.
+    setActiveDraft(null);
+    showToast("Ответ отправляется…");
+  };
+
   return (
     <div className={styles.draft} data-draft-status={activeDraft.status}>
       <DraftHeader
@@ -170,10 +187,10 @@ function WorkspaceDraftPanel({
             <button
               type="button"
               className={`${uiStyles.button} ${uiStyles.buttonPrimary}`}
-              disabled
-              title="Отправка — этап 3"
+              disabled={isPending}
+              onClick={() => void send()}
             >
-              Принять и отправить — этап 3
+              {pendingAction === "send" ? "Отправляется…" : "Принять и отправить"}
             </button>
             <button
               type="button"

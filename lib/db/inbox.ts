@@ -15,6 +15,7 @@ import {
   type ChannelBadgeView,
   type ChannelFilterView,
   type ConversationListView,
+  type ThreadMessageView,
   type ThreadView,
 } from "@/lib/mock";
 import {
@@ -95,13 +96,26 @@ type MessageRow = {
   created_at: string;
 };
 
-export type InboxThreadView = Omit<ThreadView, "draft"> & {
+export type InboxThreadMessageView = ThreadMessageView & {
+  /** Failed outgoing message — the thread renders the retry button (stage 3). */
+  canRetrySend: boolean;
+};
+
+export type InboxThreadView = Omit<ThreadView, "draft" | "messages"> & {
   draft: ActiveDraftView | null;
+  messages: InboxThreadMessageView[];
+  /**
+   * Set when the platform's response window (channel capabilities) has
+   * already closed — the composer warns but does not block
+   * (docs/architecture/16-rollout-plan.md, stage 3): the provider's own
+   * rejection turns into `failed` + retry.
+   */
+  replyWindowWarning: string | null;
 };
 
 const DELIVERY_LABELS: Record<string, string | null> = {
   received: null,
-  pending: null,
+  pending: "Отправляется…",
   sent: "Отправлено",
   delivered: "Доставлено",
   read: "Прочитано",
@@ -478,6 +492,10 @@ export async function getThreadView(
     category: null,
     replyWindowLabel:
       hoursLeft !== null && hoursLeft > 0 ? `Окно ответа: ${Math.round(hoursLeft)} ч` : null,
+    replyWindowWarning:
+      hoursLeft !== null && hoursLeft <= 0
+        ? `Окно ответа (${responseWindowHours} ч) истекло — доставка не гарантируется.`
+        : null,
     messages: messages.map((message) => ({
       id: message.id,
       direction: message.direction === "outgoing" ? ("out" as const) : ("in" as const),
@@ -485,6 +503,8 @@ export async function getThreadView(
       time: formatMessageTime(message.created_at, nowIso),
       deliveryLabel: DELIVERY_LABELS[message.delivery_status] ?? null,
       attachmentName: attachmentIndicatorLabel(message.attachments),
+      canRetrySend:
+        message.direction === "outgoing" && message.delivery_status === "failed",
     })),
     debounceNote: null,
     draft,

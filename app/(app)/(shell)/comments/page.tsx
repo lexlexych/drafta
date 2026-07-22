@@ -10,7 +10,7 @@ import {
 import { Avatar } from "../_components/avatar";
 import { CategoryFilter } from "../_components/category-filter";
 import { CategoryChip, ChannelChip } from "../_components/chips";
-import { Composer } from "../_components/composer";
+import { MockComposer } from "../_components/composer";
 import { DraftPanel } from "../_components/draft-panel";
 import { FilterChips } from "../_components/filter-chips";
 import { BackIcon, CommentsIcon, ExternalIcon } from "../_components/icons";
@@ -196,7 +196,7 @@ export default async function CommentsPage({
                   channelName={post.channel.name}
                 />
               ) : null}
-              <Composer placeholder="Ответить на комментарий вручную…" />
+              <MockComposer placeholder="Ответить на комментарий вручную…" />
             </div>
           </>
         ) : null}
