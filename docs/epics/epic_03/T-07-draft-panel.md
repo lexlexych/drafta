@@ -3,7 +3,7 @@ id: T-07
 epic: E-003
 title: "Панель черновика в треде: реальные drafts + Realtime"
 type: dev
-status: in_progress
+status: done
 depends_on: [T-05]
 created: 2026-07-19
 updated: 2026-07-21

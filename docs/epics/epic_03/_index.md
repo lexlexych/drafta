@@ -88,7 +88,7 @@ email, IBAN, карты) маскируются плейсхолдерами с 
 | T-04 | [Сборка промпта по структуре §8 и debug-лог](T-04-prompt-builder.md) | dev | T-02, T-03 | done |
 | T-05 | [generate-draft: дебаунс, пайплайн, supersede, регенерация](T-05-generate-draft.md) | dev | T-01, T-02, T-03, T-04 | done |
 | T-06 | [Настройки → AI: форма реальных ai_settings](T-06-ai-settings-form.md) | dev | — | done |
-| T-07 | [Панель черновика в треде: реальные drafts + Realtime](T-07-draft-panel.md) | dev | T-05 | todo |
+| T-07 | [Панель черновика в треде: реальные drafts + Realtime](T-07-draft-panel.md) | dev | T-05 | done |
 | T-08 | [Executive summary — ручные шаги](T-08-executive-summary.md) | manual | T-01–T-07 | todo |
 
 ## Критерий готовности эпика
