@@ -7,7 +7,7 @@ import { usePathname, useSearchParams } from "next/navigation";
 import { useState } from "react";
 
 import type { ChannelPlatform } from "@/lib/channels/types";
-import type { NavigationCountersView, SettingsSectionView } from "@/lib/mock";
+import type { SettingsSectionView } from "@/lib/mock";
 
 import { Avatar } from "./avatar";
 import { PlatformDot } from "./chips";
@@ -24,6 +24,7 @@ import {
   SECTIONS,
   buildHref,
   sectionIdForPathname,
+  type ContactsNavCounters,
   type InboxNavCounters,
   type SectionId,
 } from "./navigation";
@@ -42,14 +43,10 @@ export type SidebarProps = {
   workspaceName: string;
   userName: string;
   userRole: string;
-  counters: NavigationCountersView;
   /**
    * Real per-channel DM unread counts (docs/epics/epic_02/T-05-inbox-messages.md,
    * `lib/db/inbox.ts`'s `getInboxNavigationCounters`) — drives the
-   * "Сообщения" nav item and its channel expand specifically. Every other
-   * section (Комментарии, Контакты, Дашборд) still reads `counters`
-   * (mock, E-001/T-07) — out of scope for this ticket (epic E-002 "Вне
-   * скоупа").
+   * "Сообщения" nav item and its channel expand.
    */
   messagesCounters: InboxNavCounters;
   /**
@@ -58,6 +55,11 @@ export type SidebarProps = {
    * "Комментарии" nav item and its channel expand.
    */
   commentsCounters: InboxNavCounters;
+  /**
+   * Real per-channel contact counts (этап 7, `lib/db/contacts.ts`'s
+   * `getContactNavigationCounters`) — drives the "Контакты" channel expand.
+   */
+  contactsCounters: ContactsNavCounters;
   settingsSections: SettingsSectionView[];
 };
 
@@ -72,9 +74,9 @@ export function Sidebar({
   workspaceName,
   userName,
   userRole,
-  counters,
   messagesCounters,
   commentsCounters,
+  contactsCounters,
   settingsSections,
 }: SidebarProps) {
   const pathname = usePathname();
@@ -102,18 +104,6 @@ export function Sidebar({
     settings: 0,
   };
 
-  function channelCount(sectionId: SectionId, channelId: string): number {
-    const channel = counters.channels.find((entry) => entry.id === channelId);
-
-    if (!channel) {
-      return 0;
-    }
-
-    // Only "Контакты" still reads mock per-channel counts; inbox and comments
-    // use their real counters in `subListChannelsFor`.
-    return channel.contactCount;
-  }
-
   function subListChannelsFor(sectionId: SectionId): SubListChannel[] {
     if (sectionId === "inbox") {
       return messagesCounters.channels.map((channel) => ({
@@ -133,12 +123,16 @@ export function Sidebar({
       }));
     }
 
-    return counters.channels.map((channel) => ({
-      id: channel.id,
-      name: channel.name,
-      platform: channel.platform,
-      count: channelCount(sectionId, channel.id),
-    }));
+    if (sectionId === "contacts") {
+      return contactsCounters.channels.map((channel) => ({
+        id: channel.id,
+        name: channel.name,
+        platform: channel.platform,
+        count: channel.contactCount,
+      }));
+    }
+
+    return [];
   }
 
   return (

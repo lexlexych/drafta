@@ -1,13 +1,22 @@
 import Link from "next/link";
 
-import { getChannelFilters, getContactCard, getContactList } from "@/lib/mock";
+import {
+  getContactCardView,
+  getContactChannelFilters,
+  getContactListView,
+  listChannelConnections,
+  listMergeCandidates,
+} from "@/lib/db/contacts";
+import { createServerSupabaseClient } from "@/lib/db/server";
+import { getAuthenticatedUser, getCurrentWorkspace } from "@/lib/db/workspace";
 
 import { Avatar } from "../_components/avatar";
 import { PlatformDot } from "../_components/chips";
 import { FilterChips } from "../_components/filter-chips";
 import { BackIcon } from "../_components/icons";
 import { QUERY_KEYS, buildHref, firstParam } from "../_components/navigation";
-import { StubButton } from "../_components/stub";
+import { ContactNotes } from "./contact-notes";
+import { MergeContact } from "./merge-contact";
 import cardStyles from "./contacts.module.css";
 import styles from "../_components/panes.module.css";
 import uiStyles from "../_components/ui.module.css";
@@ -25,9 +34,30 @@ export default async function ContactsPage({
   const channelId = firstParam(params[QUERY_KEYS.channel]);
   const contactId = firstParam(params[QUERY_KEYS.contact]);
 
-  const list = getContactList(channelId);
+  const user = await getAuthenticatedUser();
+  const workspace = user ? await getCurrentWorkspace(user.id) : null;
+
+  if (!workspace) {
+    // The shell layout already gates auth/workspace; this is a defensive null.
+    return null;
+  }
+
+  const supabase = await createServerSupabaseClient();
+  const channels = await listChannelConnections(supabase, workspace.id);
+  const [filters, list] = await Promise.all([
+    getContactChannelFilters(supabase, workspace.id, channels),
+    getContactListView(supabase, workspace.id, channels, { channelId }),
+  ]);
+
   const openedId = contactId ?? list.items[0]?.id ?? null;
-  const card = openedId ? getContactCard(openedId) : null;
+  let card: Awaited<ReturnType<typeof getContactCardView>> = null;
+  let mergeCandidates: Awaited<ReturnType<typeof listMergeCandidates>> = [];
+  if (openedId) {
+    [card, mergeCandidates] = await Promise.all([
+      getContactCardView(supabase, workspace.id, channels, openedId),
+      listMergeCandidates(supabase, workspace.id, openedId),
+    ]);
+  }
   const isDetail = contactId !== null;
 
   const listParams = { [QUERY_KEYS.channel]: channelId };
@@ -42,7 +72,7 @@ export default async function ContactsPage({
 
         <FilterChips
           pathname={PATHNAME}
-          channels={getChannelFilters("contacts")}
+          channels={filters}
           activeChannelId={channelId}
         />
 
@@ -110,11 +140,7 @@ export default async function ContactsPage({
                       ))}
                     </div>
                   </div>
-                  <StubButton
-                    className={`${uiStyles.button} ${uiStyles.buttonSmall} ${uiStyles.buttonSecondary}`}
-                  >
-                    Склеить с другим…
-                  </StubButton>
+                  <MergeContact contactId={card.id} candidates={mergeCandidates} />
                 </div>
 
                 <div className={uiStyles.card}>
@@ -133,13 +159,11 @@ export default async function ContactsPage({
 
                 <div className={uiStyles.card}>
                   <h3>Заметки</h3>
-                  <div className={cardStyles.notes}>
-                    {card.notes ? (
-                      card.notes
-                    ) : (
-                      <span className={cardStyles.notesEmpty}>Пока пусто</span>
-                    )}
-                  </div>
+                  <ContactNotes
+                    key={card.id}
+                    contactId={card.id}
+                    notes={card.notes}
+                  />
                 </div>
 
                 <div className={uiStyles.card}>

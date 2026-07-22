@@ -2,10 +2,11 @@ import { Suspense, type ReactNode } from "react";
 import { redirect } from "next/navigation";
 
 import { getCommentsNavigationCounters } from "@/lib/db/comments-inbox";
+import { getContactNavigationCounters } from "@/lib/db/contacts";
 import { getInboxNavigationCounters, listChannelConnections } from "@/lib/db/inbox";
 import { createServerSupabaseClient } from "@/lib/db/server";
 import { getAuthenticatedUser, getCurrentWorkspace } from "@/lib/db/workspace";
-import { SETTINGS_SECTIONS, getNavigationCounters } from "@/lib/mock";
+import { SETTINGS_SECTIONS } from "@/lib/mock";
 
 import { InboxRealtimeSync } from "./_components/inbox-realtime-sync";
 import { Sidebar } from "./_components/sidebar";
@@ -18,9 +19,9 @@ import styles from "./_components/shell.module.css";
  *
  * Гейты: аутентификацию проверяет `app/(app)/layout.tsx`, наличие workspace —
  * этот layout (нет workspace → онбординг). Workspace и пользователь — реальные;
- * пункт «Сообщения» (счётчик + расхлоп по каналам) — реальные данные
- * `lib/db/inbox.ts` (T-05); остальные счётчики и содержимое разделов —
- * mock-данные T-07 (Комментарии, Контакты, Дашборд — вне скоупа эпика).
+ * счётчики «Сообщения» (`lib/db/inbox.ts`, T-05), «Комментарии»
+ * (`lib/db/comments-inbox.ts`, этап 5) и «Контакты» (`lib/db/contacts.ts`,
+ * этап 7) — реальные данные; «Дашборд» пока на mock (вне скоупа).
  * `InboxRealtimeSync` (T-06) держит те же счётчики и открытый инбокс живыми —
  * см. его собственный докстринг.
  */
@@ -39,12 +40,12 @@ export default async function ShellLayout({
     redirect("/onboarding");
   }
 
-  const counters = getNavigationCounters();
   const supabase = await createServerSupabaseClient();
   const channels = await listChannelConnections(supabase, workspace.id);
-  const [messagesCounters, commentsCounters] = await Promise.all([
+  const [messagesCounters, commentsCounters, contactsCounters] = await Promise.all([
     getInboxNavigationCounters(supabase, workspace.id, channels),
     getCommentsNavigationCounters(supabase, workspace.id, channels),
+    getContactNavigationCounters(supabase, workspace.id, channels),
   ]);
   const userName = user.email?.split("@")[0] ?? "Пользователь";
 
@@ -55,9 +56,9 @@ export default async function ShellLayout({
           workspaceName={workspace.name}
           userName={userName}
           userRole={workspace.role}
-          counters={counters}
           messagesCounters={messagesCounters}
           commentsCounters={commentsCounters}
+          contactsCounters={contactsCounters}
           settingsSections={SETTINGS_SECTIONS}
         />
       </Suspense>

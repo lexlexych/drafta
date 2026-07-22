@@ -98,11 +98,22 @@ export type LoadedDraftContext = {
   selectedCategory: SelectedPipelineCategory;
   /** Post text for a comment thread (docs/architecture/08-ai-subsystem.md#структура-промпта §4). Empty for DM. */
   postText: string;
+  /**
+   * The DM contact's notes (docs/architecture/16-rollout-plan.md, этап 7). Empty
+   * for comment threads — their authors differ, so there is no single contact.
+   */
+  contactNotes: string;
 };
 
 type MaskedDraftContext = Omit<
   LoadedDraftContext,
-  "aiSettings" | "messages" | "batchMessages" | "knowledgeBase" | "selectedCategory" | "postText"
+  | "aiSettings"
+  | "messages"
+  | "batchMessages"
+  | "knowledgeBase"
+  | "selectedCategory"
+  | "postText"
+  | "contactNotes"
 > & {
   aiSettings: PipelineAiSettings;
   messages: PipelineMessage[];
@@ -110,6 +121,7 @@ type MaskedDraftContext = Omit<
   knowledgeBase: KnowledgeBaseContext;
   selectedCategory: SelectedPipelineCategory;
   postText: string;
+  contactNotes: string;
   entities: MaskedEntity[];
 };
 
@@ -448,7 +460,7 @@ async function loadContext(
   const supabase = createAdminSupabaseClient();
   const { data: conversation, error: conversationError } = await supabase
     .from("conversations")
-    .select("id, workspace_id, kind, channel_connection_id, post_metadata")
+    .select("id, workspace_id, kind, channel_connection_id, contact_id, post_metadata")
     .eq("workspace_id", input.workspaceId)
     .eq("id", input.conversationId)
     .maybeSingle();
@@ -467,6 +479,7 @@ async function loadContext(
     { data: settings, error: settingsError },
     { data: connection, error: connectionError },
     { data: messageRows, error: messagesError },
+    { data: contactRow, error: contactError },
     knowledgeFiles,
     categories,
   ] = await Promise.all([
@@ -491,6 +504,16 @@ async function loadContext(
       .order("created_at", { ascending: false })
       .order("id", { ascending: false })
       .limit(DRAFT_CONTEXT_MESSAGE_LIMIT),
+    // Contact notes feed the prompt (docs/architecture/16-rollout-plan.md, этап
+    // 7). Only DM has a single contact; a comment thread's authors differ.
+    conversationKind === "dm" && conversation.contact_id
+      ? supabase
+          .from("contacts")
+          .select("notes")
+          .eq("workspace_id", input.workspaceId)
+          .eq("id", conversation.contact_id)
+          .maybeSingle()
+      : Promise.resolve({ data: null, error: null }),
     // Reuse the existing workspace-scoped KB and category server helpers;
     // there is no parallel model or storage for the generation pipeline.
     listKnowledgeFiles(supabase, input.workspaceId),
@@ -500,6 +523,7 @@ async function loadContext(
   assertQuerySucceeded(settingsError, "Loading AI settings");
   assertQuerySucceeded(connectionError, "Loading channel capabilities");
   assertQuerySucceeded(messagesError, "Loading conversation messages");
+  assertQuerySucceeded(contactError, "Loading contact notes");
 
   if (!settings) {
     throw new Error("Workspace AI settings are unavailable.");
@@ -563,6 +587,8 @@ async function loadContext(
       conversationKind === "comments"
         ? postTextFromMetadata(conversation.post_metadata)
         : "",
+    contactNotes:
+      contactRow && typeof contactRow.notes === "string" ? contactRow.notes : "",
   };
 }
 
@@ -578,6 +604,7 @@ function maskContext(context: LoadedDraftContext): MaskedDraftContext {
     context.selectedCategory.description,
     categoryInstruction,
     context.postText,
+    context.contactNotes,
   ];
   const { masked, entities } = maskMessages(values);
   let index = 0;
@@ -595,12 +622,14 @@ function maskContext(context: LoadedDraftContext): MaskedDraftContext {
   const categoryDescription = masked[index++]!;
   const maskedCategoryInstruction = masked[index++]!;
   const postText = masked[index++]!;
+  const contactNotes = masked[index++]!;
 
   return {
     ...context,
     messages,
     batchMessages,
     postText,
+    contactNotes,
     aiSettings: { ...context.aiSettings, tone, language, signature },
     knowledgeBase: { ...context.knowledgeBase, text: knowledgeBaseText },
     selectedCategory: {
@@ -793,6 +822,7 @@ export async function runDraftPipeline(
       conversationKind: maskedContext.conversationKind,
       knowledgeBase: maskedContext.knowledgeBase,
       selectedCategory: maskedContext.selectedCategory,
+      maskedContactNotes: maskedContext.contactNotes || undefined,
       maskedPostText:
         maskedContext.conversationKind === "comments"
           ? maskedContext.postText
