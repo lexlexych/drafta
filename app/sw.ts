@@ -1,5 +1,5 @@
 import type { PrecacheEntry, RuntimeCaching, SerwistGlobalConfig } from "serwist";
-import { CacheFirst, ExpirationPlugin, NetworkOnly, Serwist } from "serwist";
+import { CacheFirst, ExpirationPlugin, Serwist } from "serwist";
 
 declare global {
   interface WorkerGlobalScope extends SerwistGlobalConfig {
@@ -11,11 +11,15 @@ declare const self: ServiceWorkerGlobalScope;
 
 /**
  * Границы офлайна (docs/architecture/11-realtime-pwa.md#границы-офлайна):
- * кэшируется **только оболочка приложения** — сборочные ассеты и иконки. Любой
- * запрос с данными (страницы `(app)/*`, `/api/*`, Supabase, вебхуки) идёт
- * `NetworkOnly` — данные всегда из сети (минимизация данных, §15). Быстрая
- * навигация между разделами достигается прекэшем статики + `<Link prefetch>`
- * Next.js, а не кэшем ответов с данными.
+ * кэшируется **только оболочка приложения** — сборочные ассеты и иконки.
+ *
+ * Здесь перечислены ТОЛЬКО статичные ассеты. Всё остальное — навигации на
+ * страницы `(app)/*`, `/api/*`, Supabase, вебхуки — сюда не попадает и
+ * обрабатывается браузером напрямую (данные всегда из сети, §15). Важно, что
+ * воркер **не перехватывает навигации**: proxy может ответить редиректом на
+ * `/login`, а service worker не вправе вернуть redirected-ответ на
+ * навигационный запрос (иначе Workbox падает с `no-response`). Быстрая
+ * навигация достигается прекэшем статики + `<Link prefetch>` Next.js.
  */
 const runtimeCaching: RuntimeCaching[] = [
   {
@@ -50,18 +54,12 @@ const runtimeCaching: RuntimeCaching[] = [
       ],
     }),
   },
-  {
-    // Всё остальное — включая навигацию на страницы с данными и /api — только из сети.
-    matcher: () => true,
-    handler: new NetworkOnly(),
-  },
 ];
 
 const serwist = new Serwist({
   precacheEntries: self.__SW_MANIFEST,
   skipWaiting: true,
   clientsClaim: true,
-  navigationPreload: true,
   runtimeCaching,
 });
 
