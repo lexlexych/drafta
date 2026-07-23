@@ -3,6 +3,11 @@
 import { useEffect, useState } from "react";
 
 import { isIOS, isStandaloneDisplay } from "@/lib/pwa/client";
+import {
+  isInstallAvailable,
+  promptInstall,
+  subscribeInstallAvailability,
+} from "@/lib/pwa/install-store";
 
 import styles from "./pwa.module.css";
 import uiStyles from "./ui.module.css";
@@ -11,19 +16,7 @@ const DISMISSED_KEY = "drafta:install-dismissed";
 // После отклонения не показываем предложение снова 14 дней, чтобы не надоедать.
 const DISMISS_TTL_MS = 14 * 24 * 60 * 60 * 1000;
 
-/**
- * Событие `beforeinstallprompt` (Chromium) — не в стандартных типах DOM.
- * Появляется только там, где установка поддерживается «в один клик».
- */
-type BeforeInstallPromptEvent = Event & {
-  prompt: () => Promise<void>;
-  userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
-};
-
-type Scenario =
-  | { kind: "hidden" }
-  | { kind: "prompt"; event: BeforeInstallPromptEvent }
-  | { kind: "ios" };
+type Scenario = { kind: "hidden" } | { kind: "prompt" } | { kind: "ios" };
 
 function wasRecentlyDismissed(): boolean {
   try {
@@ -66,13 +59,17 @@ export function InstallPrompt() {
       return;
     }
 
-    const onBeforeInstallPrompt = (event: Event) => {
-      // Отменяем мини-инфобар браузера, показываем собственное предложение.
-      event.preventDefault();
-      setScenario({ kind: "prompt", event: event as BeforeInstallPromptEvent });
+    // Событие могло быть перехвачено ранним head-скриптом ещё до монтирования —
+    // читаем текущее состояние и подписываемся на будущие захваты.
+    const showIfAvailable = () => {
+      if (isInstallAvailable()) {
+        setScenario((current) =>
+          current.kind === "hidden" ? { kind: "prompt" } : current,
+        );
+      }
     };
-
-    window.addEventListener("beforeinstallprompt", onBeforeInstallPrompt);
+    showIfAvailable();
+    const unsubscribe = subscribeInstallAvailability(showIfAvailable);
 
     // iOS не эмитит beforeinstallprompt — показываем инструкцию отложенно,
     // чтобы не перебивать первый экран сразу после входа.
@@ -92,7 +89,7 @@ export function InstallPrompt() {
     window.addEventListener("appinstalled", onInstalled);
 
     return () => {
-      window.removeEventListener("beforeinstallprompt", onBeforeInstallPrompt);
+      unsubscribe();
       window.removeEventListener("appinstalled", onInstalled);
       if (iosTimer) {
         clearTimeout(iosTimer);
@@ -114,8 +111,7 @@ export function InstallPrompt() {
       return;
     }
     try {
-      await scenario.event.prompt();
-      await scenario.event.userChoice;
+      await promptInstall();
     } catch (error) {
       console.error("[pwa] install prompt failed", error);
     } finally {

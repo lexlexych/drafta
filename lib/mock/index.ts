@@ -208,6 +208,7 @@ export type SettingsSectionId =
   | "knowledge"
   | "team"
   | "notifications"
+  | "app"
   | "privacy";
 
 export type SettingsSectionView = {
@@ -962,6 +963,11 @@ export const SETTINGS_SECTIONS: SettingsSectionView[] = [
   },
   { id: "team", title: "Команда", description: "Участники и приглашения" },
   { id: "notifications", title: "Уведомления", description: "Частота push" },
+  {
+    id: "app",
+    title: "Приложение",
+    description: "Установка на устройство",
+  },
   {
     id: "privacy",
     title: "Приватность",
