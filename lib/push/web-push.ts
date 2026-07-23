@@ -43,9 +43,32 @@ function ensureConfigured(): void {
     );
   }
 
-  const subject = process.env.VAPID_SUBJECT ?? "mailto:support@drafta.app";
-  webpush.setVapidDetails(subject, publicKey, privateKey);
+  webpush.setVapidDetails(
+    normalizeVapidSubject(process.env.VAPID_SUBJECT),
+    publicKey,
+    privateKey,
+  );
   configured = true;
+}
+
+/**
+ * `web-push` требует, чтобы VAPID subject был URL — `mailto:` или `https://`.
+ * Голый email (`user@example.com`) роняет `setVapidDetails` с ошибкой
+ * «Vapid subject is not a valid URL», поэтому нормализуем его в `mailto:`.
+ */
+export function normalizeVapidSubject(raw: string | undefined): string {
+  const value = raw?.trim();
+  if (!value) {
+    return "mailto:support@drafta.app";
+  }
+  if (
+    value.startsWith("mailto:") ||
+    value.startsWith("https://") ||
+    value.startsWith("http://")
+  ) {
+    return value;
+  }
+  return `mailto:${value}`;
 }
 
 /** Push-конфигурация присутствует (ключи заданы) — можно вообще пытаться слать. */
