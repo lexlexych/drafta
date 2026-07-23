@@ -74,7 +74,9 @@ npx inngest-cli dev
 | `INNGEST_EVENT_KEY` | отправка событий |
 | `INNGEST_SIGNING_KEY` | подпись вызовов функций |
 | `VAPID_PUBLIC_KEY` | Web Push ([11. PWA](11-realtime-pwa.md#web-push)) |
-| `VAPID_PRIVATE_KEY` | Web Push |
+| `NEXT_PUBLIC_VAPID_PUBLIC_KEY` | тот же публичный VAPID-ключ, экспонированный браузеру для `pushManager.subscribe` |
+| `VAPID_PRIVATE_KEY` | Web Push — **только сервер** |
+| `VAPID_SUBJECT` | контакт VAPID (`mailto:`/URL); по умолчанию `mailto:support@drafta.app` |
 | `POSTMARK_TOKEN` | API-токен — для будущих `notify-existing-user` и email-канала. **SMTP-креды живут в дашборде Supabase, не в env приложения** |
 | `CREDENTIALS_ENCRYPTION_KEY` | шифрование токенов каналов — на будущее для Meta ([`channel_connections`](06-data-model.md#channel_connections)) |
 

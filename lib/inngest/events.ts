@@ -42,6 +42,19 @@ export type MessageSendRequestedEvent = {
 };
 
 /**
+ * Payload for the `push/notify.requested` Inngest event
+ * (docs/architecture/11-realtime-pwa.md#web-push) — emitted after a draft is
+ * ready for a new incoming message. IDs only (vibecoding rule 7); the
+ * `send-push` function reloads the contact/channel names server-side and never
+ * puts message text into the push payload (§11 data-minimization).
+ */
+export type PushNotifyRequestedEvent = {
+  messageId: string;
+  conversationId: string;
+  workspaceId: string;
+};
+
+/**
  * Inngest SDK v4 event definitions. `staticSchema` provides compile-time
  * validation without adding a runtime validation dependency; payload fields
  * remain an explicit allow-list of pseudonymous IDs (vibecoding rule 7).
@@ -59,6 +72,10 @@ export const draftRegenerateRequestedEvent = eventType(
 
 export const messageSendRequestedEvent = eventType("message/send", {
   schema: staticSchema<MessageSendRequestedEvent>(),
+});
+
+export const pushNotifyRequestedEvent = eventType("push/notify.requested", {
+  schema: staticSchema<PushNotifyRequestedEvent>(),
 });
 
 /**
@@ -108,4 +125,23 @@ export async function emitMessageSendRequested(
   payload: MessageSendRequestedEvent,
 ): Promise<void> {
   await inngest.send(messageSendRequestedEvent.create(payload));
+}
+
+/**
+ * Emits `push/notify.requested`, fail-safe. Called at the tail of the draft
+ * pipeline (draft already finalized): a failure to reach Inngest must never
+ * fail the generation run, so it is logged and swallowed — the missed instant
+ * push still shows up in the user's next digest. IDs only (rule 7).
+ */
+export async function emitPushNotifyRequested(
+  payload: PushNotifyRequestedEvent,
+): Promise<void> {
+  try {
+    await inngest.send(pushNotifyRequestedEvent.create(payload));
+  } catch (error) {
+    console.error(
+      '[inngest] failed to emit "push/notify.requested" (draft already finalized; not retried from here)',
+      error,
+    );
+  }
 }

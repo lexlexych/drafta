@@ -2,7 +2,6 @@ import Link from "next/link";
 
 import {
   SETTINGS_SECTIONS,
-  getNotificationSettings,
   getSettingsTeam,
   getWorkspace,
   isSettingsSectionId,
@@ -18,6 +17,10 @@ import {
   getWorkspaceAiSettings,
   type AiSettingsRow,
 } from "@/lib/db/ai-settings";
+import {
+  getNotificationSettings,
+  type NotificationSettingsView,
+} from "@/lib/db/notification-settings";
 import {
   listKnowledgeFiles,
   type KnowledgeFileRow,
@@ -43,6 +46,7 @@ import {
   type CategoryChannelOption,
 } from "./categories/categories-panel";
 import { AiSettingsForm } from "./ai/ai-settings-form";
+import { NotificationsForm } from "./notifications/notifications-form";
 import setStyles from "./settings.module.css";
 import styles from "../_components/panes.module.css";
 import uiStyles from "../_components/ui.module.css";
@@ -147,6 +151,24 @@ async function loadCategoriesSectionData(): Promise<{
   };
 }
 
+async function loadNotificationsSectionData(): Promise<NotificationSettingsView | null> {
+  const user = await getAuthenticatedUser();
+
+  if (!user) {
+    return null;
+  }
+
+  const workspace = await getCurrentWorkspace(user.id);
+
+  if (!workspace) {
+    return null;
+  }
+
+  const supabase = await createServerSupabaseClient();
+
+  return getNotificationSettings(supabase, workspace.id, user.id);
+}
+
 async function loadAiSectionData(): Promise<AiSectionData | null> {
   const user = await getAuthenticatedUser();
 
@@ -206,6 +228,8 @@ export default async function SettingsPage({
   const categoriesData =
     sectionId === "categories" ? await loadCategoriesSectionData() : null;
   const aiData = sectionId === "ai" ? await loadAiSectionData() : null;
+  const notificationsData =
+    sectionId === "notifications" ? await loadNotificationsSectionData() : null;
   const connectResult =
     sectionId === "channels" ? readConnectResult(params) : null;
 
@@ -253,6 +277,7 @@ export default async function SettingsPage({
             <SectionDetail
               sectionId={sectionId}
               aiData={aiData}
+              notificationsData={notificationsData}
               categoriesData={categoriesData}
               channels={channels}
               connectResult={connectResult}
@@ -268,6 +293,7 @@ export default async function SettingsPage({
 function SectionDetail({
   sectionId,
   aiData,
+  notificationsData,
   categoriesData,
   channels,
   connectResult,
@@ -275,6 +301,7 @@ function SectionDetail({
 }: {
   sectionId: SettingsSectionId;
   aiData: AiSectionData | null;
+  notificationsData: NotificationSettingsView | null;
   categoriesData: {
     categories: CategoryRow[];
     channels: CategoryChannelOption[];
@@ -305,7 +332,7 @@ function SectionDetail({
     case "team":
       return <TeamSection />;
     case "notifications":
-      return <NotificationsSection />;
+      return <NotificationsSection data={notificationsData} />;
     case "privacy":
       return <PrivacySection />;
   }
@@ -423,29 +450,31 @@ function TeamSection() {
   );
 }
 
-function NotificationsSection() {
-  const settings = getNotificationSettings();
+function NotificationsSection({
+  data,
+}: {
+  data: NotificationSettingsView | null;
+}) {
+  if (!data) {
+    return (
+      <p className={setStyles.formError}>Настройки уведомлений недоступны.</p>
+    );
+  }
 
   return (
-    <div className={uiStyles.card}>
-      <h3>Частота push-уведомлений</h3>
-      <div className={uiStyles.radioRow}>
-        <span
-          className={uiStyles.radio}
-          data-checked={settings.mode === "instant"}
-          aria-hidden="true"
-        />
-        На каждое входящее
-      </div>
-      <div className={uiStyles.radioRow}>
-        <span
-          className={uiStyles.radio}
-          data-checked={settings.mode === "digest"}
-          aria-hidden="true"
-        />
-        Дайджест — раз в {settings.digest_interval_minutes} минут
-      </div>
-    </div>
+    <>
+      <p className={setStyles.description}>
+        Push приходят на устройства, где включены уведомления. В режиме
+        «дайджест» вместо мгновенных push приходит сводка о новых входящих по
+        заданному интервалу.
+      </p>
+      <NotificationsForm
+        initialValue={{
+          mode: data.mode,
+          digestIntervalMinutes: data.digestIntervalMinutes,
+        }}
+      />
+    </>
   );
 }
 
