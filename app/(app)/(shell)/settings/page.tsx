@@ -46,6 +46,7 @@ import {
   type CategoryChannelOption,
 } from "./categories/categories-panel";
 import { AiSettingsForm } from "./ai/ai-settings-form";
+import { AppInstallPanel } from "./app/app-install-panel";
 import { NotificationsForm } from "./notifications/notifications-form";
 import setStyles from "./settings.module.css";
 import styles from "../_components/panes.module.css";
@@ -333,6 +334,8 @@ function SectionDetail({
       return <TeamSection />;
     case "notifications":
       return <NotificationsSection data={notificationsData} />;
+    case "app":
+      return <AppSection />;
     case "privacy":
       return <PrivacySection />;
   }
@@ -474,6 +477,18 @@ function NotificationsSection({
           digestIntervalMinutes: data.digestIntervalMinutes,
         }}
       />
+    </>
+  );
+}
+
+function AppSection() {
+  return (
+    <>
+      <p className={setStyles.description}>
+        drafta — это PWA: приложение можно установить на устройство и открывать
+        как обычное — в отдельном окне, с поддержкой push-уведомлений.
+      </p>
+      <AppInstallPanel />
     </>
   );
 }
