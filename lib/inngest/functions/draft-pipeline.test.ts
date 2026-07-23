@@ -112,6 +112,7 @@ function dependencies(
     generate: vi.fn().mockResolvedValue("We will call {{PHONE_1}}."),
     finalizeDraft: vi.fn().mockResolvedValue(undefined),
     cleanupGeneratingDrafts: vi.fn().mockResolvedValue(undefined),
+    notifyPushReady: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   };
 }
@@ -133,6 +134,7 @@ describe("draft pipeline", () => {
       return "We will call {{PHONE_1}}.";
     });
     const finalizeDraft = vi.fn().mockResolvedValue(undefined);
+    const notifyPushReady = vi.fn().mockResolvedValue(undefined);
 
     const result = await runDraftPipeline(
       {
@@ -142,7 +144,12 @@ describe("draft pipeline", () => {
         regenerate: false,
       },
       steps,
-      dependencies({ createGeneratingDraft, generate, finalizeDraft }),
+      dependencies({
+        createGeneratingDraft,
+        generate,
+        finalizeDraft,
+        notifyPushReady,
+      }),
     );
 
     expect(result).toEqual({ status: "ready", draftId: "draft-1" });
@@ -159,7 +166,14 @@ describe("draft pipeline", () => {
       "generate",
       "restore",
       "finalize",
+      "notify-push-ready",
     ]);
+    // Instant push (§11) fires for a new incoming with IDs only (rule 7).
+    expect(notifyPushReady).toHaveBeenCalledWith({
+      workspaceId: "workspace-1",
+      conversationId: "conversation-1",
+      messageId: "m1",
+    });
     expect(llmPrompt).not.toContain("+49 151 23456789");
     expect(llmPrompt).toContain("{{PHONE_1}}");
     expect(llmPrompt).toContain("Product Alpha costs 10 EUR");

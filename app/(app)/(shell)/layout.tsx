@@ -9,6 +9,8 @@ import { getAuthenticatedUser, getCurrentWorkspace } from "@/lib/db/workspace";
 import { SETTINGS_SECTIONS } from "@/lib/mock";
 
 import { InboxRealtimeSync } from "./_components/inbox-realtime-sync";
+import { InstallPrompt } from "./_components/install-prompt";
+import { PwaRegister } from "./_components/pwa-register";
 import { Sidebar } from "./_components/sidebar";
 import { Tabbar } from "./_components/tabbar";
 import { Toast } from "./_components/stub";
@@ -70,6 +72,8 @@ export default async function ShellLayout({
         />
       </Suspense>
       <InboxRealtimeSync workspaceId={workspace.id} />
+      <PwaRegister />
+      <InstallPrompt />
       <Toast />
     </div>
   );

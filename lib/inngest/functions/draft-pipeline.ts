@@ -29,6 +29,7 @@ import {
   listKnowledgeFiles,
   type KnowledgeFileRow,
 } from "@/lib/db/knowledge-base";
+import { emitPushNotifyRequested } from "@/lib/inngest/events";
 
 export const DRAFT_CONTEXT_MESSAGE_LIMIT = 20;
 export const DEFAULT_DRAFT_MAX_TOKENS = 800;
@@ -164,6 +165,16 @@ export type DraftPipelineDependencies = {
     workspaceId: string;
     conversationId: string;
     lastMessageId?: string;
+  }): Promise<void>;
+  /**
+   * Fires the ID-only `push/notify.requested` event after a draft is ready
+   * (docs/architecture/11-realtime-pwa.md#web-push). Fail-safe: never throws
+   * back into the pipeline — a missed instant push is picked up by the digest.
+   */
+  notifyPushReady(input: {
+    workspaceId: string;
+    conversationId: string;
+    messageId: string;
   }): Promise<void>;
 };
 
@@ -735,6 +746,7 @@ export const draftPipelineDependencies: DraftPipelineDependencies = {
     }),
   finalizeDraft,
   cleanupGeneratingDrafts,
+  notifyPushReady: (input) => emitPushNotifyRequested(input),
 };
 
 export async function runDraftPipeline(
@@ -850,6 +862,21 @@ export async function runDraftPipeline(
     }),
   );
 
-  // TODO(stage 9): emit the ID-only push event after draft readiness.
+  // Instant push (docs/architecture/11-realtime-pwa.md#web-push): notify only
+  // for a new incoming message (not regeneration, which answers no new arrival).
+  // The event is IDs-only (rule 7); `send-push` builds the "черновик готов" copy
+  // from names/channels server-side. Emitting inside a step memoizes it so a
+  // retry of a later step never double-sends. Categories that skip the draft or
+  // have auto-generation off never reach here — those still surface in digests.
+  if (!input.regenerate && input.messageId) {
+    await steps.run("notify-push-ready", () =>
+      dependencies.notifyPushReady({
+        workspaceId: input.workspaceId,
+        conversationId: input.conversationId,
+        messageId: input.messageId!,
+      }),
+    );
+  }
+
   return { status: "ready", draftId };
 }
