@@ -162,12 +162,22 @@
   color: var(--ink3);
 }
 
+/*
+ * Превью последнего сообщения: до двух строк, дальше обрезаем многоточием.
+ * Раньше был `white-space: nowrap` на инлайновом span — text-overflow к нему
+ * не применялся, длинный текст выходил за экран и давал горизонтальную
+ * прокрутку списка. `-webkit-box` + `line-clamp` дают надёжный перенос и
+ * обрезку; `overflow-wrap: anywhere` ломает сплошные длинные токены (URL).
+ */
 .listPreview {
   font-size: 12.5px;
   color: var(--ink2);
-  white-space: nowrap;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
   overflow: hidden;
-  text-overflow: ellipsis;
+  overflow-wrap: anywhere;
   margin: 1px 0 5px;
 }
 
@@ -262,6 +272,8 @@
   border-radius: 14px;
   font-size: 13.5px;
   position: relative;
+  /* Длинные ссылки/сплошные токены переносим, а не растягиваем пузырь. */
+  overflow-wrap: anywhere;
 }
 
 .bubbleIn {

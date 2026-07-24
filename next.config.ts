@@ -2,7 +2,13 @@ import withSerwistInit from "@serwist/next";
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  /*
+   * Пустой turbopack-конфиг: в dev используется Turbopack (SW отключён,
+   * см. `disable` ниже). @serwist/next добавляет webpack-конфиг для сборки SW,
+   * из-за чего Turbopack иначе предупреждает о «потерянном» webpack-конфиге.
+   * Прод-сборка SW идёт через `next build --webpack` (package.json).
+   */
+  turbopack: {},
 };
 
 /**

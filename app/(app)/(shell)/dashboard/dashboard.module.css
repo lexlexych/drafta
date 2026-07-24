@@ -147,7 +147,13 @@
   min-width: 0;
 }
 
+/*
+ * `display: block` обязателен: text-overflow не работает на инлайновом span,
+ * поэтому раньше длинный текст ленты выходил за экран и давал горизонтальную
+ * прокрутку дашборда на мобильных. Блочный контейнер корректно обрезает строку.
+ */
 .feedText {
+  display: block;
   font-size: 13px;
   white-space: nowrap;
   overflow: hidden;
