@@ -1,4 +1,4 @@
-/* Дашборд — иллюстративный обзорный экран (состав уточняется, §10). */
+/* Дашборд — показатели workspace за выбранный период (§10). */
 
 .single {
   flex: 1;
@@ -32,9 +32,57 @@
   color: var(--ink3);
 }
 
+/* ---------- переключатель периода ---------- */
+
+/*
+ * Segmented control из обычных ссылок: период хранится в адресе, поэтому
+ * состояние переживает перезагрузку и шеринг ссылки, а странице не нужен JS.
+ */
+.periodSwitch {
+  display: inline-flex;
+  margin: 12px 0 2px;
+  padding: 3px;
+  gap: 2px;
+  background: var(--surface2);
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  /* Три коротких слова помещаются даже на 320px, но при увеличенном шрифте
+     контрол должен переноситься, а не растягивать страницу вбок. */
+  flex-wrap: wrap;
+  max-width: 100%;
+}
+
+.periodOption {
+  padding: 6px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink2);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.periodOption:hover {
+  color: var(--ink);
+}
+
+.periodOptionActive,
+.periodOptionActive:hover {
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: var(--shadow);
+}
+
+/* ---------- плитки показателей ---------- */
+
+/*
+ * 140px — не произвольное число: при паддинге экрана 14px это ровно та
+ * граница, на которой две плитки ещё помещаются в 320px, самый узкий
+ * реальный телефон. Ниже неё сетка сама схлопывается в одну колонку.
+ */
 .statGrid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
   gap: 10px;
   margin: 14px 0;
 }
@@ -44,12 +92,16 @@
   border: 1px solid var(--line);
   border-radius: 14px;
   padding: 13px 15px;
+  /* Без этого длинное значение («1 д 14 ч») распирает колонку грида и
+     утаскивает страницу в горизонтальную прокрутку. */
+  min-width: 0;
 }
 
 .statValue {
   font-size: 24px;
   font-weight: 800;
   letter-spacing: -0.02em;
+  overflow-wrap: anywhere;
 }
 
 .statLabel {
@@ -58,44 +110,51 @@
   margin-top: 1px;
 }
 
-.statHot {
-  background: var(--draft-bg);
-  border-color: var(--draft-line);
+.empty {
+  margin: 0;
+  font-size: 13px;
+  color: var(--ink3);
 }
 
-.statHot .statValue {
-  color: var(--draft-ink);
+/* ---------- график по категориям ---------- */
+
+/*
+ * Горизонтальные полосы, а не столбцы: категорий может быть много и названия
+ * у них длинные. Список растёт вниз, ширина остаётся равной ширине экрана,
+ * и вопрос горизонтальной прокрутки не возникает в принципе.
+ */
+.categoryList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
 }
 
-.twoColumns {
-  display: grid;
-  grid-template-columns: 1fr 1.2fr;
-  gap: 12px;
-  align-items: start;
-}
-
-.channelRow {
+.categoryRow {
   display: flex;
   align-items: center;
-  gap: 9px;
-  padding: 6px 0;
+  gap: 10px;
+  padding: 5px 0;
   font-size: 13px;
 }
 
-.channelName {
-  flex: 0 0 148px;
+.categoryName {
+  flex: 0 1 190px;
+  min-width: 0;
+  /* text-overflow не работает без overflow: hidden, а без обоих длинное имя
+     категории выдавливает полосу за пределы экрана — та же причина и то же
+     решение, что и у ленты в прежней версии экрана. */
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 .bar {
-  flex: 1;
+  flex: 1 1 auto;
+  min-width: 40px;
   height: 6px;
   border-radius: 99px;
   background: var(--surface2);
   overflow: hidden;
-  min-width: 40px;
 }
 
 .barFill {
@@ -104,91 +163,129 @@
   border-radius: 99px;
 }
 
-.barFillInstagram {
-  background: var(--instagram);
-}
-
-.barFillFacebook {
-  background: var(--facebook);
-}
-
-.channelTotal {
+.categoryTotal {
+  flex: none;
   font-weight: 700;
-  width: 26px;
+  min-width: 30px;
   text-align: right;
 }
 
-.channelNote {
-  color: var(--ink3);
-  font-size: 12px;
-}
+/* ---------- расход токенов ---------- */
 
-.feed {
+.tokenTable {
   display: flex;
   flex-direction: column;
 }
 
-.feedRow {
-  display: flex;
-  gap: 10px;
-  align-items: flex-start;
-  width: 100%;
-  text-align: left;
-  padding: 8px 6px;
-  border-radius: 10px;
+.tokenRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  align-items: baseline;
+  padding: 6px 0;
+  font-size: 13px;
+  border-top: 1px solid var(--line);
 }
 
-.feedRow:hover {
-  background: var(--hover);
+.tokenRow:first-child {
+  border-top: none;
 }
 
-.feedBody {
-  flex: 1;
+.tokenHead {
+  font-size: 11.5px;
+  color: var(--ink3);
+  padding-top: 0;
+}
+
+.tokenTotal {
+  font-weight: 700;
+  border-top: 1px solid var(--line2);
+}
+
+.tokenLabel {
   min-width: 0;
 }
 
-/*
- * `display: block` обязателен: text-overflow не работает на инлайновом span,
- * поэтому раньше длинный текст ленты выходил за экран и давал горизонтальную
- * прокрутку дашборда на мобильных. Блочный контейнер корректно обрезает строку.
- */
-.feedText {
-  display: block;
-  font-size: 13px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+.tokenCell {
+  min-width: 0;
+  text-align: right;
+  overflow-wrap: anywhere;
 }
 
-.feedMeta {
-  display: flex;
-  gap: 6px;
-  align-items: center;
-  margin-top: 3px;
-  flex-wrap: wrap;
-}
-
-.feedRow time {
-  font-size: 11px;
-  color: var(--ink3);
-  flex: none;
-}
-
-.footnote {
-  font-size: 11.5px;
-  color: var(--ink3);
-  margin-top: 14px;
-  font-style: italic;
-}
-
-@media (max-width: 1100px) {
-  .twoColumns {
-    grid-template-columns: 1fr;
-  }
+/* Подпись столбца внутри ячейки — нужна только в мобильной раскладке. */
+.tokenCellLabel {
+  display: none;
 }
 
 @media (max-width: 899px) {
   .single {
     padding: 16px 14px 24px;
+  }
+}
+
+/*
+ * На узком экране таблица не сжимается и не прокручивается вбок, а
+ * разворачивается в карточки: заголовок строки сверху, три значения под ним
+ * со своими подписями. Шапка таблицы при этом лишняя.
+ */
+@media (max-width: 599px) {
+  .tokenHead {
+    display: none;
+  }
+
+  .tokenRow {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px 8px;
+    padding: 9px 0;
+  }
+
+  .tokenLabel {
+    grid-column: 1 / -1;
+    font-weight: 600;
+  }
+
+  .tokenCell {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    text-align: left;
+  }
+
+  .tokenCellLabel {
+    display: block;
+    font-size: 10.5px;
+    font-weight: 400;
+    color: var(--ink3);
+  }
+
+  /*
+   * Ставим название над полосой, а не рядом: в одну строку на 320px имя
+   * категории пришлось бы резать до пары слов, а названия здесь пользовательские
+   * и различаются как раз хвостом («Заказ и доставка» / «Заказ и самовывоз»).
+   */
+  .categoryRow {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 4px 8px;
+    padding: 7px 0;
+  }
+
+  .categoryName {
+    grid-row: 1;
+    grid-column: 1;
+    flex: none;
+    white-space: normal;
+    overflow: visible;
+  }
+
+  .categoryTotal {
+    grid-row: 1;
+    grid-column: 2;
+  }
+
+  .bar {
+    grid-row: 2;
+    grid-column: 1 / -1;
   }
 }
