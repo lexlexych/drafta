@@ -2,8 +2,11 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-export type CategoryIncomingKind = "dm" | "comments" | "both";
-
+/**
+ * Categories classify **messages** only — comments have no categories at all
+ * (they are drafted from a per-post brief instead), which is why there is no
+ * "incoming kind" here anymore.
+ */
 export type CategoryRow = {
   id: string;
   workspace_id: string;
@@ -11,7 +14,6 @@ export type CategoryRow = {
   description: string;
   draft_instruction: string | null;
   channel_connection_ids: string[];
-  incoming_kind: CategoryIncomingKind;
   skip_draft: boolean;
   priority: number;
   is_default: boolean;
@@ -24,7 +26,6 @@ export type CategoryInput = {
   description: string;
   draftInstruction: string;
   channelConnectionIds: string[];
-  incomingKind: CategoryIncomingKind;
   skipDraft: boolean;
 };
 
@@ -33,9 +34,7 @@ export type CategoryResult<T> =
   | { ok: false; error: string };
 
 const CATEGORY_COLUMNS =
-  "id, workspace_id, name, description, draft_instruction, channel_connection_ids, incoming_kind, skip_draft, priority, is_default, created_at, updated_at";
-
-const INCOMING_KINDS: CategoryIncomingKind[] = ["dm", "comments", "both"];
+  "id, workspace_id, name, description, draft_instruction, channel_connection_ids, skip_draft, priority, is_default, created_at, updated_at";
 
 export async function listCategories(
   supabase: SupabaseClient,
@@ -64,7 +63,6 @@ function normalizeCategoryInput(
     description: input.description.trim(),
     draftInstruction: input.draftInstruction.trim(),
     channelConnectionIds: [...new Set(input.channelConnectionIds)],
-    incomingKind: input.incomingKind,
     skipDraft: input.skipDraft,
   };
 
@@ -73,9 +71,6 @@ function normalizeCategoryInput(
   }
   if (!options.isDefault && !normalized.description) {
     return { ok: false, error: "Опишите правило классификации." };
-  }
-  if (!INCOMING_KINDS.includes(normalized.incomingKind)) {
-    return { ok: false, error: "Выберите тип входящего." };
   }
 
   return { ok: true, data: normalized };
@@ -120,7 +115,6 @@ export async function createCategory(
     category_description: normalized.data.description,
     category_draft_instruction: normalized.data.draftInstruction || null,
     category_channel_connection_ids: normalized.data.channelConnectionIds,
-    category_incoming_kind: normalized.data.incomingKind,
     category_skip_draft: normalized.data.skipDraft,
   });
 
@@ -155,7 +149,6 @@ export async function updateCategory(
     category_description: normalized.data.description,
     category_draft_instruction: normalized.data.draftInstruction || null,
     category_channel_connection_ids: normalized.data.channelConnectionIds,
-    category_incoming_kind: normalized.data.incomingKind,
     category_skip_draft: normalized.data.skipDraft,
   });
 

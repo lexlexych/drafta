@@ -26,7 +26,6 @@ describe("parseZernioWebhook", () => {
       provider: "zernio",
       platform: "telegram",
       externalAccountId: "acct_tg_98213",
-      interactionKind: "dm",
       conversation: { externalId: "tg_chat_77120" },
       message: {
         externalId: "tg_msg_55210",
@@ -52,20 +51,20 @@ describe("parseZernioWebhook", () => {
       provider: "zernio",
       platform: "instagram",
       externalAccountId: "acct_ig_55014",
-      interactionKind: "comment",
-      conversation: {
+      post: {
         externalId: "ig_post_88401",
-        postMetadata: {
+        text: "",
+        metadata: {
           platformPostId: "ig_post_88401",
           postId: null,
           platform: "instagram",
         },
       },
-      message: {
+      comment: {
         externalId: "ig_comment_66120",
         text: "Сколько стоит доставка по Берлину?",
         attachments: [],
-        sender: { externalId: "ig_user_31220", displayName: "Lena Fischer" },
+        author: { externalId: "ig_user_31220", displayName: "Lena Fischer" },
       },
       rawMetadata: JSON.parse(rawBody),
     };
@@ -93,9 +92,50 @@ describe("parseZernioWebhook", () => {
 
     const [event] = parseZernioWebhook({ rawBody, headers: {} });
 
-    expect(event?.interactionKind).toBe("comment");
-    expect(event?.conversation.externalId).toBe("ig_post_88401");
-    expect(event?.message.parentExternalId).toBe("ig_comment_66120");
+    expect(event?.type).toBe("comment.received");
+    expect(event?.type === "comment.received" && event.post.externalId).toBe(
+      "ig_post_88401",
+    );
+    expect(
+      event?.type === "comment.received" && event.comment.parentExternalId,
+    ).toBe("ig_comment_66120");
+  });
+
+  it("maps a post.published envelope to a post event with caption and permalink", () => {
+    const rawBody = JSON.stringify({
+      id: "wh_evt_post_1",
+      event: "post.published",
+      account: { id: "acct_ig_55014", platform: "instagram" },
+      post: {
+        id: "zernio_post_1",
+        platformPostId: "ig_post_99001",
+        caption: "Осенняя коллекция уже в продаже!",
+        permalink: "https://instagram.com/p/ig_post_99001",
+        publishedAt: "2026-07-25T09:00:00.000Z",
+      },
+    });
+
+    const [event] = parseZernioWebhook({ rawBody, headers: {} });
+
+    expect(event).toEqual({
+      type: "post.published",
+      providerEventId: "wh_evt_post_1",
+      provider: "zernio",
+      platform: "instagram",
+      externalAccountId: "acct_ig_55014",
+      post: {
+        externalId: "ig_post_99001",
+        text: "Осенняя коллекция уже в продаже!",
+        permalink: "https://instagram.com/p/ig_post_99001",
+        publishedAt: "2026-07-25T09:00:00.000Z",
+        metadata: {
+          platformPostId: "ig_post_99001",
+          postId: "zernio_post_1",
+          platform: "instagram",
+        },
+      },
+      rawMetadata: JSON.parse(rawBody),
+    });
   });
 
   it("maps a WhatsApp DM message.received fixture to a normalized event, field for field", () => {
@@ -110,7 +150,6 @@ describe("parseZernioWebhook", () => {
       provider: "zernio",
       platform: "whatsapp",
       externalAccountId: "acct_wa_31207",
-      interactionKind: "dm",
       conversation: { externalId: "wa_chat_12938" },
       message: {
         externalId: "wa_msg_88421",
@@ -133,7 +172,8 @@ describe("parseZernioWebhook", () => {
     const events = parseZernioWebhook({ rawBody, headers: {} });
 
     expect(events).toHaveLength(1);
-    expect(events[0].message.attachments).toEqual([
+    const [event] = events;
+    expect(event?.type === "message.received" && event.message.attachments).toEqual([
       {
         type: "image",
         url: "https://media.zernio.com/wa/acct_wa_31207/img_5f3c1a.jpg",

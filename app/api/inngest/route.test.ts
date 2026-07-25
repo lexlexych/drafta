@@ -3,18 +3,40 @@ import { describe, expect, it, vi } from "vitest";
 vi.mock("server-only", () => ({}));
 
 const route = await import("./route");
-const { generateDraft, regenerateDraft, sendMessage, inngestFunctions } =
-  await import("@/lib/inngest/functions");
+const {
+  generateDraft,
+  regenerateDraft,
+  generateCommentDrafts,
+  sendMessage,
+  sendComment,
+  sendPush,
+  pushDigest,
+  inngestFunctions,
+} = await import("@/lib/inngest/functions");
 const { DRAFT_PIPELINE_CONCURRENCY } = await import(
   "@/lib/inngest/functions/generate-draft"
 );
 const { SEND_PIPELINE_CONCURRENCY } = await import(
   "@/lib/inngest/functions/send-message"
 );
+const { COMMENT_DRAFTS_CONCURRENCY } = await import(
+  "@/lib/inngest/functions/generate-comment-drafts"
+);
+const { SEND_COMMENT_CONCURRENCY } = await import(
+  "@/lib/inngest/functions/send-comment"
+);
 
 describe("Inngest serve route", () => {
   it("registers generation, regeneration, and send functions", () => {
-    expect(inngestFunctions).toEqual([generateDraft, regenerateDraft, sendMessage]);
+    expect(inngestFunctions).toEqual([
+      generateDraft,
+      regenerateDraft,
+      generateCommentDrafts,
+      sendMessage,
+      sendComment,
+      sendPush,
+      pushDigest,
+    ]);
     expect(generateDraft.opts.concurrency).toEqual([
       ...DRAFT_PIPELINE_CONCURRENCY,
     ]);
@@ -23,6 +45,19 @@ describe("Inngest serve route", () => {
     ]);
     expect(generateDraft.opts.onFailure).toBeTypeOf("function");
     expect(regenerateDraft.opts.onFailure).toBeTypeOf("function");
+  });
+
+  it("serves comment drafts as their own function, one run per post", () => {
+    expect(generateCommentDrafts.opts.concurrency).toEqual([
+      ...COMMENT_DRAFTS_CONCURRENCY,
+    ]);
+    expect(generateCommentDrafts.opts.onFailure).toBeTypeOf("function");
+  });
+
+  it("serves comment replies with retries, bounded concurrency, and a failure hook", () => {
+    expect(sendComment.opts.retries).toBe(4);
+    expect(sendComment.opts.concurrency).toEqual([...SEND_COMMENT_CONCURRENCY]);
+    expect(sendComment.opts.onFailure).toBeTypeOf("function");
   });
 
   it("serves outgoing sends with retries, bounded concurrency, and a failure hook", () => {

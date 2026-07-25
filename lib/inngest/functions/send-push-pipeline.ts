@@ -37,7 +37,6 @@ export type SendPushSteps = {
  */
 export type LoadedPushContext = {
   conversationId: string;
-  kind: "dm" | "comments";
   senderName: string;
   channelName: string;
   recipients: PushSubscriptionRecord[];
@@ -70,7 +69,7 @@ async function loadContext(
 
   const { data: conversation, error: conversationError } = await supabase
     .from("conversations")
-    .select("id, kind, channel_connection_id, contact_id")
+    .select("id, channel_connection_id, contact_id")
     .eq("workspace_id", input.workspaceId)
     .eq("id", input.conversationId)
     .maybeSingle();
@@ -79,8 +78,6 @@ async function loadContext(
   if (!conversation) {
     return { status: "skip", reason: "conversation-not-found" };
   }
-
-  const kind = conversation.kind === "comments" ? "comments" : "dm";
 
   const { data: message, error: messageError } = await supabase
     .from("messages")
@@ -100,8 +97,8 @@ async function loadContext(
     return { status: "skip", reason: "no-recipients" };
   }
 
-  // Имя автора: сначала identity конкретного сообщения (работает и для
-  // комментариев), затем контакт диалога (DM), иначе — обобщённо.
+  // Имя автора: сначала identity конкретного сообщения, затем контакт
+  // диалога, иначе — обобщённо.
   const [{ data: identity, error: identityError }, { data: channel, error: channelError }, contactResult] =
     await Promise.all([
       message.contact_identity_id
@@ -144,7 +141,6 @@ async function loadContext(
     status: "ok",
     context: {
       conversationId: input.conversationId,
-      kind,
       senderName,
       channelName,
       recipients,
@@ -156,19 +152,19 @@ async function loadContext(
  * Push copy (docs/architecture/11-realtime-pwa.md#частота-уведомлений):
  * «Новое сообщение от {имя} ({канал}) — черновик готов». Only names, channel
  * label and a deep-link — no message text.
+ *
+ * Instant pushes are a direct-message thing: they announce a ready draft, and a
+ * comment draft only ever exists because the user asked for it while looking at
+ * the post.
  */
 export function buildInstantPayload(
   context: LoadedPushContext,
 ): WebPushPayload {
-  const noun = context.kind === "comments" ? "комментарий" : "сообщение";
-  const article = context.kind === "comments" ? "Новый" : "Новое";
-  // Deep-link uses the `conversation` query key (see (shell)/_components/navigation.ts).
-  const path = context.kind === "comments" ? "/comments" : "/inbox";
-
   return {
     title: `${context.senderName} (${context.channelName})`,
-    body: `${article} ${noun} — черновик готов`,
-    url: `${path}?conversation=${context.conversationId}`,
+    body: "Новое сообщение — черновик готов",
+    // Deep-link uses the `conversation` query key (see (shell)/_components/navigation.ts).
+    url: `/inbox?conversation=${context.conversationId}`,
     tag: `conversation:${context.conversationId}`,
   };
 }

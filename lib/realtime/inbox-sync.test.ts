@@ -167,7 +167,7 @@ describe("subscribeToInboxRealtime", () => {
     expect(supabase.auth.getSession).toHaveBeenCalledTimes(1);
     expect(supabase.realtime.setAuth).toHaveBeenCalledWith("test-access-token");
     expect(supabase.channel).toHaveBeenCalledWith("inbox-realtime:wsp_a");
-    expect(channel.on).toHaveBeenCalledTimes(6);
+    expect(channel.on).toHaveBeenCalledTimes(12);
     expect(channel.on).toHaveBeenCalledWith("system", {}, expect.any(Function));
     expect(channel.on).toHaveBeenCalledWith(
       "postgres_changes",
@@ -219,6 +219,22 @@ describe("subscribeToInboxRealtime", () => {
       },
       expect.any(Function),
     );
+
+    // The comment tables refresh the same way the inbox does.
+    for (const table of ["posts", "comments", "comment_drafts"]) {
+      for (const event of ["INSERT", "UPDATE"]) {
+        expect(channel.on).toHaveBeenCalledWith(
+          "postgres_changes",
+          {
+            event,
+            schema: "public",
+            table,
+            filter: "workspace_id=eq.wsp_a",
+          },
+          expect.any(Function),
+        );
+      }
+    }
   });
 
   it("returns an unsubscribe function that removes the authorized channel (ticket step 4)", async () => {

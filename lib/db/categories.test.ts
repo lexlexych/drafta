@@ -24,7 +24,6 @@ describe("lib/db/categories", () => {
       description: "A useful rule",
       draftInstruction: "",
       channelConnectionIds: [],
-      incomingKind: "both",
       skipDraft: false,
     });
 
@@ -43,7 +42,6 @@ describe("lib/db/categories", () => {
       description: "  Клиент сообщает о проблеме.  ",
       draftInstruction: "  предложить замену  ",
       channelConnectionIds: ["ch_1", "ch_1"],
-      incomingKind: "dm",
       skipDraft: false,
     });
 
@@ -54,7 +52,6 @@ describe("lib/db/categories", () => {
       category_description: "Клиент сообщает о проблеме.",
       category_draft_instruction: "предложить замену",
       category_channel_connection_ids: ["ch_1"],
-      category_incoming_kind: "dm",
       category_skip_draft: false,
     });
   });
@@ -69,7 +66,6 @@ describe("lib/db/categories", () => {
       description: "",
       draftInstruction: "  Отвечать кратко  ",
       channelConnectionIds: [],
-      incomingKind: "both",
       skipDraft: true,
     });
 

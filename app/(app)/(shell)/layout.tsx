@@ -1,7 +1,7 @@
 import { Suspense, type ReactNode } from "react";
 import { redirect } from "next/navigation";
 
-import { getCommentsNavigationCounters } from "@/lib/db/comments-inbox";
+import { getCommentsNavigationCounters } from "@/lib/db/comments";
 import { getInboxNavigationCounters, listChannelConnections } from "@/lib/db/inbox";
 import { createServerSupabaseClient } from "@/lib/db/server";
 import {
@@ -25,7 +25,7 @@ import styles from "./_components/shell.module.css";
  * Гейты: аутентификацию проверяет `app/(app)/layout.tsx`, наличие workspace —
  * этот layout (нет workspace → онбординг). Workspace и пользователь — реальные;
  * счётчики «Сообщения» (`lib/db/inbox.ts`, T-05) и «Комментарии»
- * (`lib/db/comments-inbox.ts`, этап 5) — реальные данные; «Дашборд» пока на
+ * (`lib/db/comments.ts`) — реальные данные; «Дашборд» пока на
  * mock (вне скоупа). Список workspace'ов пользователя уходит в меню подвала
  * (`_components/user-menu.tsx`) — переключение и создание нового.
  * `InboxRealtimeSync` (T-06) держит те же счётчики и открытый инбокс живыми —

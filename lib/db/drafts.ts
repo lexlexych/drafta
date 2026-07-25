@@ -18,13 +18,12 @@ type DraftRow = {
   text: string;
   model: string | null;
   kb_file_ids: string[] | null;
-  last_message_id: string | null;
   created_at: string;
   updated_at: string;
 };
 
 const DRAFT_COLUMNS =
-  "id, workspace_id, conversation_id, status, text, model, kb_file_ids, last_message_id, created_at, updated_at";
+  "id, workspace_id, conversation_id, status, text, model, kb_file_ids, created_at, updated_at";
 
 type KbFileRow = { id: string; name: string };
 
@@ -77,7 +76,6 @@ async function mapDraftRow(
     model: row.model,
     kbFileIds,
     kbFileNames,
-    lastMessageId: row.last_message_id,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -105,34 +103,6 @@ export async function getActiveConversationDraft(
   }
 
   return data ? mapDraftRow(supabase, data as DraftRow) : null;
-}
-
-/**
- * All active drafts of one conversation (stage 5). A comment thread keeps one
- * draft per comment; the "Комментарии" screen renders each under its comment.
- * Ordered newest-first so a caller keying by `lastMessageId` keeps the latest.
- */
-export async function listActiveConversationDrafts(
-  supabase: SupabaseClient,
-  workspaceId: string,
-  conversationId: string,
-): Promise<ActiveDraftView[]> {
-  const { data, error } = await supabase
-    .from("drafts")
-    .select(DRAFT_COLUMNS)
-    .eq("workspace_id", workspaceId)
-    .eq("conversation_id", conversationId)
-    .in("status", ACTIVE_DRAFT_STATUSES)
-    .order("created_at", { ascending: false });
-
-  if (error) {
-    console.error("[drafts] failed to load active conversation drafts", error);
-    throw new Error("Unable to load the active drafts.");
-  }
-
-  return Promise.all(
-    ((data ?? []) as DraftRow[]).map((row) => mapDraftRow(supabase, row)),
-  );
 }
 
 export async function editConversationDraft(
@@ -206,8 +176,6 @@ export async function canRegenerateConversationDraft(
   workspaceId: string,
   conversationId: string,
 ): Promise<boolean> {
-  // Regeneration works for both DM and comment threads (stage 5); the
-  // workspace + conversation scope is the ownership check.
   const { data, error } = await supabase
     .from("conversations")
     .select("id")

@@ -91,7 +91,6 @@ const CATEGORIES = [
     description: "Реклама и массовые рассылки.",
     draft_instruction: null,
     channel_connection_ids: [],
-    incoming_kind: "both",
     skip_draft: true,
     priority: 0,
     is_default: false,
@@ -105,7 +104,6 @@ const CATEGORIES = [
     description: "Всё остальное.",
     draft_instruction: null,
     channel_connection_ids: [],
-    incoming_kind: "both",
     skip_draft: false,
     priority: 1,
     is_default: true,
@@ -133,6 +131,21 @@ const KNOWLEDGE_FILES = [
 
 vi.mock("@/lib/db/knowledge-base", () => ({
   listKnowledgeFiles: async () => KNOWLEDGE_FILES,
+}));
+
+vi.mock("@/lib/db/ai-settings", () => ({
+  getWorkspaceAiSettings: async () => ({
+    id: "ais_tonwerk",
+    workspace_id: "wsp_tonwerk",
+    tone: "friendly",
+    language: "de",
+    signature: "Viele Grüße",
+    debounce_seconds: 45,
+    model: "mistral-large-latest",
+    auto_generate_dm: true,
+    created_at: "2026-07-22T10:00:00.000Z",
+    updated_at: "2026-07-22T10:00:00.000Z",
+  }),
 }));
 
 const INBOX_LIST_ITEMS = [
@@ -267,6 +280,101 @@ vi.mock("@/lib/db/inbox", () => ({
 
 vi.mock("./inbox/actions", () => ({
   markConversationReadAction: async () => ({ ok: true }),
+}));
+
+const POST_LIST_ITEMS = [
+  {
+    id: "post_autumn_ig",
+    title: "Осенняя коллекция уже в продаже",
+    preview: "Сколько стоит доставка по Берлину?",
+    time: "10:12",
+    unreadCount: 2,
+    commentCount: 2,
+    channel: {
+      id: "chc_instagram_shop",
+      name: "Instagram Магазин",
+      platform: "instagram",
+    },
+  },
+  {
+    id: "post_fresh_ig",
+    title: "Новый стеллаж в мастерской",
+    preview: "Пока нет комментариев",
+    time: "09:40",
+    unreadCount: 0,
+    commentCount: 0,
+    channel: {
+      id: "chc_instagram_shop",
+      name: "Instagram Магазин",
+      platform: "instagram",
+    },
+  },
+];
+
+const POST_THREAD = {
+  postId: "post_autumn_ig",
+  channel: {
+    id: "chc_instagram_shop",
+    name: "Instagram Магазин",
+    platform: "instagram",
+  },
+  postText: "Осенняя коллекция уже в продаже — заходите за новинками!",
+  postUrl: "https://instagram.com/p/ig_post_autumn",
+  postMeta: "2 комментария",
+  draftBrief: { description: "", instruction: "", isConfigured: false },
+  sendableDraftCount: 0,
+  comments: [
+    {
+      id: "cmt_lena",
+      authorName: "Lena Fischer",
+      authorHandle: "@ig_user_lena",
+      avatar: { initials: "LF", hue: 40 },
+      text: "Сколько стоит доставка по Берлину?",
+      time: "10:12",
+      isOurs: false,
+      isReply: false,
+      deliveryLabel: null,
+      isAnswered: false,
+      draft: null,
+    },
+  ],
+};
+
+vi.mock("@/lib/db/comments", () => ({
+  listChannelConnections: async () => INBOX_CHANNELS,
+  getCommentsChannelFiltersView: async () => [
+    {
+      id: "chc_instagram_shop",
+      name: "Instagram Магазин",
+      platform: "instagram",
+      count: 2,
+    },
+  ],
+  getCommentsNavigationCounters: async () => ({
+    totalUnread: 2,
+    channels: [],
+  }),
+  getPostListView: async () => ({
+    title: "Комментарии",
+    subtitle: "все каналы · 2 поста",
+    items: POST_LIST_ITEMS,
+  }),
+  getPostThreadView: async (
+    _supabase: unknown,
+    _workspaceId: string,
+    _channels: unknown,
+    postId: string,
+  ) => (postId === "post_autumn_ig" ? POST_THREAD : null),
+}));
+
+vi.mock("./comments/actions", () => ({
+  markPostReadAction: async () => ({ ok: true }),
+  configureCommentDraftsAction: async () => ({ ok: true }),
+  generateCommentDraftAction: async () => ({ ok: true }),
+  editCommentDraftAction: async () => ({ ok: true }),
+  discardCommentDraftAction: async () => ({ ok: true }),
+  sendCommentDraftAction: async () => ({ ok: true }),
+  sendAllCommentDraftsAction: async () => ({ ok: true, sent: 0, failed: 0 }),
 }));
 
 const CONTACT_LIST_ALL = [
@@ -460,19 +568,41 @@ describe("inbox page", () => {
 });
 
 describe("comments page", () => {
-  it("renders posts grouped list and a comment thread", async () => {
+  it("lists every post, including one without comments yet", async () => {
+    render(await CommentsPage({ searchParams: searchParams() }));
+
+    expect(screen.getByRole("heading", { name: "Комментарии" })).toBeDefined();
+    expect(screen.getByText("Новый стеллаж в мастерской")).toBeDefined();
+    expect(screen.getByText("Пока нет комментариев")).toBeDefined();
+    expect(screen.getByText(/Выберите пост слева/)).toBeDefined();
+  });
+
+  it("opens a post with its comments and the draft controls", async () => {
     render(
       await CommentsPage({
-        searchParams: searchParams({ conversation: "cnv_post_sea_ig" }),
+        searchParams: searchParams({ post: "post_autumn_ig" }),
       }),
     );
 
-    expect(screen.getByRole("heading", { name: "Комментарии" })).toBeDefined();
     expect(screen.getByText("Комментарии к посту")).toBeDefined();
-    expect(screen.getByText(/сгруппировано по постам/)).toBeDefined();
-    expect(screen.getByText("черновик не создаётся")).toBeDefined();
-    expect(screen.getByText(/Ответ на комментарий @dashkov\.art/)).toBeDefined();
-    expect(screen.getByRole("button", { name: "Принять и отправить" })).toBeDefined();
+    expect(screen.getByRole("button", { name: "Черновики" })).toBeDefined();
+    expect(screen.getByText("Lena Fischer")).toBeDefined();
+    // Черновик не создаётся при получении комментария — его запускает кнопка.
+    expect(screen.getByRole("button", { name: "Создать черновик" })).toBeDefined();
+    expect(screen.getByRole("button", { name: "Отправить все" })).toBeDefined();
+  });
+
+  it("asks for the draft brief before generating for a single comment", async () => {
+    render(
+      await CommentsPage({
+        searchParams: searchParams({ post: "post_autumn_ig" }),
+      }),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Создать черновик" }));
+
+    expect(screen.getByRole("dialog")).toBeDefined();
+    expect(screen.getByText("Черновики к комментариям")).toBeDefined();
   });
 });
 

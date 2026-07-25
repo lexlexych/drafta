@@ -267,6 +267,40 @@ export function subscribeToInboxRealtime(
             handleEvent(event);
           },
         )
+        // The comment tables only need `router.refresh()`: «Комментарии» is
+        // server-rendered end to end (no client-side draft reducer like the DM
+        // panel has), so a refresh is both the simplest and the only correct
+        // way to reflect a new post, a new comment, or a finished draft.
+        .on(
+          "postgres_changes",
+          { event: "INSERT", schema: "public", table: "posts", filter },
+          handleEvent,
+        )
+        .on(
+          "postgres_changes",
+          { event: "UPDATE", schema: "public", table: "posts", filter },
+          handleEvent,
+        )
+        .on(
+          "postgres_changes",
+          { event: "INSERT", schema: "public", table: "comments", filter },
+          handleEvent,
+        )
+        .on(
+          "postgres_changes",
+          { event: "UPDATE", schema: "public", table: "comments", filter },
+          handleEvent,
+        )
+        .on(
+          "postgres_changes",
+          { event: "INSERT", schema: "public", table: "comment_drafts", filter },
+          handleEvent,
+        )
+        .on(
+          "postgres_changes",
+          { event: "UPDATE", schema: "public", table: "comment_drafts", filter },
+          handleEvent,
+        )
         .subscribe((status, error) => {
           if (disposed) {
             return;

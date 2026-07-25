@@ -276,8 +276,7 @@ async function listChannelUnreadCounts(
   const { data, error } = await supabase
     .from("conversations")
     .select("channel_connection_id, unread_count")
-    .eq("workspace_id", workspaceId)
-    .eq("kind", "dm");
+    .eq("workspace_id", workspaceId);
 
   if (error) {
     console.error("[inbox] failed to aggregate unread counts", error);
@@ -352,8 +351,7 @@ export async function getConversationListView(
   let filterBuilder = supabase
     .from("conversations")
     .select("id, channel_connection_id, contact_id, status, last_incoming_at, unread_count")
-    .eq("workspace_id", workspaceId)
-    .eq("kind", "dm");
+    .eq("workspace_id", workspaceId);
 
   if (channelId) {
     filterBuilder = filterBuilder.eq("channel_connection_id", channelId);
@@ -429,7 +427,7 @@ export async function getConversationListView(
   };
 }
 
-/** Thread: full message history of one `kind = "dm"` conversation, chronological. */
+/** Thread: full message history of one conversation, chronological. */
 export async function getThreadView(
   supabase: SupabaseClient,
   workspaceId: string,
@@ -438,7 +436,7 @@ export async function getThreadView(
 ): Promise<InboxThreadView | null> {
   const { data: conversation, error: conversationError } = await supabase
     .from("conversations")
-    .select("id, channel_connection_id, contact_id, kind, last_incoming_at")
+    .select("id, channel_connection_id, contact_id, last_incoming_at")
     .eq("workspace_id", workspaceId)
     .eq("id", conversationId)
     .maybeSingle();
@@ -448,7 +446,7 @@ export async function getThreadView(
     throw new Error("Unable to load the conversation.");
   }
 
-  if (!conversation || conversation.kind !== "dm") {
+  if (!conversation) {
     return null;
   }
 

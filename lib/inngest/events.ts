@@ -21,12 +21,6 @@ export type InteractionReceivedEvent = {
 export type DraftRegenerateRequestedEvent = {
   conversationId: string;
   workspaceId: string;
-  /**
-   * The specific comment to regenerate for (stage 5): comment threads keep one
-   * draft per comment, so regeneration targets that comment. Omitted for DM,
-   * where regeneration answers the whole conversation. IDs-only (rule 7).
-   */
-  messageId?: string;
 };
 
 /**
@@ -39,6 +33,34 @@ export type MessageSendRequestedEvent = {
   messageId: string;
   conversationId: string;
   workspaceId: string;
+};
+
+/**
+ * Payload for the `comment/drafts.requested` Inngest event — the user asked for
+ * comment drafts from the «Комментарии» screen (comments are never drafted on
+ * arrival). IDs only (vibecoding rule 7): the post's draft brief is stored on
+ * the `posts` row and read by the pipeline itself, never carried in the event.
+ *
+ * `commentId` narrows the run to a single comment («Создать черновик» under one
+ * comment, or its regenerate button). Omitted, the run covers every comment of
+ * the post that still needs a draft.
+ */
+export type CommentDraftsRequestedEvent = {
+  workspaceId: string;
+  postId: string;
+  commentId?: string;
+};
+
+/**
+ * Payload for the `comment/send` Inngest event — the outgoing reply is already
+ * persisted as `pending`; the event carries IDs only (vibecoding rule 7), the
+ * `send-comment` function reloads the text itself.
+ */
+export type CommentSendRequestedEvent = {
+  workspaceId: string;
+  postId: string;
+  /** The outgoing `comments` row to publish. */
+  replyCommentId: string;
 };
 
 /**
@@ -76,6 +98,17 @@ export const messageSendRequestedEvent = eventType("message/send", {
 
 export const pushNotifyRequestedEvent = eventType("push/notify.requested", {
   schema: staticSchema<PushNotifyRequestedEvent>(),
+});
+
+export const commentDraftsRequestedEvent = eventType(
+  "comment/drafts.requested",
+  {
+    schema: staticSchema<CommentDraftsRequestedEvent>(),
+  },
+);
+
+export const commentSendRequestedEvent = eventType("comment/send", {
+  schema: staticSchema<CommentSendRequestedEvent>(),
 });
 
 /**
@@ -125,6 +158,28 @@ export async function emitMessageSendRequested(
   payload: MessageSendRequestedEvent,
 ): Promise<void> {
   await inngest.send(messageSendRequestedEvent.create(payload));
+}
+
+/**
+ * Emits `comment/drafts.requested`. Deliberately throwing: the user pressed a
+ * button and is waiting for the drafts to start appearing — if the event never
+ * reaches Inngest nothing will generate them, so the action must say so.
+ */
+export async function emitCommentDraftsRequested(
+  payload: CommentDraftsRequestedEvent,
+): Promise<void> {
+  await inngest.send(commentDraftsRequestedEvent.create(payload));
+}
+
+/**
+ * Emits `comment/send`. Throwing for the same reason as `message/send`: the
+ * reply is already persisted `pending`, so a failed emit has to be compensated
+ * to `failed` by the caller rather than left silently unsent.
+ */
+export async function emitCommentSendRequested(
+  payload: CommentSendRequestedEvent,
+): Promise<void> {
+  await inngest.send(commentSendRequestedEvent.create(payload));
 }
 
 /**

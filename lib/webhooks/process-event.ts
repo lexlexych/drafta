@@ -1,18 +1,32 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
+﻿import type { SupabaseClient } from "@supabase/supabase-js";
 
-import type { NormalizedEvent } from "@/lib/channels/types";
+import type {
+  NormalizedCommentEvent,
+  NormalizedDirectMessageEvent,
+  NormalizedEvent,
+  NormalizedPostPublishedEvent,
+  NormalizedPostRef,
+  NormalizedSender,
+} from "@/lib/channels/types";
 import { emitInteractionReceived } from "@/lib/inngest/events";
 
 /**
  * One normalized event → the DB side of §6.1's pipeline
  * (docs/architecture/07-data-flows.md#61-входящее-dm-или-комментарий):
- * `webhook_events` idempotency write, `channel_connection` resolution,
- * `message.received` (`kind = dm`) and `comment.received` (`kind = comments`,
- * with `post_metadata` and the comment's parent) → upsert
- * contact/contact_identity, conversation, insert message, emit
- * `interaction/received`; delivery statuses update an existing message;
- * anything else is journaled and skipped. Called once per event returned by
- * the adapter's `parseWebhook` — see `app/api/webhooks/[provider]/route.ts`.
+ * `webhook_events` idempotency write, `channel_connection` resolution, then one
+ * of three independent paths:
+ *
+ *   * `message.received` → contact/contact_identity, conversation, message,
+ *     `interaction/received` (the DM draft pipeline debounces and generates);
+ *   * `comment.received` → contact/contact_identity, post, comment. **No
+ *     Inngest event**: a comment draft is never generated on arrival, only when
+ *     the user asks for it from the «Комментарии» screen;
+ *   * `post.published` → the post row alone, so a freshly published post is
+ *     listed with zero comments.
+ *
+ * Delivery statuses update an existing message; anything else is journaled and
+ * skipped. Called once per event returned by the adapter's `parseWebhook` — see
+ * `app/api/webhooks/[provider]/route.ts`.
  *
  * `supabase` is untyped (`SupabaseClient` without a generated `Database`
  * generic) because this repo has no generated types yet — same as every
@@ -102,7 +116,7 @@ export async function processInboundEvent(
   // reconciliation pass can retry — see `webhook_events_processing_idx`
   // (supabase/migrations/20260720103000_create_schema_v1.sql) and the
   // `reconcile-webhooks` cron listed as a later stage
-  // (docs/architecture/07-data-flows.md#65-полный-список-inngest-функций).
+  // (docs/architecture/07-data-flows.md#66-полный-список-inngest-функций).
   // Reserved for genuinely transient failures (a DB write erroring
   // mid-pipeline), not for definitive business outcomes like an unknown
   // channel_connection or an out-of-scope event type — those are terminal
@@ -135,11 +149,10 @@ export async function processInboundEvent(
     return;
   }
 
-  if (event.type === "message.received" && event.interactionKind === "dm") {
-    await processIncomingInteraction({
+  if (event.type === "message.received") {
+    await processIncomingDirectMessage({
       supabase,
       event,
-      kind: "dm",
       channelConnectionId: channelConnection.id,
       workspaceId: channelConnection.workspace_id,
       markProcessed,
@@ -148,15 +161,22 @@ export async function processInboundEvent(
     return;
   }
 
-  if (event.type === "comment.received" && event.interactionKind === "comment") {
-    // Stage 5 (docs/architecture/16-rollout-plan.md#этап-5--комментарии):
-    // same pipeline as a DM, but the conversation is the post
-    // (`kind = comments`, `post_metadata`) and the message carries its parent
-    // comment id.
-    await processIncomingInteraction({
+  if (event.type === "comment.received") {
+    await processIncomingComment({
       supabase,
       event,
-      kind: "comments",
+      channelConnectionId: channelConnection.id,
+      workspaceId: channelConnection.workspace_id,
+      markProcessed,
+      markUnprocessedWithError,
+    });
+    return;
+  }
+
+  if (event.type === "post.published") {
+    await processPublishedPost({
+      supabase,
+      event,
       channelConnectionId: channelConnection.id,
       workspaceId: channelConnection.workspace_id,
       markProcessed,
@@ -182,7 +202,7 @@ export async function processInboundEvent(
   // reactions, if a future adapter emits them into the normalized union).
   // Journaled, not an error.
   await markProcessed(
-    `Event type "${event.type}" (kind=${event.interactionKind}) is not processed at this stage`,
+    `Event type "${event.type}" is not processed at this stage`,
   );
 }
 
@@ -197,10 +217,9 @@ const DELIVERY_STATUS_BY_EVENT_TYPE: Partial<
 type MarkProcessed = (processingError: string | null) => Promise<void>;
 type MarkUnprocessedWithError = (processingError: string) => Promise<void>;
 
-async function processIncomingInteraction(params: {
+async function processIncomingDirectMessage(params: {
   supabase: SupabaseClient;
-  event: NormalizedEvent;
-  kind: "dm" | "comments";
+  event: NormalizedDirectMessageEvent;
   channelConnectionId: string;
   workspaceId: string;
   markProcessed: MarkProcessed;
@@ -209,7 +228,6 @@ async function processIncomingInteraction(params: {
   const {
     supabase,
     event,
-    kind,
     channelConnectionId,
     workspaceId,
     markProcessed,
@@ -217,24 +235,19 @@ async function processIncomingInteraction(params: {
   } = params;
 
   try {
-    // A comment thread has many different authors (docs/architecture/06-data-model.md#messages):
-    // each new sender becomes its own identity/contact, same as a DM's single
-    // author does — the shared `upsertContactIdentity` handles both.
     const { contactIdentityId, contactId } = await upsertContactIdentity(
       supabase,
       workspaceId,
-      event,
+      event.platform,
+      event.message.sender,
     );
 
     const conversationId = await upsertConversation(
       supabase,
       workspaceId,
       channelConnectionId,
-      // A comment conversation is the post itself, not a single contact — it
-      // has no owning contact (authors vary per comment). DM keeps its contact.
-      kind === "comments" ? null : contactId,
-      kind,
-      event,
+      contactId,
+      event.conversation.externalId,
     );
 
     const messageId = await insertIncomingMessage(
@@ -249,14 +262,91 @@ async function processIncomingInteraction(params: {
 
     // Fail-safe by design (docs/architecture/14-vibecoding-rules.md#7) —
     // never allowed to turn a persisted message into a failed webhook. The
-    // event payload is IDs-only and kind-agnostic (generate-draft discovers
-    // the conversation kind itself).
+    // event payload is IDs-only.
     await emitInteractionReceived({ messageId, conversationId, workspaceId });
   } catch (error) {
-    console.error(
-      `[webhooks] failed to process incoming ${kind === "comments" ? "comment" : "direct message"}`,
-      error,
+    console.error("[webhooks] failed to process incoming direct message", error);
+    await markUnprocessedWithError(describeError(error));
+  }
+}
+
+/**
+ * A comment arrival persists the post (if it isn't known yet), the author and
+ * the comment — and stops there. Comment drafts are explicitly requested from
+ * the «Комментарии» screen, so nothing is emitted to Inngest here.
+ */
+async function processIncomingComment(params: {
+  supabase: SupabaseClient;
+  event: NormalizedCommentEvent;
+  channelConnectionId: string;
+  workspaceId: string;
+  markProcessed: MarkProcessed;
+  markUnprocessedWithError: MarkUnprocessedWithError;
+}): Promise<void> {
+  const {
+    supabase,
+    event,
+    channelConnectionId,
+    workspaceId,
+    markProcessed,
+    markUnprocessedWithError,
+  } = params;
+
+  try {
+    // A post's comments have many different authors — each new one becomes its
+    // own identity/contact, the same way a DM's single author does.
+    const { contactIdentityId } = await upsertContactIdentity(
+      supabase,
+      workspaceId,
+      event.platform,
+      event.comment.author,
     );
+
+    const postId = await upsertPost(
+      supabase,
+      workspaceId,
+      channelConnectionId,
+      event.post,
+    );
+
+    await insertIncomingComment(
+      supabase,
+      workspaceId,
+      postId,
+      contactIdentityId,
+      event,
+    );
+
+    await markProcessed(null);
+  } catch (error) {
+    console.error("[webhooks] failed to process incoming comment", error);
+    await markUnprocessedWithError(describeError(error));
+  }
+}
+
+/** A post goes live: it appears in «Комментарии» right away, with no comments. */
+async function processPublishedPost(params: {
+  supabase: SupabaseClient;
+  event: NormalizedPostPublishedEvent;
+  channelConnectionId: string;
+  workspaceId: string;
+  markProcessed: MarkProcessed;
+  markUnprocessedWithError: MarkUnprocessedWithError;
+}): Promise<void> {
+  const {
+    supabase,
+    event,
+    channelConnectionId,
+    workspaceId,
+    markProcessed,
+    markUnprocessedWithError,
+  } = params;
+
+  try {
+    await upsertPost(supabase, workspaceId, channelConnectionId, event.post);
+    await markProcessed(null);
+  } catch (error) {
+    console.error("[webhooks] failed to process published post", error);
     await markUnprocessedWithError(describeError(error));
   }
 }
@@ -264,10 +354,10 @@ async function processIncomingInteraction(params: {
 async function upsertContactIdentity(
   supabase: SupabaseClient,
   workspaceId: string,
-  event: NormalizedEvent,
+  platform: string,
+  sender: NormalizedSender,
 ): Promise<{ contactIdentityId: string; contactId: string }> {
-  const platform = event.platform;
-  const externalId = event.message.sender.externalId;
+  const externalId = sender.externalId;
 
   const { data: existing, error: selectError } = await supabase
     .from("contact_identities")
@@ -283,7 +373,7 @@ async function upsertContactIdentity(
 
   // New identity → new contact (docs/architecture/06-data-model.md#contact_identities:
   // "склейка" of two contacts is a manual, later UI action, not automatic here).
-  const displayName = event.message.sender.displayName?.trim() || externalId;
+  const displayName = sender.displayName?.trim() || externalId;
 
   const { data: newContact, error: contactError } = await supabase
     .from("contacts")
@@ -299,7 +389,7 @@ async function upsertContactIdentity(
       contact_id: newContact.id,
       platform,
       external_id: externalId,
-      display_name: event.message.sender.displayName ?? null,
+      display_name: sender.displayName ?? null,
     })
     .select("id")
     .single();
@@ -331,12 +421,9 @@ async function upsertConversation(
   supabase: SupabaseClient,
   workspaceId: string,
   channelConnectionId: string,
-  contactId: string | null,
-  kind: "dm" | "comments",
-  event: NormalizedEvent,
+  contactId: string,
+  externalId: string,
 ): Promise<string> {
-  const externalId = event.conversation.externalId;
-
   const { data: existing, error: selectError } = await supabase
     .from("conversations")
     .select("id")
@@ -352,12 +439,7 @@ async function upsertConversation(
       workspace_id: workspaceId,
       channel_connection_id: channelConnectionId,
       contact_id: contactId,
-      kind,
       external_id: externalId,
-      // Post identity/preview for a comment thread; null for a DM
-      // (docs/architecture/06-data-model.md#conversations).
-      post_metadata:
-        kind === "comments" ? (event.conversation.postMetadata ?? null) : null,
       status: "open",
     })
     .select("id")
@@ -380,12 +462,87 @@ async function upsertConversation(
   return created.id;
 }
 
+/**
+ * Resolves the post row for a normalized post reference, creating it when the
+ * post is new. An existing row is only *enriched*: `post.published` carries the
+ * caption and permalink, `comment.received` carries neither, and a comment on
+ * an older post must never blank out what a publish event already stored.
+ */
+async function upsertPost(
+  supabase: SupabaseClient,
+  workspaceId: string,
+  channelConnectionId: string,
+  post: NormalizedPostRef,
+): Promise<string> {
+  const { data: existing, error: selectError } = await supabase
+    .from("posts")
+    .select("id, text, permalink, published_at")
+    .eq("channel_connection_id", channelConnectionId)
+    .eq("external_id", post.externalId)
+    .maybeSingle();
+  if (selectError) throw selectError;
+
+  if (existing) {
+    const enrichment: Record<string, unknown> = {};
+    if (post.text?.trim() && !existing.text?.trim()) {
+      enrichment.text = post.text;
+    }
+    if (post.permalink && !existing.permalink) {
+      enrichment.permalink = post.permalink;
+    }
+    if (post.publishedAt && !existing.published_at) {
+      enrichment.published_at = post.publishedAt;
+    }
+
+    if (Object.keys(enrichment).length > 0) {
+      enrichment.updated_at = new Date().toISOString();
+      const { error: updateError } = await supabase
+        .from("posts")
+        .update(enrichment)
+        .eq("id", existing.id);
+      if (updateError) throw updateError;
+    }
+
+    return existing.id;
+  }
+
+  const { data: created, error: insertError } = await supabase
+    .from("posts")
+    .insert({
+      workspace_id: workspaceId,
+      channel_connection_id: channelConnectionId,
+      external_id: post.externalId,
+      text: post.text ?? "",
+      permalink: post.permalink ?? null,
+      published_at: post.publishedAt ?? null,
+      metadata: post.metadata ?? {},
+    })
+    .select("id")
+    .single();
+
+  if (insertError) {
+    if (isUniqueViolation(insertError)) {
+      const { data: winner, error: winnerError } = await supabase
+        .from("posts")
+        .select("id")
+        .eq("channel_connection_id", channelConnectionId)
+        .eq("external_id", post.externalId)
+        .single();
+      if (winnerError || !winner) throw winnerError ?? insertError;
+      return winner.id;
+    }
+    throw insertError;
+  }
+
+  return created.id;
+}
+
 async function insertIncomingMessage(
   supabase: SupabaseClient,
   workspaceId: string,
   conversationId: string,
   contactIdentityId: string,
-  event: NormalizedEvent,
+  event: NormalizedDirectMessageEvent,
 ): Promise<string> {
   const { data: created, error: insertError } = await supabase
     .from("messages")
@@ -394,9 +551,6 @@ async function insertIncomingMessage(
       conversation_id: conversationId,
       contact_identity_id: contactIdentityId,
       external_id: event.message.externalId,
-      // Set for a comment that replies to another comment; null otherwise
-      // (docs/architecture/06-data-model.md#messages).
-      parent_external_id: event.message.parentExternalId ?? null,
       direction: "incoming",
       text: event.message.text,
       attachments: event.message.attachments,
@@ -429,6 +583,49 @@ async function insertIncomingMessage(
   throw insertError;
 }
 
+async function insertIncomingComment(
+  supabase: SupabaseClient,
+  workspaceId: string,
+  postId: string,
+  contactIdentityId: string,
+  event: NormalizedCommentEvent,
+): Promise<string> {
+  const { data: created, error: insertError } = await supabase
+    .from("comments")
+    .insert({
+      workspace_id: workspaceId,
+      post_id: postId,
+      contact_identity_id: contactIdentityId,
+      external_id: event.comment.externalId,
+      parent_external_id: event.comment.parentExternalId ?? null,
+      direction: "incoming",
+      text: event.comment.text,
+      attachments: event.comment.attachments,
+      delivery_status: "received",
+      provider_metadata: event.rawMetadata,
+    })
+    .select("id")
+    .single();
+
+  if (!insertError) {
+    await bumpPostOnNewComment(supabase, postId);
+    return created.id;
+  }
+
+  if (isUniqueViolation(insertError)) {
+    const { data: existing, error: selectError } = await supabase
+      .from("comments")
+      .select("id")
+      .eq("post_id", postId)
+      .eq("external_id", event.comment.externalId)
+      .single();
+    if (selectError || !existing) throw selectError ?? insertError;
+    return existing.id;
+  }
+
+  throw insertError;
+}
+
 async function bumpConversationOnNewIncomingMessage(
   supabase: SupabaseClient,
   conversationId: string,
@@ -446,9 +643,20 @@ async function bumpConversationOnNewIncomingMessage(
   if (error) throw error;
 }
 
+/** Same atomic-increment reasoning as the DM counter, for `posts`. */
+async function bumpPostOnNewComment(
+  supabase: SupabaseClient,
+  postId: string,
+): Promise<void> {
+  const { error } = await supabase.rpc("bump_post_unread_count", {
+    target_post_id: postId,
+  });
+  if (error) throw error;
+}
+
 async function processDeliveryStatusUpdate(params: {
   supabase: SupabaseClient;
-  event: NormalizedEvent;
+  event: NormalizedDirectMessageEvent;
   channelConnectionId: string;
   deliveryStatus: "delivered" | "read" | "failed";
   markProcessed: MarkProcessed;

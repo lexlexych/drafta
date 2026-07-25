@@ -29,3 +29,9 @@ export type {
   PromptLogger,
   PromptLogOptions,
 } from "./prompt";
+export { buildCommentDraftPrompt } from "./comment-prompt";
+export type {
+  CommentPromptBrief,
+  CommentPromptInput,
+  CommentPromptTarget,
+} from "./comment-prompt";

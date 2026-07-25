@@ -5,19 +5,18 @@ import {
   getPostListView,
   getPostThreadView,
   listChannelConnections,
-} from "@/lib/db/comments-inbox";
+} from "@/lib/db/comments";
 import { createServerSupabaseClient } from "@/lib/db/server";
 import { getAuthenticatedUser, getCurrentWorkspace } from "@/lib/db/workspace";
 
-import { Avatar } from "../_components/avatar";
 import { ChannelChip } from "../_components/chips";
-import { DraftPanel } from "../_components/draft-panel";
 import { FilterChips } from "../_components/filter-chips";
-import { BackIcon, CommentsIcon, ExternalIcon } from "../_components/icons";
+import { CommentsIcon } from "../_components/icons";
 import { QUERY_KEYS, buildHref, firstParam } from "../_components/navigation";
 import styles from "../_components/panes.module.css";
 import uiStyles from "../_components/ui.module.css";
-import { MarkThreadRead } from "../inbox/mark-thread-read";
+import { MarkPostRead } from "./_components/mark-post-read";
+import { PostThread } from "./_components/post-thread";
 
 const PATHNAME = "/comments";
 
@@ -30,7 +29,7 @@ export default async function CommentsPage({
 }) {
   const params = await searchParams;
   const channelId = firstParam(params[QUERY_KEYS.channel]);
-  const conversationId = firstParam(params[QUERY_KEYS.conversation]);
+  const postId = firstParam(params[QUERY_KEYS.post]);
 
   const user = await getAuthenticatedUser();
   const workspace = user ? await getCurrentWorkspace(user.id) : null;
@@ -54,11 +53,10 @@ export default async function CommentsPage({
   ]);
 
   // Пост открывается только явным выбором пользователя — см. `../inbox/page.tsx`.
-  const openedId = conversationId;
-  const post = openedId
-    ? await getPostThreadView(supabase, workspace.id, channels, openedId)
+  const post = postId
+    ? await getPostThreadView(supabase, workspace.id, channels, postId)
     : null;
-  const isDetail = conversationId !== null;
+  const isDetail = postId !== null;
 
   const listParams = { [QUERY_KEYS.channel]: channelId };
 
@@ -92,19 +90,19 @@ export default async function CommentsPage({
           ) : list.items.length === 0 ? (
             <div className={styles.empty}>
               {channelId
-                ? "Нет постов с комментариями в этом канале."
-                : "Нет постов — комментарии появятся здесь, когда придёт первый."}
+                ? "В этом канале ещё нет постов."
+                : "Постов пока нет — они появятся здесь сразу после публикации."}
             </div>
           ) : null}
           {list.items.map((item) => (
             <Link
               key={item.id}
               className={styles.listItem}
-              data-active={item.id === openedId}
+              data-active={item.id === postId}
               data-unread={item.unreadCount > 0}
               href={buildHref(PATHNAME, {
                 ...listParams,
-                [QUERY_KEYS.conversation]: item.id,
+                [QUERY_KEYS.post]: item.id,
               })}
             >
               <span
@@ -137,99 +135,8 @@ export default async function CommentsPage({
       <section className={styles.paneDetail}>
         {post ? (
           <>
-            <MarkThreadRead conversationId={post.conversationId} />
-            <div className={styles.threadHead}>
-              <Link
-                className={styles.backButton}
-                href={buildHref(PATHNAME, listParams)}
-                aria-label="Назад"
-              >
-                <BackIcon />
-              </Link>
-              <div className={styles.threadWho}>
-                <b>Комментарии к посту</b>
-                <div className={styles.threadChips}>
-                  <ChannelChip channel={post.channel} />
-                </div>
-              </div>
-            </div>
-
-            <div className={styles.postCard}>
-              <div className={styles.postCardTop}>
-                <ChannelChip channel={post.channel} />
-                {post.postUrl ? (
-                  <a
-                    className={styles.postLink}
-                    href={post.postUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    пост <ExternalIcon />
-                  </a>
-                ) : null}
-              </div>
-              <div className={styles.postText}>{post.postText}</div>
-              <div className={styles.postMeta}>{post.postMeta}</div>
-            </div>
-
-            <div className={`${styles.messages} ${styles.commentsList}`}>
-              {post.comments.length === 0 ? (
-                <div className={styles.empty}>Пока нет комментариев.</div>
-              ) : null}
-              {post.comments.map((comment) => (
-                <div key={comment.id} className={styles.commentRow}>
-                  <div
-                    className={[
-                      styles.comment,
-                      comment.isReply ? styles.commentReply : "",
-                      comment.draft ? styles.commentTarget : "",
-                      comment.isOurs ? styles.commentOurs : "",
-                    ]
-                      .filter(Boolean)
-                      .join(" ")}
-                  >
-                    {comment.isOurs ? (
-                      <span
-                        className={`${uiStyles.avatar} ${uiStyles.avatarSm} ${styles.ourAvatar}`}
-                        aria-hidden="true"
-                      >
-                        {comment.authorName.slice(0, 1)}
-                      </span>
-                    ) : comment.avatar ? (
-                      <Avatar avatar={comment.avatar} size="sm" />
-                    ) : null}
-                    <div className={styles.commentBody}>
-                      <div className={styles.commentHead}>
-                        <b>{comment.authorName}</b>
-                        {comment.authorHandle ? (
-                          <span className={styles.commentHandle}>
-                            {comment.authorHandle}
-                          </span>
-                        ) : null}
-                        <span className={`${styles.commentHandle} ${uiStyles.num}`}>
-                          {comment.time}
-                          {comment.deliveryLabel ? ` · ${comment.deliveryLabel}` : ""}
-                        </span>
-                      </div>
-                      <div className={styles.commentText}>{comment.text}</div>
-                    </div>
-                  </div>
-
-                  {/* One draft per comment, rendered right under it (stage 5). */}
-                  {comment.draft ? (
-                    <div className={styles.commentDraft}>
-                      <DraftPanel
-                        key={`${comment.id}:${comment.draft.id}:${comment.draft.updatedAt}`}
-                        draft={comment.draft}
-                        workspaceId={workspace.id}
-                        conversationId={post.conversationId}
-                        targetMessageId={comment.id}
-                      />
-                    </div>
-                  ) : null}
-                </div>
-              ))}
-            </div>
+            <MarkPostRead postId={post.postId} />
+            <PostThread post={post} backHref={buildHref(PATHNAME, listParams)} />
           </>
         ) : (
           <div className={styles.paneEmpty}>

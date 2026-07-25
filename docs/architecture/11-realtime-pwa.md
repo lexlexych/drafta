@@ -1,4 +1,4 @@
----
+﻿---
 title: "11. Realtime, Web Push, PWA"
 aliases: ["Realtime", "PWA", "Push", "Serwist", "Уведомления", "§8"]
 tags: [architecture, realtime, pwa, push, serwist, ios, notifications]
@@ -34,7 +34,7 @@ updated: 2026-07-19
 ## Web Push
 
 Через Serwist-воркер; отправка — Inngest-функции `send-push` и `push-digest`
-([7.5](07-data-flows.md#65-полный-список-inngest-функций)), библиотека web-push, VAPID
+([7.6](07-data-flows.md#66-полный-список-inngest-функций)), библиотека web-push, VAPID
 (ключи — [13. Секреты](13-environments-secrets.md#секреты-vercel-env)).
 Подписки хранятся в [`push_subscriptions`](06-data-model.md#push_subscriptions).
 

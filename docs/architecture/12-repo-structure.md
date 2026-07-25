@@ -1,4 +1,4 @@
----
+﻿---
 title: "12. Структура репозитория"
 aliases: ["Структура репозитория", "Дерево каталогов", "Repo structure", "§9"]
 tags: [architecture, repository, structure, nextjs, conventions]
@@ -55,7 +55,7 @@ CLAUDE.md                         # глоссарий §1.1 + правила §
 | `app/(app)/*` — экраны | [10. UI и навигация](10-ui.md) + [11. Realtime, Web Push, PWA](11-realtime-pwa.md) |
 | `app/api/webhooks/[provider]/` | [7.1. Входящее](07-data-flows.md#61-входящее-dm-или-комментарий) |
 | `lib/channels/` | [5. Слой абстракции каналов](05-channels.md) |
-| `lib/inngest/functions/` | [7.5. Список функций](07-data-flows.md#65-полный-список-inngest-функций) |
+| `lib/inngest/functions/` | [7.6. Список функций](07-data-flows.md#66-полный-список-inngest-функций) |
 | `lib/ai/` (включая `masking.ts` и классификацию) | [8. AI-подсистема](08-ai-subsystem.md) + [9. Категории](09-categories.md) |
 | `supabase/migrations/` | [6. Модель данных](06-data-model.md) |
 | `CLAUDE.md` | [2. Глоссарий](02-glossary.md) + [14. Правила вайбкодинга](14-vibecoding-rules.md) |

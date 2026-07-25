@@ -8,10 +8,7 @@ import {
 } from "react";
 import { useRouter } from "next/navigation";
 
-import type {
-  CategoryIncomingKind,
-  CategoryRow,
-} from "@/lib/db/categories";
+import type { CategoryRow } from "@/lib/db/categories";
 
 import { GripIcon, LockIcon } from "../../_components/icons";
 import uiStyles from "../../_components/ui.module.css";
@@ -36,7 +33,6 @@ type EditorState = {
   description: string;
   draftInstruction: string;
   channelConnectionIds: string[];
-  incomingKind: CategoryIncomingKind;
   skipDraft: boolean;
   isDefault: boolean;
 };
@@ -49,12 +45,6 @@ const CATEGORY_COLOR_VARS = [
   "--cat-5",
 ];
 
-const INCOMING_KIND_LABELS: Record<CategoryIncomingKind, string> = {
-  dm: "сообщения",
-  comments: "комментарии",
-  both: "оба",
-};
-
 function editorFromCategory(category: CategoryListItem): EditorState {
   return {
     id: category.id,
@@ -62,7 +52,6 @@ function editorFromCategory(category: CategoryListItem): EditorState {
     description: category.description,
     draftInstruction: category.draft_instruction ?? "",
     channelConnectionIds: category.channel_connection_ids,
-    incomingKind: category.incoming_kind,
     skipDraft: category.skip_draft,
     isDefault: category.is_default,
   };
@@ -75,7 +64,6 @@ function emptyEditor(): EditorState {
     description: "",
     draftInstruction: "",
     channelConnectionIds: [],
-    incomingKind: "both",
     skipDraft: false,
     isDefault: false,
   };
@@ -114,7 +102,7 @@ function categoryScopeLabel(
     .filter((name): name is string => Boolean(name));
   const scope = channelNames.length > 0 ? channelNames.join(", ") : "все";
 
-  return `каналы: ${scope} · тип: ${INCOMING_KIND_LABELS[category.incoming_kind]}`;
+  return `каналы: ${scope}`;
 }
 
 export function CategoriesPanel({
@@ -151,7 +139,6 @@ export function CategoriesPanel({
         channelConnectionIds: editor.isDefault
           ? []
           : editor.channelConnectionIds,
-        incomingKind: editor.isDefault ? ("both" as const) : editor.incomingKind,
         skipDraft: editor.skipDraft,
       };
       const result = editor.id
@@ -377,7 +364,7 @@ export function CategoriesPanel({
                   <p>
                     {editor.isDefault
                       ? "Системная категория всегда остаётся последней."
-                      : "Первая подходящая категория по порядку получает входящее."}
+                      : "Первая подходящая категория по порядку получает сообщение. У комментариев категорий нет."}
                   </p>
                 </div>
                 <button
@@ -451,66 +438,34 @@ export function CategoriesPanel({
                 </label>
 
                 {!editor.isDefault ? (
-                  <div className={styles.categoryFormGrid}>
-                    <fieldset className={styles.categoryFieldset}>
-                      <legend>Тип входящего</legend>
-                      {(
-                        ["both", "dm", "comments"] as CategoryIncomingKind[]
-                      ).map((kind) => (
-                        <label key={kind}>
+                  <fieldset className={styles.categoryFieldset}>
+                    <legend>Каналы</legend>
+                    <span className={styles.categoryFieldHint}>
+                      Ничего не выбрано — категория работает во всех каналах.
+                    </span>
+                    {channels.length > 0 ? (
+                      channels.map((channel) => (
+                        <label key={channel.id}>
                           <input
-                            type="radio"
-                            name="incoming-kind"
-                            value={kind}
-                            checked={editor.incomingKind === kind}
-                            onChange={() =>
-                              setEditor((current) =>
-                                current
-                                  ? { ...current, incomingKind: kind }
-                                  : current,
-                              )
-                            }
+                            type="checkbox"
+                            checked={editor.channelConnectionIds.includes(
+                              channel.id,
+                            )}
+                            onChange={() => toggleChannel(channel.id)}
                             disabled={isPending}
                           />
-                          {kind === "both"
-                            ? "Сообщения и комментарии"
-                            : kind === "dm"
-                              ? "Только сообщения"
-                              : "Только комментарии"}
+                          {channel.name}
                         </label>
-                      ))}
-                    </fieldset>
-
-                    <fieldset className={styles.categoryFieldset}>
-                      <legend>Каналы</legend>
+                      ))
+                    ) : (
                       <span className={styles.categoryFieldHint}>
-                        Ничего не выбрано — категория работает во всех каналах.
+                        Подключённых каналов пока нет.
                       </span>
-                      {channels.length > 0 ? (
-                        channels.map((channel) => (
-                          <label key={channel.id}>
-                            <input
-                              type="checkbox"
-                              checked={editor.channelConnectionIds.includes(
-                                channel.id,
-                              )}
-                              onChange={() => toggleChannel(channel.id)}
-                              disabled={isPending}
-                            />
-                            {channel.name}
-                          </label>
-                        ))
-                      ) : (
-                        <span className={styles.categoryFieldHint}>
-                          Подключённых каналов пока нет.
-                        </span>
-                      )}
-                    </fieldset>
-                  </div>
+                    )}
+                  </fieldset>
                 ) : (
                   <p className={styles.categoryLockedNote}>
-                    Каналы и тип входящего зафиксированы: все каналы, сообщения и
-                    комментарии.
+                    Каналы зафиксированы: категория работает во всех каналах.
                   </p>
                 )}
 

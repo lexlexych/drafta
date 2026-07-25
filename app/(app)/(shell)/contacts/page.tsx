@@ -173,10 +173,15 @@ export default async function ContactsPage({
                     <Link
                       key={entry.conversationId}
                       className={cardStyles.historyRow}
-                      href={buildHref(
-                        entry.kind === "dm" ? "/inbox" : "/comments",
-                        { [QUERY_KEYS.conversation]: entry.conversationId },
-                      )}
+                      href={
+                        entry.kind === "dm"
+                          ? buildHref("/inbox", {
+                              [QUERY_KEYS.conversation]: entry.conversationId,
+                            })
+                          : buildHref("/comments", {
+                              [QUERY_KEYS.post]: entry.conversationId,
+                            })
+                      }
                     >
                       <span className={cardStyles.historyLabel}>{entry.label}</span>
                       <time className={uiStyles.num}>{entry.time}</time>

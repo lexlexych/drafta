@@ -1,8 +1,9 @@
 import type {
   ChannelPlatform,
   NormalizedAttachment,
+  NormalizedDirectMessageEvent,
   NormalizedEvent,
-  NormalizedEventType,
+  NormalizedPostRef,
   ParseWebhookInput,
 } from "../types";
 
@@ -34,13 +35,17 @@ import type {
  * see the `conversation` field mapping in `parseSingleEnvelope` below for
  * why this adapter picks the internal one).
  *
- * Stage 5 (docs/architecture/16-rollout-plan.md#этап-5--комментарии) adds
- * `comment.received` — a *different* envelope shape (`WebhookPayloadComment`):
+ * `comment.received` is a *different* envelope shape (`WebhookPayloadComment`):
  * a top-level `comment` (with its own `author`, not a DM `sender`) and `post`,
  * and no `message`/`conversation`. Comments of one post share the post's
- * `platformPostId`, so they group into a single `kind = comments` conversation;
- * a reply-to-a-reply carries `comment.parentCommentId`. The webhook does not
- * include the post caption/permalink — only ids. See `buildCommentEvent`.
+ * `platformPostId`, so they group into a single `posts` row; a reply-to-a-reply
+ * carries `comment.parentCommentId`. The comment webhook does not include the
+ * post caption/permalink — only ids. See `buildCommentEvent`.
+ *
+ * `post.published` is a third shape: a top-level `post` and nothing else. It is
+ * what puts a freshly published post into «Комментарии» before it has any
+ * comments, and it is where the caption/permalink actually arrive. See
+ * `buildPostPublishedEvent`.
  *
  * `InboxWebhookMessage.attachments[]` only carries `type`, `url`, and an
  * opaque `payload` object ("additional attachment metadata", undocumented
@@ -72,15 +77,20 @@ interface ZernioRawConversation {
 }
 
 /**
- * The post a `comment.received` event belongs to — Zernio's `WebhookPayloadComment.post`
- * (confirmed against docs.zernio.com/api/openapi). Only `platformPostId` is
- * guaranteed: the internal `id` is null for posts not published through Zernio
- * (the common case for organic posts users comment on). The webhook does NOT
- * carry the post's caption text or a permalink — those need a separate fetch.
+ * The post a `comment.received` event belongs to, and the subject of a
+ * `post.published` event — Zernio's `WebhookPayloadComment.post` /
+ * `WebhookPayloadPost.post` (confirmed against docs.zernio.com/api/openapi).
+ * Only `platformPostId` is guaranteed: the internal `id` is null for posts not
+ * published through Zernio (the common case for organic posts users comment
+ * on). A `comment.received` envelope carries ids only — `caption`/`permalink`
+ * appear on the publish event, where Zernio does report them.
  */
 interface ZernioRawPost {
   id?: string | null;
   platformPostId: string;
+  caption?: string | null;
+  permalink?: string | null;
+  publishedAt?: string | null;
 }
 
 interface ZernioRawCommentAuthor {
@@ -151,7 +161,9 @@ interface ZernioWebhookEnvelope {
  * account lifecycle, calls — is an "unknown type" for this adapter and gets
  * skipped, not mapped.
  */
-const DM_EVENT_TYPES: Readonly<Record<string, NormalizedEventType>> = {
+const DM_EVENT_TYPES: Readonly<
+  Record<string, NormalizedDirectMessageEvent["type"]>
+> = {
   "message.received": "message.received",
   "message.delivered": "message.delivered",
   "message.read": "message.read",
@@ -166,6 +178,13 @@ const DM_EVENT_TYPES: Readonly<Record<string, NormalizedEventType>> = {
  * sets `comment.parentCommentId`.
  */
 const COMMENT_EVENT = "comment.received" as const;
+
+/**
+ * Publication of a post on the connected account. Its envelope carries only
+ * `post` — no comment yet, by definition. drafta creates the `posts` row on it
+ * so the post is listed under «Комментарии» from the moment it goes live.
+ */
+const POST_PUBLISHED_EVENT = "post.published" as const;
 
 /** Platforms this product supports — epic E-002 scope ("Zernio покрывает платформы: Telegram, WhatsApp, Facebook, Instagram (DM)"). */
 const KNOWN_PLATFORMS: ReadonlySet<ChannelPlatform> = new Set([
@@ -241,6 +260,14 @@ function isZernioComment(value: unknown): value is ZernioRawComment {
   );
 }
 
+function isZernioPost(value: unknown): value is ZernioRawPost {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+
+  return typeof (value as Record<string, unknown>).platformPostId === "string";
+}
+
 /**
  * Zernio's real attachment schema (`InboxWebhookMessage.attachments`,
  * confirmed via docs.zernio.com/api/openapi) only exposes `type`, `url`,
@@ -276,6 +303,10 @@ function parseSingleEnvelope(raw: unknown): NormalizedEvent | null {
     return buildCommentEvent(raw, raw.account.platform);
   }
 
+  if (raw.event === POST_PUBLISHED_EVENT) {
+    return buildPostPublishedEvent(raw, raw.account.platform);
+  }
+
   const dmType = DM_EVENT_TYPES[raw.event];
   if (dmType) {
     return buildDmEvent(raw, dmType, raw.account.platform);
@@ -291,7 +322,7 @@ function parseSingleEnvelope(raw: unknown): NormalizedEvent | null {
 
 function buildDmEvent(
   raw: ZernioWebhookEnvelope,
-  type: NormalizedEventType,
+  type: NormalizedDirectMessageEvent["type"],
   platform: ChannelPlatform,
 ): NormalizedEvent | null {
   if (!isZernioMessage(raw.message)) {
@@ -314,7 +345,6 @@ function buildDmEvent(
     provider: "zernio",
     platform,
     externalAccountId: raw.account.id,
-    interactionKind: "dm",
     // `conversation.id` (Zernio's internal conversation ID) rather than
     // `conversation.platformConversationId`: this adapter consistently keys on
     // Zernio's own IDs, which is what `webhook_events`/`messages` idempotency
@@ -334,6 +364,33 @@ function buildDmEvent(
   };
 }
 
+/**
+ * Normalizes Zernio's post shape. `platformPostId` is always the identity:
+ * the internal `postId` is null for posts not published through Zernio, so it
+ * can't be the key. It is also the value Zernio's reply endpoint
+ * (POST /v1/inbox/comments/{postId}) accepts.
+ */
+function postRef(
+  post: ZernioRawPost,
+  platform: ChannelPlatform,
+  internalPostId: string | null,
+): NormalizedPostRef {
+  const permalink = post.permalink?.trim();
+  const publishedAt = post.publishedAt?.trim();
+
+  return {
+    externalId: post.platformPostId,
+    text: post.caption ?? "",
+    ...(permalink ? { permalink } : {}),
+    ...(publishedAt ? { publishedAt } : {}),
+    metadata: {
+      platformPostId: post.platformPostId,
+      postId: internalPostId,
+      platform,
+    },
+  };
+}
+
 function buildCommentEvent(
   raw: ZernioWebhookEnvelope,
   platform: ChannelPlatform,
@@ -346,11 +403,13 @@ function buildCommentEvent(
   }
 
   const comment = raw.comment;
-  // The comment thread is grouped by the post. `platformPostId` is always
-  // present; the internal `postId` is null for posts not published through
-  // Zernio, so it can't be the grouping key. This is also the value Zernio's
-  // reply endpoint (POST /v1/inbox/comments/{postId}) accepts.
-  const postExternalId = comment.platformPostId;
+  // A comment envelope carries the post's ids only — no caption, no permalink.
+  // The post row keeps whatever a `post.published` event already filled in;
+  // this event only has to make sure the row exists.
+  const post: ZernioRawPost = raw.post ?? {
+    platformPostId: comment.platformPostId,
+    id: comment.postId ?? null,
+  };
 
   return {
     type: "comment.received",
@@ -358,22 +417,12 @@ function buildCommentEvent(
     provider: "zernio",
     platform,
     externalAccountId: raw.account.id,
-    interactionKind: "comment",
-    conversation: {
-      externalId: postExternalId,
-      // The webhook does not carry the post caption or permalink — only ids.
-      // Post text (used in the draft prompt / list title) is a later fetch.
-      postMetadata: {
-        platformPostId: comment.platformPostId,
-        postId: comment.postId ?? raw.post?.id ?? null,
-        platform,
-      },
-    },
-    message: {
+    post: postRef(post, platform, comment.postId ?? raw.post?.id ?? null),
+    comment: {
       externalId: comment.id,
       text: comment.text ?? "",
       attachments: [],
-      sender: {
+      author: {
         externalId: comment.author.id,
         displayName:
           comment.author.name ?? comment.author.username ?? undefined,
@@ -383,6 +432,28 @@ function buildCommentEvent(
         : {}),
     },
     // Kept in full per docs/architecture/05-channels.md#нормализованное-событие.
+    rawMetadata: raw as unknown as Record<string, unknown>,
+  };
+}
+
+function buildPostPublishedEvent(
+  raw: ZernioWebhookEnvelope,
+  platform: ChannelPlatform,
+): NormalizedEvent | null {
+  if (!isZernioPost(raw.post)) {
+    console.warn(
+      `[zernio] skipping "post.published" event with no usable post payload (event id: ${raw.id})`,
+    );
+    return null;
+  }
+
+  return {
+    type: "post.published",
+    providerEventId: raw.id,
+    provider: "zernio",
+    platform,
+    externalAccountId: raw.account.id,
+    post: postRef(raw.post, platform, raw.post.id ?? null),
     rawMetadata: raw as unknown as Record<string, unknown>,
   };
 }

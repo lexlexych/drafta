@@ -157,8 +157,7 @@ insert into public.ai_settings (
   signature,
   debounce_seconds,
   model,
-  auto_generate_dm,
-  auto_generate_comments
+  auto_generate_dm
 )
 values
   (
@@ -168,7 +167,6 @@ values
     'Viele Grüße, Demo A',
     45,
     'mistral-large-latest',
-    true,
     true
   ),
   (
@@ -178,8 +176,7 @@ values
     'Mit freundlichen Grüßen, Demo B',
     60,
     'mistral-large-latest',
-    true,
-    false
+    true
   )
 on conflict (workspace_id) do update
 set
@@ -189,7 +186,6 @@ set
   debounce_seconds = excluded.debounce_seconds,
   model = excluded.model,
   auto_generate_dm = excluded.auto_generate_dm,
-  auto_generate_comments = excluded.auto_generate_comments,
   updated_at = now();
 
 insert into public.channel_connections (
@@ -383,7 +379,6 @@ insert into public.conversations (
   workspace_id,
   channel_connection_id,
   contact_id,
-  kind,
   external_id,
   status,
   last_incoming_at,
@@ -395,7 +390,6 @@ values
     'a0000000-0000-4000-8000-000000000001',
     'a0000000-0000-4000-8000-000000000101',
     'a0000000-0000-4000-8000-000000000201',
-    'dm',
     'seed-a-telegram-chat-anna',
     'open',
     now() - interval '10 minutes',
@@ -406,7 +400,6 @@ values
     'a0000000-0000-4000-8000-000000000001',
     'a0000000-0000-4000-8000-000000000102',
     'a0000000-0000-4000-8000-000000000202',
-    'dm',
     'seed-a-instagram-chat-anton',
     'open',
     now() - interval '25 minutes',
@@ -421,7 +414,6 @@ values
     'a0000000-0000-4000-8000-000000000001',
     'a0000000-0000-4000-8000-000000000103',
     'a0000000-0000-4000-8000-000000000203',
-    'dm',
     'seed-a-telegram-chat-clara',
     'open',
     now() - interval '5 minutes',
@@ -432,7 +424,6 @@ values
     'b0000000-0000-4000-8000-000000000001',
     'b0000000-0000-4000-8000-000000000101',
     'b0000000-0000-4000-8000-000000000201',
-    'dm',
     'seed-b-telegram-chat-bernd',
     'open',
     now() - interval '15 minutes',
@@ -443,7 +434,6 @@ values
     'b0000000-0000-4000-8000-000000000001',
     'b0000000-0000-4000-8000-000000000102',
     'b0000000-0000-4000-8000-000000000202',
-    'dm',
     'seed-b-instagram-chat-britta',
     'open',
     now() - interval '35 minutes',
@@ -453,7 +443,6 @@ on conflict (id) do update
 set
   channel_connection_id = excluded.channel_connection_id,
   contact_id = excluded.contact_id,
-  kind = excluded.kind,
   external_id = excluded.external_id,
   status = excluded.status,
   last_incoming_at = excluded.last_incoming_at,
@@ -673,10 +662,10 @@ set
   updated_at = now();
 
 -- ---------------------------------------------------------------------------
--- Stage 5 — comments: a post with a comment thread on Workspace A's Instagram
--- channel (capabilities {"comments":true}). A comment conversation is the post
--- itself (kind = 'comments', post_metadata), its messages are comments from
--- several different authors, and each incoming comment gets its own draft.
+-- Comments: two posts on Workspace A's Instagram channel (capabilities
+-- {"comments":true}). Comments live in their own tables — `posts` with
+-- `comments` under them — and carry no drafts on arrival: the second post is
+-- seeded with no comments at all, exactly as a freshly published one looks.
 -- ---------------------------------------------------------------------------
 
 insert into public.contacts (id, workspace_id, display_name, notes, tags)
@@ -729,16 +718,16 @@ set platform = excluded.platform,
     display_name = excluded.display_name,
     updated_at = now();
 
-insert into public.conversations (
+insert into public.posts (
   id,
   workspace_id,
   channel_connection_id,
-  contact_id,
-  kind,
   external_id,
-  post_metadata,
-  status,
-  last_incoming_at,
+  text,
+  permalink,
+  published_at,
+  metadata,
+  last_comment_at,
   unread_count
 )
 values
@@ -746,29 +735,44 @@ values
     'a0000000-0000-4000-8000-000000000410',
     'a0000000-0000-4000-8000-000000000001',
     'a0000000-0000-4000-8000-000000000102',
-    null,
-    'comments',
-    'seed-a-instagram-post-autumn',
-    '{"externalId":"ig_post_autumn","text":"Осенняя коллекция уже в продаже — заходите за новинками!","permalink":"https://instagram.com/p/ig_post_autumn","platform":"instagram"}'::jsonb,
-    'open',
+    'ig_post_autumn',
+    'Осенняя коллекция уже в продаже — заходите за новинками!',
+    'https://instagram.com/p/ig_post_autumn',
+    now() - interval '2 days',
+    '{"platformPostId":"ig_post_autumn","postId":null,"platform":"instagram"}'::jsonb,
     now() - interval '8 minutes',
     2
+  ),
+  (
+    -- Только что опубликованный пост: в списке «Комментарии» он есть,
+    -- комментариев под ним ещё нет.
+    'a0000000-0000-4000-8000-000000000411',
+    'a0000000-0000-4000-8000-000000000001',
+    'a0000000-0000-4000-8000-000000000102',
+    'ig_post_workshop',
+    'Собрали новый стеллаж в мастерской — показываем на видео.',
+    'https://instagram.com/p/ig_post_workshop',
+    now() - interval '20 minutes',
+    '{"platformPostId":"ig_post_workshop","postId":null,"platform":"instagram"}'::jsonb,
+    null,
+    0
   )
 on conflict (id) do update
 set
   channel_connection_id = excluded.channel_connection_id,
-  kind = excluded.kind,
   external_id = excluded.external_id,
-  post_metadata = excluded.post_metadata,
-  status = excluded.status,
-  last_incoming_at = excluded.last_incoming_at,
+  text = excluded.text,
+  permalink = excluded.permalink,
+  published_at = excluded.published_at,
+  metadata = excluded.metadata,
+  last_comment_at = excluded.last_comment_at,
   unread_count = excluded.unread_count,
   updated_at = now();
 
-insert into public.messages (
+insert into public.comments (
   id,
   workspace_id,
-  conversation_id,
+  post_id,
   contact_identity_id,
   external_id,
   parent_external_id,

@@ -96,16 +96,6 @@ function channelNameForPlatform(
   return channel?.name ?? platformLabel(platform as Platform);
 }
 
-function postText(postMetadata: unknown): string {
-  if (typeof postMetadata !== "object" || postMetadata === null) {
-    return "";
-  }
-
-  const value = (postMetadata as Record<string, unknown>).text;
-
-  return typeof value === "string" ? value : "";
-}
-
 async function loadContacts(
   supabase: SupabaseClient,
   workspaceId: string,
@@ -311,14 +301,12 @@ export async function getContactCardView(
   const identityIds = identities.map((identity) => identity.id);
   const nowIso = new Date().toISOString();
 
-  // DM threads are linked to the contact directly; comment posts are linked
-  // only through the identities that authored comments in them (the same
-  // cross-channel reduction the mock layer uses, lib/mock/index.ts).
+  // DM threads are linked to the contact directly; posts are linked only
+  // through the identities that authored comments under them.
   const { data: dmRows, error: dmError } = await supabase
     .from("conversations")
     .select("id, channel_connection_id, last_incoming_at")
     .eq("workspace_id", workspaceId)
-    .eq("kind", "dm")
     .eq("contact_id", contactId);
 
   if (dmError) {
@@ -326,17 +314,16 @@ export async function getContactCardView(
     throw new Error("Unable to load the contact history.");
   }
 
-  let commentRows: Array<{
+  let postRows: Array<{
     id: string;
-    channel_connection_id: string;
-    last_incoming_at: string | null;
-    post_metadata: unknown;
+    text: string;
+    last_comment_at: string | null;
   }> = [];
 
   if (identityIds.length > 0) {
     const { data: authoredRows, error: authoredError } = await supabase
-      .from("messages")
-      .select("conversation_id")
+      .from("comments")
+      .select("post_id")
       .eq("workspace_id", workspaceId)
       .in("contact_identity_id", identityIds);
 
@@ -345,28 +332,27 @@ export async function getContactCardView(
       throw new Error("Unable to load the contact history.");
     }
 
-    const commentConversationIds = [
+    const postIds = [
       ...new Set(
-        ((authoredRows ?? []) as Array<{ conversation_id: string }>).map(
-          (row) => row.conversation_id,
+        ((authoredRows ?? []) as Array<{ post_id: string }>).map(
+          (row) => row.post_id,
         ),
       ),
     ];
 
-    if (commentConversationIds.length > 0) {
+    if (postIds.length > 0) {
       const { data, error } = await supabase
-        .from("conversations")
-        .select("id, channel_connection_id, last_incoming_at, post_metadata")
+        .from("posts")
+        .select("id, text, last_comment_at")
         .eq("workspace_id", workspaceId)
-        .eq("kind", "comments")
-        .in("id", commentConversationIds);
+        .in("id", postIds);
 
       if (error) {
         console.error("[contacts] failed to load comment history", error);
         throw new Error("Unable to load the contact history.");
       }
 
-      commentRows = (data ?? []) as typeof commentRows;
+      postRows = (data ?? []) as typeof postRows;
     }
   }
 
@@ -387,11 +373,11 @@ export async function getContactCardView(
         lastIncomingAt: conversation.last_incoming_at,
       };
     }),
-    ...commentRows.map((conversation) => ({
-      conversationId: conversation.id,
+    ...postRows.map((post) => ({
+      conversationId: post.id,
       kind: "comments" as const,
-      label: `Комментарий к посту «${truncate(postText(conversation.post_metadata), 28)}»`,
-      lastIncomingAt: conversation.last_incoming_at,
+      label: `Комментарий к посту «${truncate(post.text, 28)}»`,
+      lastIncomingAt: post.last_comment_at,
     })),
   ]
     .sort((left, right) =>

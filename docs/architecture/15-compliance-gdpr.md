@@ -1,4 +1,4 @@
----
+﻿---
 title: "15. Compliance: GDPR и запуск в Германии"
 aliases: ["GDPR", "Compliance", "Субпроцессоры", "AVV", "DPA", "§12"]
 tags: [architecture, compliance, gdpr, legal, dpa, subprocessors, privacy, germany]
@@ -70,7 +70,7 @@ updated: 2026-07-20
 | Маскирование идентификаторов перед LLM | [§8](08-ai-subsystem.md#маскирование-идентификаторов-перед-llm) |
 | Шифрование credentials каналов | [`channel_connections`](06-data-model.md#channel_connections) |
 | RLS-изоляция тенантов | [§4](04-multitenancy.md#изоляция-данных) |
-| Ретенция `webhook_events` через `cleanup` | [§7.5](07-data-flows.md#65-полный-список-inngest-функций) |
+| Ретенция `webhook_events` через `cleanup` | [§7.6](07-data-flows.md#66-полный-список-inngest-функций) |
 | Каскадное удаление workspace = право на удаление (Art. 17) | [§6](06-data-model.md) |
 | Экспорт данных workspace (Art. 15/20) | простой JSON-дамп по `workspace_id`, раздел «Приватность» в настройках — [§10](10-ui.md#разделы-настроек) |
 | HTTPS везде, санитизация HTML писем | [§7.4](07-data-flows.md#64-email-этап-после-mvp) |

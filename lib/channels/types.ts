@@ -20,12 +20,17 @@ export type ChannelPlatform = "telegram" | "whatsapp" | "instagram" | "facebook"
 /** Normalized event type — see docs/architecture/05-channels.md#нормализованное-событие. */
 export type NormalizedEventType =
   | "message.received"
-  | "comment.received"
   | "message.delivered"
   | "message.read"
-  | "message.failed";
+  | "message.failed"
+  | "comment.received"
+  | "post.published";
 
-/** Whether the event is a direct message or a comment on a post. */
+/**
+ * Whether an outgoing send addresses a DM thread or a comment on a post. Kept
+ * for `SendMessageInput`; inbound events no longer carry it — a DM event, a
+ * comment event and a post event are three distinct normalized shapes.
+ */
 export type InteractionKind = "dm" | "comment";
 
 /**
@@ -51,44 +56,63 @@ export interface NormalizedSender {
   displayName?: string;
 }
 
-/** The message or comment body carried by the event. */
+/** The direct-message body carried by a `message.*` event. */
 export interface NormalizedMessage {
   /**
-   * External ID of the message/comment at the provider — together with the
+   * External ID of the message at the provider — together with the
    * conversation, this is the `messages` table's idempotency key.
    */
   externalId: string;
   text: string;
   attachments: NormalizedAttachment[];
   sender: NormalizedSender;
+}
+
+/** Reference to the DM thread a `message.*` event belongs to. */
+export interface NormalizedConversationRef {
+  /** External ID of the DM thread. */
+  externalId: string;
+}
+
+/**
+ * The post a comment belongs to, or a newly published one. `externalId` is the
+ * provider-side post ID — the key `posts.external_id` stores, and the value a
+ * later comment on the same post reports. Everything else is optional: the
+ * comment webhook carries IDs only, while a publish webhook usually also has
+ * the caption and a link.
+ */
+export interface NormalizedPostRef {
+  externalId: string;
+  /** Caption/body of the post, when the provider reports it. */
+  text?: string;
+  /** Public link to the post, when the provider reports one. */
+  permalink?: string;
+  /** Publication timestamp (ISO-8601), when the provider reports one. */
+  publishedAt?: string;
+  /** Anything else worth keeping about the post — stored as `posts.metadata`. */
+  metadata?: Record<string, unknown>;
+}
+
+/** The comment body carried by a `comment.received` event. */
+export interface NormalizedComment {
   /**
-   * For comment events: external ID of the parent comment this one replies to
-   * (a reply-to-a-reply), when the provider reports one. Absent for DM and for
-   * top-level comments. Stored as `messages.parent_external_id`
-   * (docs/architecture/06-data-model.md#messages).
+   * External ID of the comment at the provider — together with the post, this
+   * is the `comments` table's idempotency key.
+   */
+  externalId: string;
+  text: string;
+  attachments: NormalizedAttachment[];
+  author: NormalizedSender;
+  /**
+   * External ID of the parent comment this one replies to (a reply-to-a-reply),
+   * when the provider reports one. Absent for top-level comments. Stored as
+   * `comments.parent_external_id`.
    */
   parentExternalId?: string;
 }
 
-/** Reference to the DM thread, or to the post a comment belongs to. */
-export interface NormalizedConversationRef {
-  /** External ID of the DM thread, or of the post for comment events. */
-  externalId: string;
-  /**
-   * Post metadata for comment events (external post ID, preview text,
-   * link…). Absent for DM events.
-   */
-  postMetadata?: Record<string, unknown>;
-}
-
-/**
- * A single provider webhook payload normalizes to zero or more of these.
- * This is the contract every adapter's `parseWebhook` must produce, and the
- * one every consumer downstream of `lib/channels` (webhook route, inbox)
- * relies on — see docs/architecture/05-channels.md#нормализованное-событие.
- */
-export interface NormalizedEvent {
-  type: NormalizedEventType;
+/** Fields every normalized event carries, whatever its shape. */
+interface NormalizedEventBase {
   /** Event ID at the provider — the `webhook_events` idempotency key together with provider. */
   providerEventId: string;
   provider: ChannelProvider;
@@ -99,9 +123,6 @@ export interface NormalizedEvent {
    * own UUID isn't known yet while parsing a raw webhook.
    */
   externalAccountId: string;
-  interactionKind: InteractionKind;
-  conversation: NormalizedConversationRef;
-  message: NormalizedMessage;
   /**
    * Raw provider metadata for this event, kept in full — nothing gets lost
    * even where the normalized fields above are incomplete (email headers,
@@ -109,6 +130,44 @@ export interface NormalizedEvent {
    */
   rawMetadata: Record<string, unknown>;
 }
+
+/** A direct message, or a delivery-status update for one we sent. */
+export interface NormalizedDirectMessageEvent extends NormalizedEventBase {
+  type: "message.received" | "message.delivered" | "message.read" | "message.failed";
+  conversation: NormalizedConversationRef;
+  message: NormalizedMessage;
+}
+
+/**
+ * A comment under a post. Deliberately *not* shaped like a DM: comments live in
+ * their own tables and their own pipeline, so nothing downstream has to branch
+ * on a `kind` discriminator inside a shared shape.
+ */
+export interface NormalizedCommentEvent extends NormalizedEventBase {
+  type: "comment.received";
+  post: NormalizedPostRef;
+  comment: NormalizedComment;
+}
+
+/**
+ * A post published on the connected account. It creates the `posts` row right
+ * away, so the post shows up under «Комментарии» before anyone has commented.
+ */
+export interface NormalizedPostPublishedEvent extends NormalizedEventBase {
+  type: "post.published";
+  post: NormalizedPostRef;
+}
+
+/**
+ * A single provider webhook payload normalizes to zero or more of these.
+ * This is the contract every adapter's `parseWebhook` must produce, and the
+ * one every consumer downstream of `lib/channels` (webhook route, inbox)
+ * relies on — see docs/architecture/05-channels.md#нормализованное-событие.
+ */
+export type NormalizedEvent =
+  | NormalizedDirectMessageEvent
+  | NormalizedCommentEvent
+  | NormalizedPostPublishedEvent;
 
 /** Input to `verifyWebhook` — the exact bytes/headers the provider sent, needed for signature checks. */
 export interface VerifyWebhookInput {
@@ -134,19 +193,20 @@ export interface SendMessageInput {
    * the database (vibecoding rule 4).
    */
   externalAccountId: string;
+  /** `conversations.external_id` for a DM; `posts.external_id` for a comment reply. */
   conversationExternalId: string;
   text: string;
   attachments?: NormalizedAttachment[];
   /**
-   * DM vs comment reply (stage 5). Defaults to `"dm"` when omitted so existing
-   * callers keep the same behavior. For `"comment"` the adapter posts a reply
-   * to a specific comment rather than into a DM thread.
+   * DM vs comment reply. Defaults to `"dm"` when omitted so existing callers
+   * keep the same behavior. For `"comment"` the adapter posts a reply to a
+   * specific comment rather than into a DM thread.
    */
   interactionKind?: InteractionKind;
   /**
    * External ID of the comment being replied to — required when
    * `interactionKind === "comment"`. Comes from
-   * `messages.parent_external_id` of the outgoing reply
+   * `comments.parent_external_id` of the outgoing reply
    * (docs/architecture/07-data-flows.md#63-отправка-ответа: «для комментария —
    * как ответ на конкретный комментарий»).
    */

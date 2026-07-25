@@ -36,21 +36,19 @@ export type PromptKnowledgeBase = Pick<
   "text" | "usedFileIds"
 >;
 
+/**
+ * Direct messages only. Comments have their own builder
+ * (`./comment-prompt.ts`) — they carry no category, no debounced batch and a
+ * different set of context blocks.
+ */
 export type PromptInput = {
   aiSettings: PromptAiSettings;
   maskedMessages: readonly MaskedPromptMessage[];
   channelCapabilities: ChannelCapabilities;
-  conversationKind: "dm" | "comments";
   knowledgeBase: PromptKnowledgeBase;
   selectedCategory: PromptCategory;
   /** Contact notes are a stage-7 input and must already be stripped of direct identifiers. */
   maskedContactNotes?: string;
-  /**
-   * For `conversationKind === "comments"`: the already-masked text of the post
-   * the comments are under (docs/architecture/08-ai-subsystem.md#структура-промпта,
-   * §4 «для комментариев — текст поста»). Absent for DM.
-   */
-  maskedPostText?: string;
 };
 
 export type PromptLogger = {
@@ -62,20 +60,18 @@ export type PromptLogOptions = {
   logger?: PromptLogger;
 };
 
-function safeJson(value: unknown): string {
+/** Shared with `./comment-prompt.ts`, which composes the same kind of blocks. */
+export function safeJson(value: unknown): string {
   // Prevent user-controlled strings from visually terminating our delimited
   // data blocks. JSON escaping also preserves the original content for the LLM.
   return JSON.stringify(value, null, 2).replaceAll("</", "<\\/");
 }
 
-function untrustedBlock(label: string, value: unknown): string {
+export function untrustedBlock(label: string, value: unknown): string {
   return `<UNTRUSTED_${label}_JSON>\n${safeJson(value)}\n</UNTRUSTED_${label}_JSON>`;
 }
 
-function channelRules(
-  capabilities: ChannelCapabilities,
-  conversationKind: PromptInput["conversationKind"],
-): string[] {
+function channelRules(capabilities: ChannelCapabilities): string[] {
   const maxLength =
     capabilities.maxMessageLength === null
       ? "There is no known hard character limit."
@@ -90,9 +86,7 @@ function channelRules(
   return [
     maxLength,
     threadingStyle,
-    conversationKind === "comments"
-      ? "This is a public comment: keep the reply concise and do not expose private context."
-      : "This is a private direct-message conversation.",
+    "This is a private direct-message conversation.",
     capabilities.responseWindowHours === null
       ? "The channel has no known response-window limit."
       : `The channel response window is ${capabilities.responseWindowHours} hours after the last incoming message.`,
@@ -140,18 +134,10 @@ export function buildDraftPrompt(input: PromptInput): AiMessage[] {
     [
       "## 4. Conversation context",
       "The already-masked conversation is supplied as an UNTRUSTED_CONVERSATION_JSON data block in the user message. Preserve placeholders such as {{PHONE_1}} verbatim when they are needed in the draft.",
-      ...(input.conversationKind === "comments" && input.maskedPostText?.trim()
-        ? [
-            "These are public comments under the business's own post. The post is provided only as context for what the commenters are reacting to:",
-            untrustedBlock("POST", input.maskedPostText),
-          ]
-        : []),
     ].join("\n"),
     [
       "## 5. Channel rules",
-      ...channelRules(input.channelCapabilities, input.conversationKind).map(
-        (rule) => `- ${rule}`,
-      ),
+      ...channelRules(input.channelCapabilities).map((rule) => `- ${rule}`),
     ].join("\n"),
     [
       "## 6. Selected category action",

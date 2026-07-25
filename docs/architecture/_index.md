@@ -1,4 +1,4 @@
----
+﻿---
 title: "Архитектурный план: AI-инбокс (PWA) — v5"
 aliases: ["Архитектура", "Оглавление", "Architecture Index"]
 tags: [architecture, index, moc, ai-inbox]
@@ -99,7 +99,7 @@ cssclass: architecture-doc
 
 **Push-уведомления** — [режимы «мгновенно» и «дайджест»](11-realtime-pwa.md#частота-уведомлений--настройка-пользователя) ·
 [`notification_settings`](06-data-model.md#notification_settings) ·
-[функции `send-push` и `push-digest`](07-data-flows.md#65-полный-список-inngest-функций)
+[функции `send-push` и `push-digest`](07-data-flows.md#66-полный-список-inngest-функций)
 
 **Регион ЕС** — [Supabase Frankfurt и Vercel fra1](03-stack.md) ·
 [Mistral как европейский LLM](08-ai-subsystem.md) ·

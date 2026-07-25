@@ -1,4 +1,4 @@
-import "server-only";
+﻿import "server-only";
 
 import { Inngest } from "inngest";
 
@@ -6,7 +6,7 @@ import { Inngest } from "inngest";
  * The single Inngest client the app sends events through and (starting
  * stage 2 of the rollout plan) serves functions with — see
  * docs/architecture/12-repo-structure.md (`lib/inngest/functions/`) and
- * docs/architecture/07-data-flows.md#65-полный-список-inngest-функций.
+ * docs/architecture/07-data-flows.md#66-полный-список-inngest-функций.
  *
  * `id` is the Inngest "app id", unrelated to any workspace/tenant — same
  * value everywhere this client is constructed.

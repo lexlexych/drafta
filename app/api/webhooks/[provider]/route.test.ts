@@ -119,7 +119,7 @@ describe.skipIf(!hasLocalSupabaseConfig)("POST /api/webhooks/[provider] (zernio)
     emitInteractionReceivedMock.mockClear();
 
     // workspaces cascade-delete channel_connections/contacts/contact_identities/
-    // conversations/messages/webhook_events (docs/architecture/06-data-model.md
+    // conversations/messages/posts/comments/webhook_events (docs/architecture/06-data-model.md
     // "все связи от workspace вниз — с каскадным удалением") — one delete per
     // test workspace is enough to fully clean up.
     while (workspaceIdsToClean.length > 0) {
@@ -201,11 +201,10 @@ describe.skipIf(!hasLocalSupabaseConfig)("POST /api/webhooks/[provider] (zernio)
 
     const { data: conversation } = await supabase
       .from("conversations")
-      .select("id, kind, external_id, contact_id, last_incoming_at, unread_count")
+      .select("id, external_id, contact_id, last_incoming_at, unread_count")
       .eq("workspace_id", workspaceId)
       .eq("external_id", "tg_chat_77120")
       .single();
-    expect(conversation?.kind).toBe("dm");
     expect(conversation?.contact_id).toBe(contact!.id);
     expect(conversation?.last_incoming_at).not.toBeNull();
     expect(conversation?.unread_count).toBe(1);

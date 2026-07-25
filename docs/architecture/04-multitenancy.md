@@ -1,4 +1,4 @@
----
+﻿---
 title: "4. Мультитенантность, роли, приглашения"
 aliases: ["Мультитенантность", "Роли", "Приглашения", "RLS", "§3"]
 tags: [architecture, multitenancy, rls, auth, roles, invitations, supabase, postmark]
@@ -63,7 +63,7 @@ updated: 2026-07-19
 
 - **На MVP:** показать owner'у ссылку-приглашение «скопировать и отправить самому».
 - **Позже:** отдельная Inngest-функция `notify-existing-user`, шлющая обычное письмо-уведомление
-  через Postmark API — см. [6.5. Список Inngest-функций](07-data-flows.md#65-полный-список-inngest-функций).
+  через Postmark API — см. [6.6. Список Inngest-функций](07-data-flows.md#66-полный-список-inngest-функций).
 
 ### Бонус настройки
 

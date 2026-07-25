@@ -29,15 +29,9 @@ import {
   emitMessageSendRequested,
 } from "@/lib/inngest/events";
 
-/**
- * A conversation is either a DM ("/inbox") or a comment thread ("/comments"),
- * and these actions are shared by both screens (stage 5). Revalidating both
- * paths is cheap and keeps whichever screen is open in sync — the conversation
- * only exists on one of them.
- */
+/** These actions belong to "/inbox" only — comments have their own actions. */
 function revalidateInboxViews() {
   revalidatePath("/inbox");
-  revalidatePath("/comments");
 }
 
 /**
@@ -268,12 +262,7 @@ export async function retrySendMessageAction(
   return requestMessageSend(context, conversationId, messageId);
 }
 
-export async function regenerateDraftAction(
-  conversationId: string,
-  // For a comment thread the caller passes the comment being regenerated
-  // (stage 5): one draft per comment. Omitted for DM.
-  messageId?: string,
-) {
+export async function regenerateDraftAction(conversationId: string) {
   const context = await getDraftActionContext();
 
   if ("error" in context) {
@@ -294,7 +283,6 @@ export async function regenerateDraftAction(
     await emitDraftRegenerateRequested({
       conversationId,
       workspaceId: context.workspace.id,
-      ...(messageId ? { messageId } : {}),
     });
     return { ok: true as const };
   } catch (error) {

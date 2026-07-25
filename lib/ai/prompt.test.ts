@@ -26,7 +26,6 @@ function promptInput(overrides: Partial<PromptInput> = {}): PromptInput {
       },
     ],
     channelCapabilities: DEFAULT_CHANNEL_CAPABILITIES.instagram,
-    conversationKind: "comments",
     knowledgeBase: buildKnowledgeBaseContext([
       {
         id: "price-file",
@@ -87,7 +86,7 @@ describe("buildDraftPrompt", () => {
     expect(system).toContain("Preisfrage");
     expect(system).toContain("Nenne den Preis klar");
     expect(system).toContain("Do not exceed 1000 characters");
-    expect(system).toContain("public comment");
+    expect(system).toContain("private direct-message conversation");
     expect(user).toContain('"direction": "incoming"');
   });
 

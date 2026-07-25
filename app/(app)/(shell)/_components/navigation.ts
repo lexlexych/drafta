@@ -44,6 +44,8 @@ export const QUERY_KEYS = {
   channel: "channel",
   category: "category",
   conversation: "conversation",
+  /** Open post on «Комментарии» — posts are not conversations. */
+  post: "post",
   contact: "contact",
   section: "section",
 } as const;
