@@ -53,7 +53,8 @@ export default async function CommentsPage({
     getCommentsChannelFiltersView(supabase, workspace.id, channels),
   ]);
 
-  const openedId = conversationId ?? list.items[0]?.id ?? null;
+  // Пост открывается только явным выбором пользователя — см. `../inbox/page.tsx`.
+  const openedId = conversationId;
   const post = openedId
     ? await getPostThreadView(supabase, workspace.id, channels, openedId)
     : null;
@@ -230,7 +231,11 @@ export default async function CommentsPage({
               ))}
             </div>
           </>
-        ) : null}
+        ) : (
+          <div className={styles.paneEmpty}>
+            Выберите пост слева, чтобы открыть комментарии.
+          </div>
+        )}
       </section>
     </div>
   );

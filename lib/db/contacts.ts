@@ -2,7 +2,6 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import type { ChannelPlatform } from "@/lib/channels/types";
 import {
   listChannelConnections,
   type ChannelConnectionRow,
@@ -51,18 +50,6 @@ export type ContactResult<T> =
 export type MergeCandidate = {
   id: string;
   name: string;
-};
-
-/** Per-channel contact counts for the shell's "Контакты" nav item — docs/architecture/10-ui.md. */
-export type ContactNavChannelCounter = {
-  id: string;
-  name: string;
-  platform: ChannelPlatform;
-  contactCount: number;
-};
-
-export type ContactNavigationCounters = {
-  channels: ContactNavChannelCounter[];
 };
 
 export type ContactListFilter = {
@@ -242,25 +229,7 @@ function contactListItem(
   };
 }
 
-/** Shell "Контакты" nav item: per-channel contact counts under channel names — docs/architecture/10-ui.md. */
-export async function getContactNavigationCounters(
-  supabase: SupabaseClient,
-  workspaceId: string,
-  channels: ChannelConnectionRow[],
-): Promise<ContactNavigationCounters> {
-  const counts = await contactCountsByPlatform(supabase, workspaceId);
-
-  return {
-    channels: channels.map((channel) => ({
-      id: channel.id,
-      name: channel.name,
-      platform: channel.platform,
-      contactCount: counts.get(channel.platform) ?? 0,
-    })),
-  };
-}
-
-/** Filter chips (`FilterChips`) on the contacts screen — same aggregation, `ChannelFilterView` shape. */
+/** Filter chips (`FilterChips`) on the contacts screen — `ChannelFilterView` shape. */
 export async function getContactChannelFilters(
   supabase: SupabaseClient,
   workspaceId: string,

@@ -53,7 +53,9 @@ export default async function InboxPage({
     getChannelFiltersView(supabase, workspace.id, channels),
   ]);
 
-  const openedId = conversationId ?? list.items[0]?.id ?? null;
+  // Диалог открывается только явным выбором пользователя: пока в адресе нет
+  // `conversation`, правая панель пуста и ни один элемент списка не активен.
+  const openedId = conversationId;
   const thread = openedId
     ? await getThreadView(supabase, workspace.id, channels, openedId)
     : null;
@@ -211,7 +213,11 @@ export default async function InboxPage({
               />
             </div>
           </>
-        ) : null}
+        ) : (
+          <div className={styles.paneEmpty}>
+            Выберите диалог слева, чтобы открыть переписку.
+          </div>
+        )}
       </section>
     </div>
   );

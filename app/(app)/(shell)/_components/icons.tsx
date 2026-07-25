@@ -87,6 +87,51 @@ export function ChevronIcon(props: IconProps) {
   );
 }
 
+export function CheckIcon(props: IconProps) {
+  return (
+    <Icon
+      size={14}
+      {...stroke}
+      strokeWidth={2.2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      {...props}
+    >
+      <path d="M5 12.5l4.5 4.5L19 7" />
+    </Icon>
+  );
+}
+
+export function PlusIcon(props: IconProps) {
+  return (
+    <Icon
+      size={14}
+      {...stroke}
+      strokeWidth={2}
+      strokeLinecap="round"
+      {...props}
+    >
+      <path d="M12 5v14M5 12h14" />
+    </Icon>
+  );
+}
+
+export function LogoutIcon(props: IconProps) {
+  return (
+    <Icon
+      size={16}
+      {...stroke}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      {...props}
+    >
+      <path d="M14.5 4.5h3a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2h-3" />
+      <path d="M10 8.5L6 12l4 3.5" />
+      <path d="M6 12h8" />
+    </Icon>
+  );
+}
+
 export function BackIcon(props: IconProps) {
   return (
     <Icon

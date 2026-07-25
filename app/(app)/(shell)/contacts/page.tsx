@@ -49,7 +49,8 @@ export default async function ContactsPage({
     getContactListView(supabase, workspace.id, channels, { channelId }),
   ]);
 
-  const openedId = contactId ?? list.items[0]?.id ?? null;
+  // Карточка открывается только явным выбором пользователя — см. `../inbox/page.tsx`.
+  const openedId = contactId;
   let card: Awaited<ReturnType<typeof getContactCardView>> = null;
   let mergeCandidates: Awaited<ReturnType<typeof listMergeCandidates>> = [];
   if (openedId) {
@@ -185,7 +186,11 @@ export default async function ContactsPage({
               </div>
             </div>
           </>
-        ) : null}
+        ) : (
+          <div className={styles.paneEmpty}>
+            Выберите контакт слева, чтобы открыть карточку.
+          </div>
+        )}
       </section>
     </div>
   );

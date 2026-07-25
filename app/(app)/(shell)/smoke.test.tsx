@@ -10,7 +10,7 @@
  * ниже.
  */
 
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { SETTINGS_SECTIONS } from "@/lib/mock";
@@ -47,6 +47,11 @@ vi.mock("@/lib/db/workspace", () => ({
 }));
 vi.mock("@/lib/db/server", () => ({
   createServerSupabaseClient: async () => ({}),
+}));
+// Серверные действия меню пользователя: в jsdom важен только их импорт.
+vi.mock("./workspace-actions", () => ({
+  switchWorkspaceAction: async () => undefined,
+  createWorkspaceFromShellAction: async () => undefined,
 }));
 const INBOX_CHANNELS = [
   {
@@ -342,12 +347,6 @@ vi.mock("@/lib/db/contacts", () => ({
     { id: "chc_instagram_shop", name: "Instagram Магазин", platform: "instagram", count: 2 },
     { id: "chc_facebook_page", name: "Facebook Страница", platform: "facebook", count: 1 },
   ],
-  getContactNavigationCounters: async () => ({
-    channels: [
-      { id: "chc_instagram_shop", name: "Instagram Магазин", platform: "instagram", contactCount: 2 },
-      { id: "chc_facebook_page", name: "Facebook Страница", platform: "facebook", contactCount: 1 },
-    ],
-  }),
   getContactListView: async (
     _supabase: unknown,
     _workspaceId: string,
@@ -404,11 +403,33 @@ describe("dashboard page", () => {
 });
 
 describe("inbox page", () => {
-  it("renders the dialog list and hides the panel when no active draft exists", async () => {
-    render(await InboxPage({ searchParams: searchParams() }));
+  it("renders the dialog list without opening a thread until one is picked", async () => {
+    const { container } = render(
+      await InboxPage({ searchParams: searchParams() }),
+    );
 
     expect(screen.getByRole("heading", { name: "Сообщения" })).toBeDefined();
     expect(screen.getAllByText("Anna Weber").length).toBeGreaterThan(0);
+    // Ни один диалог не выбран автоматически — панель треда пуста.
+    expect(screen.queryByLabelText("Ответ")).toBeNull();
+    expect(screen.getByText(/Выберите диалог/)).toBeDefined();
+
+    // `data-unread` есть только у строк списка диалогов (не у чипсов фильтра).
+    const listItems = container.querySelectorAll("[data-unread]");
+
+    expect(listItems.length).toBe(3);
+    listItems.forEach((item) => {
+      expect(item.getAttribute("data-active")).toBe("false");
+    });
+  });
+
+  it("opens the thread of the picked conversation with its composer", async () => {
+    render(
+      await InboxPage({
+        searchParams: searchParams({ conversation: "cnv_dm_anna_ig" }),
+      }),
+    );
+
     expect(screen.queryByText("AI-черновик")).toBeNull();
     expect(screen.getByLabelText("Ответ")).toBeDefined();
   });
@@ -456,10 +477,19 @@ describe("comments page", () => {
 });
 
 describe("contacts page", () => {
-  it("renders the contact list and card", async () => {
+  it("renders the contact list without opening a card until one is picked", async () => {
     render(await ContactsPage({ searchParams: searchParams() }));
 
     expect(screen.getByRole("heading", { name: "Контакты" })).toBeDefined();
+    expect(screen.queryByText("Карточка контакта")).toBeNull();
+    expect(screen.getByText(/Выберите контакт/)).toBeDefined();
+  });
+
+  it("renders the card of the picked contact", async () => {
+    render(
+      await ContactsPage({ searchParams: searchParams({ contact: "con_sofia" }) }),
+    );
+
     expect(screen.getByText("Карточка контакта")).toBeDefined();
     expect(screen.getByText("Identities по каналам")).toBeDefined();
     expect(screen.getByText("Кросс-канальная история")).toBeDefined();
@@ -523,55 +553,92 @@ describe("settings page", () => {
   });
 });
 
-// Real per-channel unread (T-05).
-const messagesCounters = {
-  totalUnread: 4,
-  channels: [
-    { id: "chc_instagram_shop", name: "Instagram Магазин", platform: "instagram" as const, unreadCount: 3 },
-    { id: "chc_facebook_page", name: "Facebook Страница", platform: "facebook" as const, unreadCount: 1 },
-  ],
-};
+// Real DM unread total (T-05).
+const messagesCounters = { totalUnread: 4 };
 
-// Real per-channel comment unread (stage 5).
-const commentsCounters = {
-  totalUnread: 2,
-  channels: [
-    { id: "chc_instagram_shop", name: "Instagram Магазин", platform: "instagram" as const, unreadCount: 2 },
-  ],
-};
+// Real comment unread total (stage 5).
+const commentsCounters = { totalUnread: 2 };
 
-// Real per-channel contact counts (этап 7).
-const contactsCounters = {
-  channels: [
-    { id: "chc_instagram_shop", name: "Instagram Магазин", platform: "instagram" as const, contactCount: 2 },
-    { id: "chc_facebook_page", name: "Facebook Страница", platform: "facebook" as const, contactCount: 1 },
-  ],
-};
+const WORKSPACES = [
+  { id: "wsp_tonwerk", name: "Tonwerk Keramik" },
+  { id: "wsp_second", name: "Второй workspace" },
+];
+
+function renderSidebar() {
+  render(
+    <Sidebar
+      workspaceName="Tonwerk Keramik"
+      workspaces={WORKSPACES}
+      currentWorkspaceId="wsp_tonwerk"
+      userName="Алексей"
+      userRole="owner"
+      messagesCounters={messagesCounters}
+      commentsCounters={commentsCounters}
+      settingsSections={SETTINGS_SECTIONS}
+    />,
+  );
+}
 
 describe("shell navigation", () => {
-  it("renders sidebar sections with counters and no knowledge base", () => {
-    render(
-      <Sidebar
-        workspaceName="Tonwerk Keramik"
-        userName="Алексей"
-        userRole="owner"
-        messagesCounters={messagesCounters}
-        commentsCounters={commentsCounters}
-        contactsCounters={contactsCounters}
-        settingsSections={SETTINGS_SECTIONS}
-      />,
-    );
+  it("renders sidebar sections with counters and no channel expands", () => {
+    renderSidebar();
 
     expect(screen.getByText("Дашборд")).toBeDefined();
     expect(screen.getByText("Сообщения")).toBeDefined();
     expect(screen.getByText("Комментарии")).toBeDefined();
     expect(screen.getByText("Контакты")).toBeDefined();
     expect(screen.getByText("Настройки")).toBeDefined();
-    // Раздел «Сообщения» раскрыт по умолчанию — виден расхлоп реальных каналов
-    // (T-05) со своим счётчиком, а не мока.
-    expect(screen.getByText("Все каналы")).toBeDefined();
     expect(screen.getByText(String(messagesCounters.totalUnread))).toBeDefined();
+    // Разделы больше не расхлопываются в каналы — списки показывают все каналы.
+    expect(screen.queryByText("Все каналы")).toBeNull();
+    expect(screen.queryByText("Instagram Магазин")).toBeNull();
+    // Подменю настроек закрыто, пока пункт не раскрыт кликом.
     expect(screen.queryByText("База знаний")).toBeNull();
+  });
+
+  it("toggles the settings submenu by clicking the item itself", () => {
+    renderSidebar();
+
+    const settingsToggle = screen.getByRole("button", { name: /Настройки/ });
+
+    expect(settingsToggle.getAttribute("aria-expanded")).toBe("false");
+    // «Настройки» не ведут на страницу — только раскрывают подменю.
+    expect(
+      screen.queryAllByRole("link", { name: /Настройки/ }),
+    ).toHaveLength(0);
+
+    fireEvent.click(settingsToggle);
+
+    expect(settingsToggle.getAttribute("aria-expanded")).toBe("true");
+    expect(screen.getByText("База знаний")).toBeDefined();
+    // Ни один подпункт не выбран, пока пользователь не кликнул по нему.
+    SETTINGS_SECTIONS.forEach((section) => {
+      expect(
+        screen
+          .getByText(section.title)
+          .closest("a")
+          ?.getAttribute("data-active"),
+      ).toBe("false");
+    });
+
+    fireEvent.click(settingsToggle);
+
+    expect(screen.queryByText("База знаний")).toBeNull();
+  });
+
+  it("offers workspace switching, creation and logout in the user menu", () => {
+    renderSidebar();
+
+    fireEvent.click(screen.getByRole("button", { name: /Алексей/ }));
+
+    expect(screen.getByText("Второй workspace")).toBeDefined();
+    expect(screen.getByRole("button", { name: /Выйти/ })).toBeDefined();
+
+    fireEvent.click(screen.getByRole("button", { name: /Создать workspace/ }));
+
+    expect(
+      screen.getByLabelText("Название нового рабочего пространства"),
+    ).toBeDefined();
   });
 
   it("renders the mobile tabbar with unread badges", () => {

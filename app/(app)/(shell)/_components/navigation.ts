@@ -1,43 +1,16 @@
 /** Маршруты защищённой зоны и сборка ссылок с фильтрами. */
 
-import type { ChannelPlatform } from "@/lib/channels/types";
-
 /**
- * Real per-channel unread counts for the "Сообщения" nav item (T-05,
+ * Unread total for the "Сообщения"/"Комментарии" nav items (T-05,
  * docs/epics/epic_02/T-05-inbox-messages.md) — `lib/db/inbox.ts` (server-only)
- * returns this shape, `Sidebar`/`Tabbar` (client components) declare it here
- * instead of importing the server module's type directly, same convention
- * `channels-panel.tsx` uses for `lib/db/channel-connections.ts` (T-04): a
- * small parallel client-side type, not a cross-boundary import of a
+ * returns a superset of this shape, `Sidebar`/`Tabbar` (client components)
+ * declare it here instead of importing the server module's type directly, same
+ * convention `channels-panel.tsx` uses for `lib/db/channel-connections.ts`
+ * (T-04): a small parallel client-side type, not a cross-boundary import of a
  * `"server-only"`-marked module.
  */
-export type InboxNavChannelCounter = {
-  id: string;
-  name: string;
-  platform: ChannelPlatform;
-  unreadCount: number;
-};
-
 export type InboxNavCounters = {
   totalUnread: number;
-  channels: InboxNavChannelCounter[];
-};
-
-/**
- * Real per-channel contact counts for the "Контакты" nav item (этап 7,
- * `lib/db/contacts.ts`'s `getContactNavigationCounters`). Same client-side
- * parallel-type convention as `InboxNavCounters` above — no cross-boundary
- * import of the `"server-only"` module.
- */
-export type ContactsNavChannelCounter = {
-  id: string;
-  name: string;
-  platform: ChannelPlatform;
-  contactCount: number;
-};
-
-export type ContactsNavCounters = {
-  channels: ContactsNavChannelCounter[];
 };
 
 export type SectionId =
@@ -51,15 +24,19 @@ export type SectionDescriptor = {
   id: SectionId;
   label: string;
   pathname: string;
-  /** Пункт раскрывается в подсписок каналов или разделов настроек. */
+  /**
+   * Пункт не ведёт на страницу, а раскрывается в подсписок разделов настроек.
+   * «Сообщения», «Комментарии» и «Контакты» расхлопа не имеют: экраны
+   * показывают записи всех каналов без фильтра по каналу в меню.
+   */
   expandable: boolean;
 };
 
 export const SECTIONS: SectionDescriptor[] = [
   { id: "dashboard", label: "Дашборд", pathname: "/dashboard", expandable: false },
-  { id: "inbox", label: "Сообщения", pathname: "/inbox", expandable: true },
-  { id: "comments", label: "Комментарии", pathname: "/comments", expandable: true },
-  { id: "contacts", label: "Контакты", pathname: "/contacts", expandable: true },
+  { id: "inbox", label: "Сообщения", pathname: "/inbox", expandable: false },
+  { id: "comments", label: "Комментарии", pathname: "/comments", expandable: false },
+  { id: "contacts", label: "Контакты", pathname: "/contacts", expandable: false },
   { id: "settings", label: "Настройки", pathname: "/settings", expandable: true },
 ];
 

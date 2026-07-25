@@ -50,6 +50,15 @@ describe("workspace bootstrap boundaries", () => {
       "workspace-form.tsx",
     );
     const action = readSource("app", "(app)", "onboarding", "actions.ts");
+    // Провижининг общий для онбординга и создания дополнительного workspace
+    // из меню пользователя — он живёт в одном серверном модуле.
+    const provisioning = readSource("lib", "db", "workspace-bootstrap.ts");
+    const shellAction = readSource(
+      "app",
+      "(app)",
+      "(shell)",
+      "workspace-actions.ts",
+    );
     // T-07: dashboard и остальные разделы живут в группе (shell);
     // второй гейт (наличие workspace) — в её layout.
     const shellLayout = readSource("app", "(app)", "(shell)", "layout.tsx");
@@ -60,10 +69,15 @@ describe("workspace bootstrap boundaries", () => {
     expect(onboarding).toContain('redirect("/dashboard")');
     expect(form).toContain("createWorkspaceAction");
     expect(form).not.toContain('.from("workspaces")');
-    expect(action).toContain("createZernioWorkspaceProfile");
-    expect(action).toContain('admin.rpc("create_workspace"');
-    expect(action).toContain("deleteZernioWorkspaceProfile");
-    expect(action).toContain("provider_profiles: { zernio: profileId }");
+    expect(provisioning).toContain('import "server-only"');
+    expect(provisioning).toContain("createZernioWorkspaceProfile");
+    expect(provisioning).toContain('admin.rpc("create_workspace"');
+    expect(provisioning).toContain("deleteZernioWorkspaceProfile");
+    expect(provisioning).toContain("provider_profiles: { zernio: profileId }");
+    expect(action).toContain("provisionWorkspace");
+    expect(shellAction).toContain("provisionWorkspace");
+    // Переключение workspace'а проверяет членство до записи куки.
+    expect(shellAction).toContain("listUserWorkspaces");
     expect(shellLayout).toContain("getCurrentWorkspace");
     expect(shellLayout).toContain('redirect("/onboarding")');
   });
