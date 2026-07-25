@@ -57,6 +57,14 @@
   display: block;
 }
 
+/* Мультиселект категорий в шапке списка диалогов (category-filter.tsx).
+   Шириной ограничен так же, как чипы каналов, чтобы шапка не расползалась. */
+.categoryFilter {
+  padding: 8px 16px 0;
+  flex: none;
+  max-width: 220px;
+}
+
 .categorySelect {
   font: inherit;
   font-size: 12px;

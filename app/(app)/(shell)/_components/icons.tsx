@@ -240,3 +240,13 @@ export function ClockIcon(props: IconProps) {
     </Icon>
   );
 }
+
+export function WarningIcon(props: IconProps) {
+  return (
+    <Icon size={14} {...stroke} strokeLinecap="round" {...props}>
+      <path d="M12 4.5 3 19.5h18L12 4.5Z" />
+      <path d="M12 10v4.5" />
+      <path d="M12 17.2v.1" />
+    </Icon>
+  );
+}

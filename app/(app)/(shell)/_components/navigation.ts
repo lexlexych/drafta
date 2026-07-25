@@ -78,6 +78,22 @@ export function buildHref(
   return query ? `${pathname}?${query}` : pathname;
 }
 
+/**
+ * Мультизначный параметр (сейчас — `category`) хранится в адресе списком через
+ * запятую: так фильтр целиком живёт в URL и переживает открытие диалога.
+ */
+export function parseIdList(value: string | null): string[] {
+  if (!value) {
+    return [];
+  }
+
+  return [...new Set(value.split(",").map((id) => id.trim()).filter(Boolean))];
+}
+
+export function serializeIdList(ids: readonly string[]): string | null {
+  return ids.length > 0 ? ids.join(",") : null;
+}
+
 /** Первое значение параметра поиска — Next отдаёт строку либо массив. */
 export function firstParam(
   value: string | string[] | undefined,

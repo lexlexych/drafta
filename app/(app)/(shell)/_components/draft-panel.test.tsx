@@ -9,6 +9,7 @@ import { DraftPanel } from "./draft-panel";
 
 const actionMocks = vi.hoisted(() => ({
   sendDraftAction: vi.fn(),
+  runDraftNowAction: vi.fn(),
 }));
 
 vi.mock("../inbox/actions", () => ({
@@ -16,6 +17,7 @@ vi.mock("../inbox/actions", () => ({
   discardDraftAction: vi.fn(),
   regenerateDraftAction: vi.fn(),
   sendDraftAction: actionMocks.sendDraftAction,
+  runDraftNowAction: actionMocks.runDraftNowAction,
 }));
 
 const readyDraft: ActiveDraftView = {
@@ -27,6 +29,7 @@ const readyDraft: ActiveDraftView = {
   model: "mistral-small-latest",
   kbFileIds: ["kb-1"],
   kbFileNames: ["FAQ.md"],
+  manualReviewReason: null,
   createdAt: "2026-07-22T10:00:00.000Z",
   updatedAt: "2026-07-22T10:00:00.000Z",
 };
@@ -40,6 +43,7 @@ describe("real draft panel states", () => {
         draft={{ ...readyDraft, status: "generating", text: "" }}
         workspaceId="workspace-1"
         conversationId="conversation-1"
+        debounceUntil={null}
       />,
     );
 
@@ -55,6 +59,7 @@ describe("real draft panel states", () => {
           draft={{ ...readyDraft, status }}
           workspaceId="workspace-1"
           conversationId="conversation-1"
+          debounceUntil={null}
         />,
       );
 
@@ -82,6 +87,7 @@ describe("real draft panel states", () => {
         draft={readyDraft}
         workspaceId="workspace-1"
         conversationId="conversation-1"
+        debounceUntil={null}
       />,
     );
 
@@ -107,6 +113,7 @@ describe("real draft panel states", () => {
         draft={readyDraft}
         workspaceId="workspace-1"
         conversationId="conversation-1"
+        debounceUntil={null}
       />,
     );
 
@@ -121,6 +128,7 @@ describe("real draft panel states", () => {
         draft={null}
         workspaceId="workspace-1"
         conversationId="conversation-1"
+        debounceUntil={null}
       />,
     );
 
@@ -144,5 +152,65 @@ describe("real draft panel states", () => {
       }),
     );
     expect(screen.getByText("Arrived live")).toBeDefined();
+  });
+
+  it("shows the manual-review notice instead of a draft the model refused to invent", () => {
+    render(
+      <DraftPanel
+        draft={{
+          ...readyDraft,
+          text: "",
+          manualReviewReason: "В базе знаний нет срока доставки.",
+        }}
+        workspaceId="workspace-1"
+        conversationId="conversation-1"
+        debounceUntil={null}
+      />,
+    );
+
+    expect(screen.getByText("Требуется ручная обработка")).toBeDefined();
+    expect(screen.getByText("В базе знаний нет срока доставки.")).toBeDefined();
+    // Текста нет — отправлять нечего.
+    expect(
+      screen.queryByRole("button", { name: "Принять и отправить" }),
+    ).toBeNull();
+    expect(screen.getByRole("button", { name: "Написать вручную" })).toBeDefined();
+    expect(screen.getByRole("button", { name: "Заново" })).toBeDefined();
+  });
+
+  it("counts down the debounce window and can start the run immediately", async () => {
+    actionMocks.runDraftNowAction.mockResolvedValue({ ok: true });
+    const deadline = new Date(Date.now() + 42_000).toISOString();
+
+    render(
+      <DraftPanel
+        draft={null}
+        workspaceId="workspace-1"
+        conversationId="conversation-1"
+        debounceUntil={deadline}
+      />,
+    );
+
+    expect(screen.getByText(/Черновик через 0:4\d/)).toBeDefined();
+
+    fireEvent.click(screen.getByRole("button", { name: "Запустить сейчас" }));
+
+    expect(actionMocks.runDraftNowAction).toHaveBeenCalledWith("conversation-1");
+    await waitFor(() => {
+      expect(screen.queryByText(/Черновик через/)).toBeNull();
+    });
+  });
+
+  it("renders nothing when there is neither a draft nor a debounce window", () => {
+    const { container } = render(
+      <DraftPanel
+        draft={null}
+        workspaceId="workspace-1"
+        conversationId="conversation-1"
+        debounceUntil={null}
+      />,
+    );
+
+    expect(container.firstChild).toBeNull();
   });
 });

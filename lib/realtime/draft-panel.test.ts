@@ -33,6 +33,7 @@ const active: ActiveDraftView = {
   model: "mistral-small-latest",
   kbFileIds: ["kb-1"],
   kbFileNames: ["FAQ.md"],
+  manualReviewReason: null,
   createdAt: "2026-07-22T10:00:00.000Z",
   updatedAt: "2026-07-22T10:00:00.000Z",
 };

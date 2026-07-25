@@ -11,6 +11,7 @@ import { useRouter } from "next/navigation";
 import type { CategoryRow } from "@/lib/db/categories";
 
 import { GripIcon, LockIcon } from "../../_components/icons";
+import { MultiSelect } from "../../_components/multi-select";
 import uiStyles from "../../_components/ui.module.css";
 import styles from "../settings.module.css";
 import {
@@ -27,6 +28,13 @@ export type CategoryChannelOption = {
   name: string;
 };
 
+export type CategoryKnowledgeFileOption = {
+  id: string;
+  name: string;
+  /** Выключенные в базе знаний файлы всё равно доступны для выбора. */
+  isEnabled: boolean;
+};
+
 type EditorState = {
   id: string | null;
   name: string;
@@ -34,6 +42,12 @@ type EditorState = {
   draftInstruction: string;
   channelConnectionIds: string[];
   skipDraft: boolean;
+  /**
+   * Всегда конкретный список: `null` из БД («наследовать базу знаний»)
+   * разворачивается в активные файлы при открытии редактора, чтобы галочки
+   * показывали ровно то, что уйдёт в промпт.
+   */
+  kbFileIds: string[];
   isDefault: boolean;
 };
 
@@ -45,7 +59,17 @@ const CATEGORY_COLOR_VARS = [
   "--cat-5",
 ];
 
-function editorFromCategory(category: CategoryListItem): EditorState {
+/** По умолчанию берутся файлы, активированные в базе знаний. */
+function defaultKbFileIds(
+  knowledgeFiles: readonly CategoryKnowledgeFileOption[],
+): string[] {
+  return knowledgeFiles.filter((file) => file.isEnabled).map((file) => file.id);
+}
+
+function editorFromCategory(
+  category: CategoryListItem,
+  knowledgeFiles: readonly CategoryKnowledgeFileOption[],
+): EditorState {
   return {
     id: category.id,
     name: category.name,
@@ -53,11 +77,14 @@ function editorFromCategory(category: CategoryListItem): EditorState {
     draftInstruction: category.draft_instruction ?? "",
     channelConnectionIds: category.channel_connection_ids,
     skipDraft: category.skip_draft,
+    kbFileIds: category.kb_file_ids ?? defaultKbFileIds(knowledgeFiles),
     isDefault: category.is_default,
   };
 }
 
-function emptyEditor(): EditorState {
+function emptyEditor(
+  knowledgeFiles: readonly CategoryKnowledgeFileOption[],
+): EditorState {
   return {
     id: null,
     name: "",
@@ -65,6 +92,7 @@ function emptyEditor(): EditorState {
     draftInstruction: "",
     channelConnectionIds: [],
     skipDraft: false,
+    kbFileIds: defaultKbFileIds(knowledgeFiles),
     isDefault: false,
   };
 }
@@ -108,9 +136,11 @@ function categoryScopeLabel(
 export function CategoriesPanel({
   categories,
   channels,
+  knowledgeFiles,
 }: {
   categories: CategoryListItem[];
   channels: CategoryChannelOption[];
+  knowledgeFiles: CategoryKnowledgeFileOption[];
 }) {
   const router = useRouter();
   const [orderedCategories, setOrderedCategories] = useState(categories);
@@ -140,6 +170,7 @@ export function CategoriesPanel({
           ? []
           : editor.channelConnectionIds,
         skipDraft: editor.skipDraft,
+        kbFileIds: editor.kbFileIds,
       };
       const result = editor.id
         ? await updateCategoryAction({
@@ -317,7 +348,7 @@ export function CategoriesPanel({
               disabled={isPending}
               onClick={() => {
                 setError(null);
-                setEditor(editorFromCategory(category));
+                setEditor(editorFromCategory(category, knowledgeFiles));
               }}
               type="button"
             >
@@ -332,7 +363,7 @@ export function CategoriesPanel({
         disabled={isPending}
         onClick={() => {
           setError(null);
-          setEditor(emptyEditor());
+          setEditor(emptyEditor(knowledgeFiles));
         }}
         type="button"
       >
@@ -436,6 +467,37 @@ export function CategoriesPanel({
                     disabled={isPending}
                   />
                 </label>
+
+                <div className={styles.categoryField}>
+                  <span id="category-kb-files-label">Файлы базы знаний</span>
+                  <span className={styles.categoryFieldHint}>
+                    По умолчанию — файлы, активные в базе знаний. Выбранные здесь
+                    попадут в промпт, даже если в базе знаний они выключены.
+                  </span>
+                  {knowledgeFiles.length > 0 ? (
+                    <MultiSelect
+                      label="Файлы базы знаний"
+                      emptyLabel="Ни одного файла"
+                      allLabel={`Все файлы (${knowledgeFiles.length})`}
+                      options={knowledgeFiles.map((file) => ({
+                        value: file.id,
+                        label: file.name,
+                        ...(file.isEnabled ? {} : { hint: "выключен" }),
+                      }))}
+                      selected={editor.kbFileIds}
+                      onChange={(next) =>
+                        setEditor((current) =>
+                          current ? { ...current, kbFileIds: next } : current,
+                        )
+                      }
+                      disabled={isPending}
+                    />
+                  ) : (
+                    <span className={styles.categoryFieldHint}>
+                      В базе знаний пока нет файлов.
+                    </span>
+                  )}
+                </div>
 
                 {!editor.isDefault ? (
                   <fieldset className={styles.categoryFieldset}>

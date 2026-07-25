@@ -19,8 +19,15 @@ export type {
   MaskedEntityKind,
   MaskedResult,
 } from "./masking";
-export { buildDraftPrompt, logPromptIfEnabled } from "./prompt";
+export {
+  MANUAL_REVIEW_MARKER,
+  buildDraftPrompt,
+  groundingRules,
+  logPromptIfEnabled,
+  parseDraftCompletion,
+} from "./prompt";
 export type {
+  ParsedDraftCompletion,
   MaskedPromptMessage,
   PromptAiSettings,
   PromptCategory,
@@ -29,6 +36,16 @@ export type {
   PromptLogger,
   PromptLogOptions,
 } from "./prompt";
+export {
+  DEFAULT_CLASSIFICATION_MAX_TOKENS,
+  buildClassificationPrompt,
+  logClassificationPromptIfEnabled,
+  parseCategorySelection,
+} from "./classification";
+export type {
+  ClassificationCategory,
+  ClassificationInput,
+} from "./classification";
 export { buildCommentDraftPrompt } from "./comment-prompt";
 export type {
   CommentPromptBrief,

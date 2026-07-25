@@ -18,12 +18,13 @@ type DraftRow = {
   text: string;
   model: string | null;
   kb_file_ids: string[] | null;
+  manual_review_reason: string | null;
   created_at: string;
   updated_at: string;
 };
 
 const DRAFT_COLUMNS =
-  "id, workspace_id, conversation_id, status, text, model, kb_file_ids, created_at, updated_at";
+  "id, workspace_id, conversation_id, status, text, model, kb_file_ids, manual_review_reason, created_at, updated_at";
 
 type KbFileRow = { id: string; name: string };
 
@@ -76,6 +77,7 @@ async function mapDraftRow(
     model: row.model,
     kbFileIds,
     kbFileNames,
+    manualReviewReason: row.manual_review_reason,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
