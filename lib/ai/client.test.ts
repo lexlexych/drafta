@@ -21,6 +21,7 @@ import {
   AI_REQUEST_TIMEOUT_MS,
   AiProviderError,
   generateCompletion,
+  generateCompletionWithUsage,
 } from "./client";
 import {
   AiConfigurationError,
@@ -125,5 +126,78 @@ describe("generateCompletion", () => {
       AiConfigurationError,
     );
     expect(openAiMock.constructor).not.toHaveBeenCalled();
+  });
+});
+
+describe("generateCompletionWithUsage", () => {
+  it("reports the token counts alongside the provider and the model used", async () => {
+    openAiMock.create.mockResolvedValue({
+      choices: [{ message: { content: "Hallo!" } }],
+      usage: { prompt_tokens: 120, completion_tokens: 30, total_tokens: 150 },
+    });
+
+    await expect(generateCompletionWithUsage(messages)).resolves.toEqual({
+      text: "Hallo!",
+      provider: "mistral",
+      model: DEFAULT_MISTRAL_MODEL,
+      usage: { promptTokens: 120, completionTokens: 30, totalTokens: 150 },
+    });
+  });
+
+  it("reports the model the provider actually got, not the one requested", async () => {
+    // Under OpenRouter the env model wins; accounting must record that one.
+    vi.stubEnv("MISTRAL_API_KEY", "");
+    vi.stubEnv("OPENROUTER_API_KEY", "openrouter-secret");
+    vi.stubEnv("OPENROUTER_MODEL", "mistralai/mistral-small-2603");
+    openAiMock.create.mockResolvedValue({
+      choices: [{ message: { content: "Hallo!" } }],
+      usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+    });
+
+    const result = await generateCompletionWithUsage(messages, {
+      model: "mistral-large-latest",
+    });
+
+    expect(result.provider).toBe("openrouter");
+    expect(result.model).toBe("mistralai/mistral-small-2603");
+  });
+
+  it("derives the total when the provider omits it", async () => {
+    openAiMock.create.mockResolvedValue({
+      choices: [{ message: { content: "Hallo!" } }],
+      usage: { prompt_tokens: 90, completion_tokens: 10 },
+    });
+
+    const { usage } = await generateCompletionWithUsage(messages);
+
+    expect(usage).toEqual({
+      promptTokens: 90,
+      completionTokens: 10,
+      totalTokens: 100,
+    });
+  });
+
+  it("still answers when the provider reports no usage at all", async () => {
+    // A missing reading must stay missing rather than becoming a zero: an
+    // absent number and a free call are different facts.
+    openAiMock.create.mockResolvedValue({
+      choices: [{ message: { content: "Hallo!" } }],
+    });
+
+    const result = await generateCompletionWithUsage(messages);
+
+    expect(result.text).toBe("Hallo!");
+    expect(result.usage).toBeNull();
+  });
+
+  it("treats a malformed usage object as no reading", async () => {
+    openAiMock.create.mockResolvedValue({
+      choices: [{ message: { content: "Hallo!" } }],
+      usage: { prompt_tokens: "many", completion_tokens: null },
+    });
+
+    await expect(
+      generateCompletionWithUsage(messages).then((result) => result.usage),
+    ).resolves.toBeNull();
   });
 });

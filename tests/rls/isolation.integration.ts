@@ -308,6 +308,40 @@ describe("workspace RLS isolation", () => {
     expectDenied(result, "webhook_events must remain server-only");
   });
 
+  it("lets a member read ai_usage but never write it", async () => {
+    // The table is read-only for `authenticated` on purpose: the draft
+    // pipelines write it under the service role, so a session that could
+    // insert or delete here could only ever forge or erase cost records.
+    const readable = await ownerAClient
+      .from("ai_usage")
+      .select("total_tokens")
+      .eq("workspace_id", rlsSeedFixtures.ownerA.workspaceId);
+
+    expect(readable.error, "a member must see their own workspace's usage").toBeNull();
+    expect(readable.data?.length ?? 0).toBeGreaterThan(0);
+
+    const inserted = await ownerAClient.from("ai_usage").insert({
+      workspace_id: rlsSeedFixtures.ownerA.workspaceId,
+      operation: "draft",
+      surface: "message",
+      provider: "mistral",
+      model: "mistral-large-latest",
+      prompt_tokens: 1,
+      completion_tokens: 1,
+      total_tokens: 2,
+    });
+
+    expect(inserted.error, "ai_usage must not be writable from a session").not.toBeNull();
+
+    const deleted = await ownerAClient
+      .from("ai_usage")
+      .delete()
+      .eq("workspace_id", rlsSeedFixtures.ownerA.workspaceId)
+      .select("id");
+
+    expectDenied(deleted, "ai_usage must not be deletable from a session");
+  });
+
   it.each(publicClientTables)("denies anonymous access to %s", async (table) => {
     const selectedColumn = table === "workspace_members" ? "workspace_id" : "id";
     const result = await anonymousClient.from(table).select(selectedColumn).limit(1);
