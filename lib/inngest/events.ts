@@ -24,6 +24,21 @@ export type DraftRegenerateRequestedEvent = {
 };
 
 /**
+ * Payload for `draft/run-now.requested` — the user pressed «Запустить сейчас»
+ * on the debounce countdown and does not want to wait out the rest of the
+ * window (docs/architecture/07-data-flows.md#62-дебаунс-и-генерация-черновика).
+ *
+ * It ends the pipeline's `waitForEvent` early rather than starting a second
+ * run. Every waiting run of the conversation wakes up; all but the newest are
+ * dropped by the existing last-event check, so supersede behaviour is unchanged.
+ * IDs only (vibecoding rule 7).
+ */
+export type DraftRunNowRequestedEvent = {
+  conversationId: string;
+  workspaceId: string;
+};
+
+/**
  * Payload for the `message/send` Inngest event
  * (docs/architecture/07-data-flows.md#63-отправка-ответа) — the outgoing
  * message is already persisted as `pending`; the event carries IDs only
@@ -92,6 +107,10 @@ export const draftRegenerateRequestedEvent = eventType(
   },
 );
 
+export const draftRunNowRequestedEvent = eventType("draft/run-now.requested", {
+  schema: staticSchema<DraftRunNowRequestedEvent>(),
+});
+
 export const messageSendRequestedEvent = eventType("message/send", {
   schema: staticSchema<MessageSendRequestedEvent>(),
 });
@@ -144,6 +163,17 @@ export async function emitDraftRegenerateRequested(
   payload: DraftRegenerateRequestedEvent,
 ): Promise<void> {
   await inngest.send(draftRegenerateRequestedEvent.create(payload));
+}
+
+/**
+ * Emits `draft/run-now.requested`. Deliberately throwing: the user pressed a
+ * button and expects the countdown to end, so a failed emit has to surface as
+ * an error toast rather than a timer that silently keeps running.
+ */
+export async function emitDraftRunNowRequested(
+  payload: DraftRunNowRequestedEvent,
+): Promise<void> {
+  await inngest.send(draftRunNowRequestedEvent.create(payload));
 }
 
 /**

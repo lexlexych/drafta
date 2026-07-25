@@ -15,6 +15,12 @@ export type ActiveDraftView = {
   model: string | null;
   kbFileIds: string[];
   kbFileNames: string[];
+  /**
+   * Set when the model refused to invent facts the knowledge base does not
+   * contain and asked for a human instead (`lib/ai/prompt.ts`). Non-null means
+   * `text` is empty and there is nothing to send.
+   */
+  manualReviewReason: string | null;
   createdAt: string;
   updatedAt: string;
 };

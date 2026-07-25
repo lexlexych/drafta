@@ -16,7 +16,8 @@ import {
   regenerateDraftAction,
   sendDraftAction,
 } from "../inbox/actions";
-import { RegenerateIcon, SparkIcon } from "./icons";
+import { DebounceTimer } from "./debounce-timer";
+import { RegenerateIcon, SparkIcon, WarningIcon } from "./icons";
 import { showToast } from "./stub";
 import styles from "./draft.module.css";
 import uiStyles from "./ui.module.css";
@@ -33,6 +34,8 @@ type DraftPanelProps =
       draft: ActiveDraftView | null;
       workspaceId: string;
       conversationId: string;
+      /** `conversations.draft_debounce_until`, если окно дебаунса ещё идёт. */
+      debounceUntil: string | null;
     };
 
 /** The mock panel stays available to the dashboard/preview screens. */
@@ -48,10 +51,12 @@ function WorkspaceDraftPanel({
   draft,
   workspaceId,
   conversationId,
+  debounceUntil,
 }: {
   draft: ActiveDraftView | null;
   workspaceId: string;
   conversationId: string;
+  debounceUntil: string | null;
 }) {
   const [activeDraft, setActiveDraft] = useState(draft);
   const [isEditing, setIsEditing] = useState(false);
@@ -72,8 +77,17 @@ function WorkspaceDraftPanel({
     return () => window.removeEventListener(DRAFT_REALTIME_EVENT, handleDraftChange);
   }, [conversationId, workspaceId]);
 
+  // Пока черновика нет, но окно дебаунса идёт — на его месте тикает счётчик.
+  // Так одно и то же место треда проходит путь «через 0:42» → «Генерируется…»
+  // → «Готов», без прыжков вёрстки.
   if (!activeDraft) {
-    return null;
+    return debounceUntil ? (
+      <DebounceTimer
+        key={debounceUntil}
+        conversationId={conversationId}
+        deadline={debounceUntil}
+      />
+    ) : null;
   }
 
   const isPending = pendingAction !== null;
@@ -176,6 +190,54 @@ function WorkspaceDraftPanel({
               }}
             >
               Отмена
+            </button>
+          </div>
+        </>
+      ) : activeDraft.manualReviewReason ? (
+        // Модель не нашла нужных фактов в базе знаний и отказалась их
+        // выдумывать (lib/ai/prompt.ts). Текста нет — отправлять нечего,
+        // поэтому «Принять и отправить» здесь не показываем.
+        <>
+          <div className={styles.manualReview} role="note">
+            <span className={styles.manualReviewIcon} aria-hidden="true">
+              <WarningIcon />
+            </span>
+            <span>
+              <b>Требуется ручная обработка</b>
+              <span className={styles.manualReviewReason}>
+                {activeDraft.manualReviewReason}
+              </span>
+            </span>
+          </div>
+          <KnowledgeBaseFiles fileNames={activeDraft.kbFileNames} />
+          <div className={styles.actions}>
+            <button
+              type="button"
+              className={`${uiStyles.button} ${uiStyles.buttonPrimary}`}
+              disabled={isPending}
+              onClick={() => {
+                setEditValue("");
+                setIsEditing(true);
+              }}
+            >
+              Написать вручную
+            </button>
+            <button
+              type="button"
+              className={`${uiStyles.button} ${uiStyles.buttonSecondary}`}
+              disabled={isPending}
+              onClick={() => void discard()}
+            >
+              {pendingAction === "discard" ? "Отклоняется…" : "Отклонить"}
+            </button>
+            <button
+              type="button"
+              className={`${uiStyles.button} ${uiStyles.buttonGhost}`}
+              disabled={isPending}
+              onClick={() => void regenerate()}
+            >
+              <RegenerateIcon />
+              {pendingAction === "regenerate" ? "Запускается…" : "Заново"}
             </button>
           </div>
         </>

@@ -9,6 +9,7 @@ import {
 } from "@/lib/db/channel-connections";
 import { getActiveConversationDraft } from "@/lib/db/drafts";
 import type { ActiveDraftView } from "@/lib/drafts/types";
+import { categoryBadges, type CategoryRow } from "@/lib/db/categories";
 import {
   avatarFor,
   countWithNoun,
@@ -40,10 +41,10 @@ import {
  * (`ConversationListView`, `ThreadView`, `ChannelFilterView`…) — per that
  * module's own docstring, this is the intended migration path: "когда mock
  * заменят реальные запросы lib/db, поменяется только этот слой: форма
- * моделей представления останется прежней". `category` is always `null` and
- * `debounceNote`/`draft` are always `null`/absent here: categories and AI
- * drafts have no real data yet at this stage (out of scope — see the
- * ticket's "Существенные факты" and epic E-002 "Вне скоупа").
+ * моделей представления останется прежней". `category` is filled from
+ * `conversations.category_id` (written by the pipeline's classification step)
+ * once the caller passes the workspace categories; `debounceNote` stays `null`
+ * — the live countdown is `draftDebounceUntil` plus a client component.
  *
  * Callers pass in an already-loaded `channels: ChannelConnectionRow[]`
  * (from `listChannelConnections`) instead of each function re-fetching it,
@@ -70,12 +71,19 @@ export type InboxNavigationCounters = {
 
 export type ConversationListFilter = {
   channelId?: string | null;
+  /**
+   * Categories picked in the dialog list's multi-select. Empty or omitted means
+   * no narrowing at all, which keeps conversations that were never classified
+   * visible; an explicit selection filters strictly.
+   */
+  categoryIds?: readonly string[] | null;
 };
 
 type ConversationRow = {
   id: string;
   channel_connection_id: string;
   contact_id: string | null;
+  category_id: string | null;
   status: string;
   last_incoming_at: string | null;
   unread_count: number;
@@ -104,6 +112,12 @@ export type InboxThreadMessageView = ThreadMessageView & {
 export type InboxThreadView = Omit<ThreadView, "draft" | "messages"> & {
   draft: ActiveDraftView | null;
   messages: InboxThreadMessageView[];
+  /**
+   * `conversations.draft_debounce_until` — the deadline of the debounce window
+   * a draft run is currently waiting out. The thread renders a countdown and a
+   * «Запустить сейчас» button while it is in the future.
+   */
+  draftDebounceUntil: string | null;
   /**
    * Set when the platform's response window (channel capabilities) has
    * already closed — the composer warns but does not block
@@ -339,10 +353,18 @@ export async function getConversationListView(
   workspaceId: string,
   channels: ChannelConnectionRow[],
   filter: ConversationListFilter = {},
+  categories: readonly CategoryRow[] = [],
 ): Promise<ConversationListView> {
   const channelId = filter.channelId ?? null;
   const channelById = new Map(channels.map((channel) => [channel.id, channel]));
   const selectedChannel = channelId ? (channelById.get(channelId) ?? null) : null;
+  const categoryIds = filter.categoryIds ?? [];
+  const badgeById = new Map(
+    categoryBadges(categories).map((badge) => [badge.id, badge]),
+  );
+  const selectedCategoryNames = categoryIds
+    .map((id) => badgeById.get(id)?.name)
+    .filter((name): name is string => Boolean(name));
 
   // The conditional `.eq()` must run before `.order()`: postgrest-js's
   // builder narrows from `PostgrestFilterBuilder` (has `.eq()`) to
@@ -350,11 +372,17 @@ export async function getConversationListView(
   // `.order()` is called, so filtering has to finish first.
   let filterBuilder = supabase
     .from("conversations")
-    .select("id, channel_connection_id, contact_id, status, last_incoming_at, unread_count")
+    .select(
+      "id, channel_connection_id, contact_id, category_id, status, last_incoming_at, unread_count",
+    )
     .eq("workspace_id", workspaceId);
 
   if (channelId) {
     filterBuilder = filterBuilder.eq("channel_connection_id", channelId);
+  }
+
+  if (categoryIds.length > 0) {
+    filterBuilder = filterBuilder.in("category_id", [...categoryIds]);
   }
 
   const { data: conversationRows, error: conversationsError } = await filterBuilder.order(
@@ -412,17 +440,25 @@ export async function getConversationListView(
       channel: channel
         ? channelBadge(channel)
         : { id: conversation.channel_connection_id, name: "—", platform: "telegram" as const },
-      category: null,
+      category: conversation.category_id
+        ? (badgeById.get(conversation.category_id) ?? null)
+        : null,
       avatar: avatarFor(contact?.id ?? conversation.id, name),
     };
   });
 
   const countLabel = countWithNoun(items.length, ["диалог", "диалога", "диалогов"]);
   const scope = selectedChannel ? "канал" : "все каналы";
+  const categoryScope =
+    selectedCategoryNames.length === 0
+      ? null
+      : selectedCategoryNames.length <= 2
+        ? selectedCategoryNames.join(", ")
+        : `${selectedCategoryNames.length} категории`;
 
   return {
     title: selectedChannel?.name ?? "Сообщения",
-    subtitle: [scope, countLabel].join(" · "),
+    subtitle: [scope, categoryScope, countLabel].filter(Boolean).join(" · "),
     items,
   };
 }
@@ -433,10 +469,13 @@ export async function getThreadView(
   workspaceId: string,
   channels: ChannelConnectionRow[],
   conversationId: string,
+  categories: readonly CategoryRow[] = [],
 ): Promise<InboxThreadView | null> {
   const { data: conversation, error: conversationError } = await supabase
     .from("conversations")
-    .select("id, channel_connection_id, contact_id, last_incoming_at")
+    .select(
+      "id, channel_connection_id, contact_id, category_id, last_incoming_at, draft_debounce_until",
+    )
     .eq("workspace_id", workspaceId)
     .eq("id", conversationId)
     .maybeSingle();
@@ -487,7 +526,11 @@ export async function getThreadView(
     title: name,
     avatar: avatarFor(contact?.id ?? conversation.id, name),
     channel: channelBadge(channel),
-    category: null,
+    category: conversation.category_id
+      ? (categoryBadges(categories).find(
+          (badge) => badge.id === conversation.category_id,
+        ) ?? null)
+      : null,
     replyWindowLabel:
       hoursLeft !== null && hoursLeft > 0 ? `Окно ответа: ${Math.round(hoursLeft)} ч` : null,
     replyWindowWarning:
@@ -505,6 +548,10 @@ export async function getThreadView(
         message.direction === "outgoing" && message.delivery_status === "failed",
     })),
     debounceNote: null,
+    draftDebounceUntil:
+      typeof conversation.draft_debounce_until === "string"
+        ? conversation.draft_debounce_until
+        : null,
     draft,
   };
 }

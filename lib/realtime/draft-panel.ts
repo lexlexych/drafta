@@ -10,6 +10,7 @@ export type DraftRealtimeRow = {
   text?: string | null;
   model?: string | null;
   kb_file_ids?: unknown;
+  manual_review_reason?: string | null;
   created_at?: string | null;
   updated_at?: string | null;
 };
@@ -50,6 +51,7 @@ function asActiveDraft(
     // postgres_changes contains IDs, not joined kb_files. Preserve resolved
     // names for updates to the same draft; router.refresh resolves new ones.
     kbFileNames: current?.id === row.id ? current.kbFileNames : [],
+    manualReviewReason: row.manual_review_reason ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at ?? row.created_at,
   };

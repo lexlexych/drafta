@@ -44,6 +44,7 @@ import {
 import {
   CategoriesPanel,
   type CategoryChannelOption,
+  type CategoryKnowledgeFileOption,
 } from "./categories/categories-panel";
 import { AiSettingsForm } from "./ai/ai-settings-form";
 import { AppInstallPanel } from "./app/app-install-panel";
@@ -121,26 +122,31 @@ async function loadKnowledgeSectionData(): Promise<KnowledgeFileListItem[]> {
   );
 }
 
-async function loadCategoriesSectionData(): Promise<{
-  categories: CategoryRow[];
-  channels: CategoryChannelOption[];
-}> {
+async function loadCategoriesSectionData(): Promise<CategoriesSectionData> {
   const user = await getAuthenticatedUser();
+  const empty: CategoriesSectionData = {
+    categories: [],
+    channels: [],
+    knowledgeFiles: [],
+  };
 
   if (!user) {
-    return { categories: [], channels: [] };
+    return empty;
   }
 
   const workspace = await getCurrentWorkspace(user.id);
 
   if (!workspace) {
-    return { categories: [], channels: [] };
+    return empty;
   }
 
   const supabase = await createServerSupabaseClient();
-  const [categories, channelRows] = await Promise.all([
+  // Категория выбирает файлы базы знаний, поэтому секции нужен их список —
+  // включая выключенные: выбрать можно любой.
+  const [categories, channelRows, knowledgeRows] = await Promise.all([
     listCategories(supabase, workspace.id),
     listChannelConnections(supabase, workspace.id),
+    listKnowledgeFiles(supabase, workspace.id),
   ]);
 
   return {
@@ -148,6 +154,11 @@ async function loadCategoriesSectionData(): Promise<{
     channels: channelRows.map((channel) => ({
       id: channel.id,
       name: channel.name,
+    })),
+    knowledgeFiles: knowledgeRows.map((file: KnowledgeFileRow) => ({
+      id: file.id,
+      name: file.name,
+      isEnabled: file.is_enabled,
     })),
   };
 }
@@ -303,10 +314,7 @@ function SectionDetail({
   sectionId: SettingsSectionId;
   aiData: AiSectionData | null;
   notificationsData: NotificationSettingsView | null;
-  categoriesData: {
-    categories: CategoryRow[];
-    channels: CategoryChannelOption[];
-  } | null;
+  categoriesData: CategoriesSectionData | null;
   channels: ChannelConnectionListItem[] | null;
   connectResult: ChannelConnectResult | null;
   knowledgeFiles: KnowledgeFileListItem[] | null;
@@ -363,14 +371,13 @@ function ChannelsSection({
   );
 }
 
-function CategoriesSection({
-  data,
-}: {
-  data: {
-    categories: CategoryRow[];
-    channels: CategoryChannelOption[];
-  } | null;
-}) {
+type CategoriesSectionData = {
+  categories: CategoryRow[];
+  channels: CategoryChannelOption[];
+  knowledgeFiles: CategoryKnowledgeFileOption[];
+};
+
+function CategoriesSection({ data }: { data: CategoriesSectionData | null }) {
   return (
     <>
       <p className={setStyles.description}>
@@ -386,6 +393,7 @@ function CategoriesSection({
           .join("|")}
         categories={data?.categories ?? []}
         channels={data?.channels ?? []}
+        knowledgeFiles={data?.knowledgeFiles ?? []}
       />
     </>
   );

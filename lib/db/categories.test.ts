@@ -25,6 +25,7 @@ describe("lib/db/categories", () => {
       draftInstruction: "",
       channelConnectionIds: [],
       skipDraft: false,
+      kbFileIds: null,
     });
 
     expect(result).toEqual({
@@ -43,6 +44,7 @@ describe("lib/db/categories", () => {
       draftInstruction: "  предложить замену  ",
       channelConnectionIds: ["ch_1", "ch_1"],
       skipDraft: false,
+      kbFileIds: ["kb_1", "kb_1"],
     });
 
     expect(result).toEqual({ ok: true, data: "cat_1" });
@@ -53,6 +55,7 @@ describe("lib/db/categories", () => {
       category_draft_instruction: "предложить замену",
       category_channel_connection_ids: ["ch_1"],
       category_skip_draft: false,
+      category_kb_file_ids: ["kb_1"],
     });
   });
 
@@ -67,6 +70,7 @@ describe("lib/db/categories", () => {
       draftInstruction: "  Отвечать кратко  ",
       channelConnectionIds: [],
       skipDraft: true,
+      kbFileIds: null,
     });
 
     expect(result).toEqual({ ok: true, data: null });
@@ -76,6 +80,9 @@ describe("lib/db/categories", () => {
         target_category_id: "cat_default",
         category_draft_instruction: "Отвечать кратко",
         category_skip_draft: true,
+        // null сохраняется: «наследовать активные файлы базы знаний» — это
+        // не то же самое, что «не брать ни одного файла».
+        category_kb_file_ids: null,
       }),
     );
   });

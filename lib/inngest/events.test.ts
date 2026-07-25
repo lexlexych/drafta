@@ -15,7 +15,9 @@ vi.mock("./client", () => ({
 
 const {
   draftRegenerateRequestedEvent,
+  draftRunNowRequestedEvent,
   emitDraftRegenerateRequested,
+  emitDraftRunNowRequested,
   emitInteractionReceived,
   emitMessageSendRequested,
   interactionReceivedEvent,
@@ -46,6 +48,16 @@ describe("Inngest event schemas", () => {
       }),
     ).toMatchObject({
       name: "draft/regenerate.requested",
+      data: { conversationId: "conv-1", workspaceId: "ws-1" },
+    });
+
+    expect(
+      draftRunNowRequestedEvent.create({
+        conversationId: "conv-1",
+        workspaceId: "ws-1",
+      }),
+    ).toMatchObject({
+      name: "draft/run-now.requested",
       data: { conversationId: "conv-1", workspaceId: "ws-1" },
     });
   });
@@ -143,6 +155,40 @@ describe("emitDraftRegenerateRequested", () => {
       data: { conversationId: "conv-1", workspaceId: "ws-1" },
     });
     expect(Object.keys(sent.data).sort()).toEqual(["conversationId", "workspaceId"]);
+  });
+});
+
+describe("emitDraftRunNowRequested", () => {
+  it("sends exactly the two ID fields so waitForEvent can match the conversation", async () => {
+    sendMock.mockReset();
+    sendMock.mockResolvedValueOnce(undefined);
+
+    await emitDraftRunNowRequested({
+      conversationId: "conv-1",
+      workspaceId: "ws-1",
+    });
+
+    const sent = sendMock.mock.calls[0][0];
+    expect(sent).toMatchObject({
+      name: "draft/run-now.requested",
+      data: { conversationId: "conv-1", workspaceId: "ws-1" },
+    });
+    expect(Object.keys(sent.data).sort()).toEqual([
+      "conversationId",
+      "workspaceId",
+    ]);
+  });
+
+  it("throws on a send() rejection so the countdown does not keep ticking silently", async () => {
+    sendMock.mockReset();
+    sendMock.mockRejectedValueOnce(new Error("inngest down"));
+
+    await expect(
+      emitDraftRunNowRequested({
+        conversationId: "conv-1",
+        workspaceId: "ws-1",
+      }),
+    ).rejects.toThrow("inngest down");
   });
 });
 

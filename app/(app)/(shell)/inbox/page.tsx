@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { listCategories, categoryBadges } from "@/lib/db/categories";
 import {
   getChannelFiltersView,
   getConversationListView,
@@ -10,12 +11,19 @@ import { createServerSupabaseClient } from "@/lib/db/server";
 import { getAuthenticatedUser, getCurrentWorkspace } from "@/lib/db/workspace";
 
 import { Avatar } from "../_components/avatar";
-import { ChannelChip } from "../_components/chips";
+import { CategoryFilter } from "../_components/category-filter";
+import { CategoryChip, ChannelChip } from "../_components/chips";
 import { Composer } from "../_components/composer";
 import { DraftPanel } from "../_components/draft-panel";
 import { FilterChips } from "../_components/filter-chips";
 import { BackIcon, ClockIcon, PictureIcon } from "../_components/icons";
-import { QUERY_KEYS, buildHref, firstParam } from "../_components/navigation";
+import {
+  QUERY_KEYS,
+  buildHref,
+  firstParam,
+  parseIdList,
+  serializeIdList,
+} from "../_components/navigation";
 import { RetrySendButton } from "../_components/retry-send-button";
 import styles from "../_components/panes.module.css";
 import uiStyles from "../_components/ui.module.css";
@@ -32,6 +40,7 @@ export default async function InboxPage({
 }) {
   const params = await searchParams;
   const channelId = firstParam(params[QUERY_KEYS.channel]);
+  const categoryIds = parseIdList(firstParam(params[QUERY_KEYS.category]));
   const conversationId = firstParam(params[QUERY_KEYS.conversation]);
 
   const user = await getAuthenticatedUser();
@@ -48,8 +57,16 @@ export default async function InboxPage({
   const channels = await listChannelConnections(supabase, workspace.id);
   const hasChannels = channels.length > 0;
 
+  const categories = await listCategories(supabase, workspace.id);
+
   const [list, filterChannels] = await Promise.all([
-    getConversationListView(supabase, workspace.id, channels, { channelId }),
+    getConversationListView(
+      supabase,
+      workspace.id,
+      channels,
+      { channelId, categoryIds },
+      categories,
+    ),
     getChannelFiltersView(supabase, workspace.id, channels),
   ]);
 
@@ -57,11 +74,14 @@ export default async function InboxPage({
   // `conversation`, правая панель пуста и ни один элемент списка не активен.
   const openedId = conversationId;
   const thread = openedId
-    ? await getThreadView(supabase, workspace.id, channels, openedId)
+    ? await getThreadView(supabase, workspace.id, channels, openedId, categories)
     : null;
   const isDetail = conversationId !== null;
 
-  const listParams = { [QUERY_KEYS.channel]: channelId };
+  const listParams = {
+    [QUERY_KEYS.channel]: channelId,
+    [QUERY_KEYS.category]: serializeIdList(categoryIds),
+  };
 
   return (
     <div className={styles.panes} data-detail={isDetail}>
@@ -78,6 +98,8 @@ export default async function InboxPage({
           channels={filterChannels}
           activeChannelId={channelId}
         />
+
+        <CategoryFilter categories={categoryBadges(categories)} />
 
         <div className={styles.list}>
           {!hasChannels ? (
@@ -117,6 +139,7 @@ export default async function InboxPage({
                 <span className={styles.listPreview}>{item.preview}</span>
                 <span className={styles.listChips}>
                   <ChannelChip channel={item.channel} />
+                  {item.category ? <CategoryChip category={item.category} /> : null}
                   <span className={styles.listSpacer} />
                   {item.unreadCount > 0 ? (
                     <span className={`${uiStyles.unread} ${uiStyles.num}`}>
@@ -205,6 +228,7 @@ export default async function InboxPage({
                 draft={thread.draft}
                 workspaceId={workspace.id}
                 conversationId={thread.conversationId}
+                debounceUntil={thread.draftDebounceUntil}
               />
               <Composer
                 conversationId={thread.conversationId}

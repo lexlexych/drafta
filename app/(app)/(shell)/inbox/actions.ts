@@ -26,6 +26,7 @@ import {
 } from "@/lib/db/workspace";
 import {
   emitDraftRegenerateRequested,
+  emitDraftRunNowRequested,
   emitMessageSendRequested,
 } from "@/lib/inngest/events";
 
@@ -289,4 +290,51 @@ export async function regenerateDraftAction(conversationId: string) {
     console.error("[drafts] failed to request regeneration", error);
     return { ok: false as const, error: "Не удалось запустить генерацию заново." };
   }
+}
+
+/**
+ * «Запустить сейчас» под таймером дебаунса: заканчивает окно ожидания, не
+ * дожидаясь таймаута. Событие ловит `waitForEvent` уже запущенного прогона —
+ * второй прогон не стартует, поэтому логика supersede не меняется.
+ */
+export async function runDraftNowAction(conversationId: string) {
+  const context = await getDraftActionContext();
+
+  if ("error" in context) {
+    return { ok: false as const, error: context.error };
+  }
+
+  if (
+    !(await canRegenerateConversationDraft(
+      context.supabase,
+      context.workspace.id,
+      conversationId,
+    ))
+  ) {
+    return { ok: false as const, error: "Диалог не найден." };
+  }
+
+  try {
+    await emitDraftRunNowRequested({
+      conversationId,
+      workspaceId: context.workspace.id,
+    });
+  } catch (error) {
+    console.error("[drafts] failed to request an immediate draft run", error);
+    return { ok: false as const, error: "Не удалось запустить генерацию." };
+  }
+
+  // Гасим счётчик сразу, не дожидаясь, пока это сделает сам пайплайн: кнопку
+  // уже нажали, и таймер, который ещё тикает, читается как «не сработало».
+  const { error } = await context.supabase
+    .from("conversations")
+    .update({ draft_debounce_until: null })
+    .eq("workspace_id", context.workspace.id)
+    .eq("id", conversationId);
+
+  if (error) {
+    console.error("[drafts] failed to clear the debounce deadline", error);
+  }
+
+  return { ok: true as const };
 }

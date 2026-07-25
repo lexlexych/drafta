@@ -36,11 +36,25 @@ export function estimateTokenCount(text: string): number {
   return Math.ceil(new TextEncoder().encode(text).length / 4);
 }
 
-function sortedEnabledFiles(
+/**
+ * Selects the files that go into the prompt.
+ *
+ * `fileIds` is the per-category selection (`categories.kb_file_ids`): those
+ * exact files are used **regardless of `is_enabled`**, because the category
+ * picker deliberately offers inactive files too. `null`/`undefined` means the
+ * category inherits the workspace-level `is_enabled` flags, which is the
+ * behaviour that predates per-category selection. Ids of files that no longer
+ * exist are simply dropped — the array is a snapshot of intent, not a foreign
+ * key.
+ */
+function selectedFiles(
   files: readonly KnowledgeFileForPrompt[],
+  fileIds?: readonly string[] | null,
 ): KnowledgeFileForPrompt[] {
+  const selection = fileIds ? new Set(fileIds) : null;
+
   return files
-    .filter((file) => file.is_enabled)
+    .filter((file) => (selection ? selection.has(file.id) : file.is_enabled))
     .toSorted(
       (left, right) =>
         left.sort_order - right.sort_order || left.name.localeCompare(right.name),
@@ -63,22 +77,38 @@ function renderContext(fragments: readonly string[]): string {
   ].join("\n\n");
 }
 
-export function getKnowledgeBaseUsage(
-  files: readonly KnowledgeFileForPrompt[],
-  tokenBudget = KNOWLEDGE_BASE_TOKEN_BUDGET,
+function usageOf(
+  selection: readonly KnowledgeFileForPrompt[],
+  tokenBudget: number,
 ): KnowledgeBaseUsage {
-  const enabledFiles = sortedEnabledFiles(files);
   const enabledTokenCount = estimateTokenCount(
-    renderContext(enabledFiles.map(fileFragment)),
+    renderContext(selection.map(fileFragment)),
   );
 
   return {
-    enabledFileCount: enabledFiles.length,
+    enabledFileCount: selection.length,
     enabledTokenCount,
     tokenBudget,
     exceedsBudget: enabledTokenCount > tokenBudget,
   };
 }
+
+/** Workspace-level budget indicator for «Настройки → База знаний». */
+export function getKnowledgeBaseUsage(
+  files: readonly KnowledgeFileForPrompt[],
+  tokenBudget = KNOWLEDGE_BASE_TOKEN_BUDGET,
+): KnowledgeBaseUsage {
+  return usageOf(selectedFiles(files), tokenBudget);
+}
+
+export type KnowledgeBaseContextOptions = {
+  /**
+   * `categories.kb_file_ids` — the files this category selected. `null` or
+   * omitted inherits the workspace `is_enabled` flags.
+   */
+  fileIds?: readonly string[] | null;
+  tokenBudget?: number;
+};
 
 /**
  * Produces the exact prompt fragment and the IDs that must be persisted in
@@ -87,14 +117,15 @@ export function getKnowledgeBaseUsage(
  */
 export function buildKnowledgeBaseContext(
   files: readonly KnowledgeFileForPrompt[],
-  tokenBudget = KNOWLEDGE_BASE_TOKEN_BUDGET,
+  options: KnowledgeBaseContextOptions = {},
 ): KnowledgeBaseContext {
-  const enabledFiles = sortedEnabledFiles(files);
+  const tokenBudget = options.tokenBudget ?? KNOWLEDGE_BASE_TOKEN_BUDGET;
+  const selection = selectedFiles(files, options.fileIds);
   const fragments: string[] = [];
   const usedFileIds: string[] = [];
-  let firstOmittedIndex = enabledFiles.length;
+  let firstOmittedIndex = selection.length;
 
-  for (const [index, file] of enabledFiles.entries()) {
+  for (const [index, file] of selection.entries()) {
     const candidateFragments = [...fragments, fileFragment(file)];
     const candidate = renderContext(candidateFragments);
 
@@ -108,13 +139,15 @@ export function buildKnowledgeBaseContext(
   }
 
   const text = renderContext(fragments);
-  const usage = getKnowledgeBaseUsage(files, tokenBudget);
 
   return {
-    ...usage,
+    // Usage describes the selection that actually feeds this prompt, so a
+    // category that picked a few files is not reported against the whole
+    // workspace budget.
+    ...usageOf(selection, tokenBudget),
     text,
     usedFileIds,
-    omittedFileIds: enabledFiles.slice(firstOmittedIndex).map((file) => file.id),
+    omittedFileIds: selection.slice(firstOmittedIndex).map((file) => file.id),
     usedTokenCount: estimateTokenCount(text),
   };
 }

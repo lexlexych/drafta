@@ -47,7 +47,9 @@ describe("knowledge-base prompt context", () => {
     const firstOnlyBudget = estimateTokenCount(
       buildKnowledgeBaseContext([files[2]]).text,
     );
-    const result = buildKnowledgeBaseContext(files, firstOnlyBudget);
+    const result = buildKnowledgeBaseContext(files, {
+      tokenBudget: firstOnlyBudget,
+    });
 
     expect(result.usedFileIds).toEqual(["first"]);
     expect(result.omittedFileIds).toEqual(["second"]);
@@ -60,5 +62,27 @@ describe("knowledge-base prompt context", () => {
     expect(usage.enabledFileCount).toBe(2);
     expect(usage.enabledTokenCount).toBeGreaterThan(1);
     expect(usage.exceedsBudget).toBe(true);
+  });
+
+  it("uses the category's own file selection, including files disabled in the KB", () => {
+    const result = buildKnowledgeBaseContext(files, { fileIds: ["hidden"] });
+
+    expect(result.usedFileIds).toEqual(["hidden"]);
+    expect(result.text).toContain("03-hidden.md");
+    expect(result.text).not.toContain("01-about.md");
+  });
+
+  it("treats a null selection as inheriting the is_enabled flags", () => {
+    expect(buildKnowledgeBaseContext(files, { fileIds: null })).toEqual(
+      buildKnowledgeBaseContext(files),
+    );
+  });
+
+  it("selects nothing for an empty selection and drops ids of deleted files", () => {
+    expect(buildKnowledgeBaseContext(files, { fileIds: [] }).text).toBe("");
+    expect(
+      buildKnowledgeBaseContext(files, { fileIds: ["gone", "first"] })
+        .usedFileIds,
+    ).toEqual(["first"]);
   });
 });

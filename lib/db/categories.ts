@@ -2,6 +2,8 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import type { CategoryBadgeView } from "@/lib/mock";
+
 /**
  * Categories classify **messages** only — comments have no categories at all
  * (they are drafted from a per-post brief instead), which is why there is no
@@ -15,6 +17,11 @@ export type CategoryRow = {
   draft_instruction: string | null;
   channel_connection_ids: string[];
   skip_draft: boolean;
+  /**
+   * Knowledge base files chosen for this category. `null` inherits the
+   * workspace `kb_files.is_enabled` flags; an empty array selects none.
+   */
+  kb_file_ids: string[] | null;
   priority: number;
   is_default: boolean;
   created_at: string;
@@ -27,6 +34,8 @@ export type CategoryInput = {
   draftInstruction: string;
   channelConnectionIds: string[];
   skipDraft: boolean;
+  /** `null` keeps inheriting the knowledge base's own `is_enabled` flags. */
+  kbFileIds: string[] | null;
 };
 
 export type CategoryResult<T> =
@@ -34,7 +43,7 @@ export type CategoryResult<T> =
   | { ok: false; error: string };
 
 const CATEGORY_COLUMNS =
-  "id, workspace_id, name, description, draft_instruction, channel_connection_ids, skip_draft, priority, is_default, created_at, updated_at";
+  "id, workspace_id, name, description, draft_instruction, channel_connection_ids, skip_draft, kb_file_ids, priority, is_default, created_at, updated_at";
 
 export async function listCategories(
   supabase: SupabaseClient,
@@ -54,6 +63,26 @@ export async function listCategories(
   return (data ?? []) as CategoryRow[];
 }
 
+/**
+ * Palette shared with the settings panel and the mock layer: colours follow the
+ * category's own position in the workspace list, the default one stays grey.
+ */
+const CATEGORY_COLOR_VARS = ["--cat-1", "--cat-2", "--cat-3", "--cat-4", "--cat-5"];
+const DEFAULT_CATEGORY_COLOR_VAR = "--cat-default";
+
+/** Badge view models for the dialog list chip and the list filter. */
+export function categoryBadges(
+  categories: readonly CategoryRow[],
+): CategoryBadgeView[] {
+  return categories.map((category, index) => ({
+    id: category.id,
+    name: category.name,
+    colorVar: category.is_default
+      ? DEFAULT_CATEGORY_COLOR_VAR
+      : (CATEGORY_COLOR_VARS[index] ?? DEFAULT_CATEGORY_COLOR_VAR),
+  }));
+}
+
 function normalizeCategoryInput(
   input: CategoryInput,
   options: { isDefault?: boolean } = {},
@@ -64,6 +93,7 @@ function normalizeCategoryInput(
     draftInstruction: input.draftInstruction.trim(),
     channelConnectionIds: [...new Set(input.channelConnectionIds)],
     skipDraft: input.skipDraft,
+    kbFileIds: input.kbFileIds === null ? null : [...new Set(input.kbFileIds)],
   };
 
   if (!options.isDefault && !normalized.name) {
@@ -81,7 +111,8 @@ function categoryRpcError(
   error: { code?: string; message?: string },
 ): string {
   if (error.code === "23503") {
-    return "Один из выбранных каналов больше недоступен.";
+    // 23503 now covers both category references: channels and knowledge files.
+    return "Один из выбранных каналов или файлов базы знаний больше недоступен.";
   }
   if (error.code === "23514" && operation === "delete") {
     return "Категорию «По умолчанию» удалить нельзя.";
@@ -116,6 +147,7 @@ export async function createCategory(
     category_draft_instruction: normalized.data.draftInstruction || null,
     category_channel_connection_ids: normalized.data.channelConnectionIds,
     category_skip_draft: normalized.data.skipDraft,
+    category_kb_file_ids: normalized.data.kbFileIds,
   });
 
   if (error || typeof data !== "string") {
@@ -150,6 +182,7 @@ export async function updateCategory(
     category_draft_instruction: normalized.data.draftInstruction || null,
     category_channel_connection_ids: normalized.data.channelConnectionIds,
     category_skip_draft: normalized.data.skipDraft,
+    category_kb_file_ids: normalized.data.kbFileIds,
   });
 
   if (error) {

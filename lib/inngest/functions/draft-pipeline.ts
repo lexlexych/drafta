@@ -1,19 +1,26 @@
 import "server-only";
 
 import {
+  DEFAULT_CLASSIFICATION_MAX_TOKENS,
+  buildClassificationPrompt,
   buildDraftPrompt,
   generateCompletion,
+  logClassificationPromptIfEnabled,
   logPromptIfEnabled,
   maskMessages,
+  parseCategorySelection,
+  parseDraftCompletion,
   resolveGenerationModel,
   unmaskText,
   type AiMessage,
   type MaskedEntity,
   type PromptCategory,
 } from "@/lib/ai";
+import { DEFAULT_MISTRAL_MODEL } from "@/lib/ai/config";
 import {
   buildKnowledgeBaseContext,
   type KnowledgeBaseContext,
+  type KnowledgeFileForPrompt,
 } from "@/lib/ai/knowledge-base";
 import {
   getDefaultChannelCapabilities,
@@ -57,6 +64,11 @@ export type DraftPipelineResult =
 export type DraftPipelineSteps = {
   run<T>(id: string, handler: () => Promise<T> | T): Promise<T>;
   sleep(id: string, duration: string): Promise<void>;
+  /** Resolves with the matching event, or `null` when the timeout elapses. */
+  waitForEvent(
+    id: string,
+    options: { event: string; timeout: string; match?: string },
+  ): Promise<unknown>;
 };
 
 type PromptLogger = {
@@ -82,6 +94,11 @@ export type PipelineMessage = {
 
 export type SelectedPipelineCategory = PromptCategory & {
   skipDraft: boolean;
+  /**
+   * `categories.kb_file_ids` — `null` inherits the workspace `is_enabled`
+   * flags, an empty array selects no knowledge base files at all.
+   */
+  kbFileIds: string[] | null;
 };
 
 export type LoadedDraftContext = {
@@ -91,24 +108,39 @@ export type LoadedDraftContext = {
   messages: PipelineMessage[];
   batchMessages: PipelineMessage[];
   channelCapabilities: ChannelCapabilities;
-  knowledgeBase: KnowledgeBaseContext;
-  selectedCategory: SelectedPipelineCategory;
+  /**
+   * Raw workspace files. The prompt fragment is only assembled after
+   * classification, because the chosen category decides which files apply.
+   */
+  knowledgeFiles: KnowledgeFileForPrompt[];
+  /**
+   * Categories applicable to this conversation's channel, in `priority` order,
+   * with the workspace default last — the exact candidate list the classifier
+   * sees (docs/architecture/09-categories.md#приоритеты-и-first-match).
+   */
+  applicableCategories: SelectedPipelineCategory[];
+  defaultCategory: SelectedPipelineCategory;
+  /**
+   * The category already stored on the batch, used by regeneration instead of
+   * classifying again — there is no new incoming message to classify.
+   */
+  assignedCategory: SelectedPipelineCategory | null;
   /** The contact's notes (docs/architecture/16-rollout-plan.md, этап 7). */
   contactNotes: string;
 };
 
-type MaskedDraftContext = Omit<
-  LoadedDraftContext,
-  | "aiSettings"
-  | "messages"
-  | "batchMessages"
-  | "knowledgeBase"
-  | "selectedCategory"
-  | "contactNotes"
-> & {
+/**
+ * Everything the generation call needs, already masked. Built after
+ * classification because both the knowledge base selection and the category
+ * fields depend on which category won.
+ */
+type MaskedDraftContext = {
+  workspaceId: string;
+  conversationId: string;
   aiSettings: PipelineAiSettings;
   messages: PipelineMessage[];
   batchMessages: PipelineMessage[];
+  channelCapabilities: ChannelCapabilities;
   knowledgeBase: KnowledgeBaseContext;
   selectedCategory: SelectedPipelineCategory;
   contactNotes: string;
@@ -118,6 +150,12 @@ type MaskedDraftContext = Omit<
 /** Enough of the interaction to decide how long to debounce it. */
 export type DebounceContext = {
   debounceSeconds: number;
+  /**
+   * ISO deadline written to `conversations.draft_debounce_until` so the thread
+   * can render a countdown. Computed inside the step, therefore stable across
+   * retries of that step.
+   */
+  debounceUntil: string;
 };
 
 export type DraftPipelineDependencies = {
@@ -131,10 +169,31 @@ export type DraftPipelineDependencies = {
     conversationId: string;
     messageId: string;
   }): Promise<boolean>;
+  /** Clears the countdown, but never a deadline newer than this run's own. */
+  clearDebounceDeadline(input: {
+    workspaceId: string;
+    conversationId: string;
+    notAfter: string;
+  }): Promise<void>;
   loadContext(input: DraftPipelineInput): Promise<LoadedDraftContext | null>;
-  createGeneratingDraft(input: {
-    context: LoadedDraftContext;
-  }): Promise<string>;
+  /**
+   * The first of the two LLM calls. Returns the 1-based position of the chosen
+   * candidate, or `null` when the answer was unusable — the caller then falls
+   * back to the workspace default category rather than acting on a guess.
+   */
+  classifyCategory(input: {
+    categories: readonly SelectedPipelineCategory[];
+    maskedMessages: readonly string[];
+    logger?: PromptLogger;
+  }): Promise<number | null>;
+  /** Writes the decision to every message of the batch and to the conversation. */
+  persistCategory(input: {
+    workspaceId: string;
+    conversationId: string;
+    messageIds: readonly string[];
+    categoryId: string;
+  }): Promise<void>;
+  createGeneratingDraft(input: { context: MaskedDraftContext }): Promise<string>;
   resolveModel(requestedModel: string): string;
   generate(
     prompt: readonly AiMessage[],
@@ -146,6 +205,7 @@ export type DraftPipelineDependencies = {
     text: string;
     model: string;
     supersedeEdited: boolean;
+    manualReviewReason: string | null;
   }): Promise<void>;
   cleanupGeneratingDrafts(input: {
     workspaceId: string;
@@ -300,34 +360,70 @@ export function selectBatchMessages(
     .filter((message) => message.direction === "incoming");
 }
 
-export function selectCategoryForBatch(
-  categories: readonly CategoryRow[],
-  batchMessages: readonly PipelineMessage[],
-  preferredMessageId?: string,
-): SelectedPipelineCategory {
-  const preferredMessage = preferredMessageId
-    ? batchMessages.find((message) => message.id === preferredMessageId)
-    : undefined;
-  const categoryId = (preferredMessage ?? batchMessages.at(-1))?.categoryId;
-  const category = categoryId
-    ? categories.find((candidate) => candidate.id === categoryId)
-    : categories.find((candidate) => candidate.is_default);
-
-  if (!category) {
-    throw new Error(
-      categoryId
-        ? "The assigned message category is unavailable in this workspace."
-        : "The workspace default category is unavailable.",
-    );
-  }
-
+function toPipelineCategory(category: CategoryRow): SelectedPipelineCategory {
   return {
     id: category.id,
     name: category.name,
     description: category.description,
     draftInstruction: category.draft_instruction,
     skipDraft: category.skip_draft,
+    kbFileIds: category.kb_file_ids,
   };
+}
+
+/**
+ * Candidates for classification: only categories applicable to the channel, in
+ * priority order, with the workspace default last so it always closes the list
+ * (docs/architecture/09-categories.md#категория-по-умолчанию).
+ */
+export function selectApplicableCategories(
+  categories: readonly CategoryRow[],
+  channelConnectionId: string,
+): SelectedPipelineCategory[] {
+  const applicable = categories.filter(
+    (category) =>
+      category.is_default ||
+      category.channel_connection_ids.length === 0 ||
+      category.channel_connection_ids.includes(channelConnectionId),
+  );
+
+  return applicable
+    .toSorted((left, right) => {
+      if (left.is_default !== right.is_default) {
+        return left.is_default ? 1 : -1;
+      }
+
+      return left.priority - right.priority;
+    })
+    .map(toPipelineCategory);
+}
+
+/**
+ * The category already stored on the batch. Used by regeneration, which has no
+ * new incoming message and therefore must not classify again.
+ */
+export function selectCategoryForBatch(
+  categories: readonly CategoryRow[],
+  batchMessages: readonly PipelineMessage[],
+  preferredMessageId?: string,
+): SelectedPipelineCategory | null {
+  const preferredMessage = preferredMessageId
+    ? batchMessages.find((message) => message.id === preferredMessageId)
+    : undefined;
+  const categoryId = (preferredMessage ?? batchMessages.at(-1))?.categoryId;
+
+  if (!categoryId) {
+    return null;
+  }
+
+  const category = categories.find((candidate) => candidate.id === categoryId);
+  if (!category) {
+    throw new Error(
+      "The assigned message category is unavailable in this workspace.",
+    );
+  }
+
+  return toPipelineCategory(category);
 }
 
 async function loadDebounceContext(input: {
@@ -371,7 +467,46 @@ async function loadDebounceContext(input: {
     throw new Error("Workspace AI settings are unavailable.");
   }
 
-  return { debounceSeconds: normalizeDebounceSeconds(settings.debounce_seconds) };
+  const debounceSeconds = normalizeDebounceSeconds(settings.debounce_seconds);
+  const debounceUntil = new Date(
+    Date.now() + debounceSeconds * 1000,
+  ).toISOString();
+
+  // Publishing the deadline is what makes the countdown possible: the debounce
+  // itself lives inside the Inngest run, which the browser cannot see.
+  // `conversations` is already in the realtime publication, so the thread picks
+  // this up without any extra plumbing. A later message overwrites it, which is
+  // exactly right — the debounce restarts and so does the countdown.
+  const { error: deadlineError } = await supabase
+    .from("conversations")
+    .update({ draft_debounce_until: debounceUntil })
+    .eq("workspace_id", input.workspaceId)
+    .eq("id", input.conversationId);
+  assertQuerySucceeded(deadlineError, "Publishing the debounce deadline");
+
+  return { debounceSeconds, debounceUntil };
+}
+
+/**
+ * Hides the countdown once this run's window is over.
+ *
+ * `notAfter` is this run's own deadline: a superseded run waking up late must
+ * not clear the deadline a newer message just published, which would freeze the
+ * countdown of a window that is still running.
+ */
+async function clearDebounceDeadline(input: {
+  workspaceId: string;
+  conversationId: string;
+  notAfter: string;
+}): Promise<void> {
+  const supabase = createAdminSupabaseClient();
+  const { error } = await supabase
+    .from("conversations")
+    .update({ draft_debounce_until: null })
+    .eq("workspace_id", input.workspaceId)
+    .eq("id", input.conversationId)
+    .lte("draft_debounce_until", input.notAfter);
+  assertQuerySucceeded(error, "Clearing the debounce deadline");
 }
 
 async function isLatestIncoming(input: {
@@ -479,17 +614,14 @@ async function loadContext(
     return null;
   }
 
-  // Stage 6 will classify an unassigned batch through lib/ai. Until then we
-  // deliberately use the already-assigned category, or the existing system
-  // default category, without inventing a second classification path.
-  const selectedCategory = selectCategoryForBatch(
+  const applicableCategories = selectApplicableCategories(
     categories,
-    batchMessages,
-    input.messageId,
+    conversation.channel_connection_id,
   );
-  const knowledgeBase = buildKnowledgeBaseContext(
-    knowledgeFiles satisfies KnowledgeFileRow[],
-  );
+  const defaultCategoryRow = categories.find((category) => category.is_default);
+  if (!defaultCategoryRow) {
+    throw new Error("The workspace default category is unavailable.");
+  }
 
   return {
     workspaceId: input.workspaceId,
@@ -501,23 +633,76 @@ async function loadContext(
       connection.platform,
       connection.capabilities,
     ),
-    knowledgeBase,
-    selectedCategory,
+    knowledgeFiles: knowledgeFiles satisfies KnowledgeFileRow[],
+    applicableCategories,
+    defaultCategory: toPipelineCategory(defaultCategoryRow),
+    assignedCategory: selectCategoryForBatch(
+      categories,
+      batchMessages,
+      input.messageId,
+    ),
     contactNotes:
       contactRow && typeof contactRow.notes === "string" ? contactRow.notes : "",
   };
 }
 
-function maskContext(context: LoadedDraftContext): MaskedDraftContext {
-  const categoryInstruction = context.selectedCategory.draftInstruction ?? "";
+/**
+ * Masking pass for the classification call.
+ *
+ * Deliberately separate from the generation pass: classification runs *before*
+ * the category is known, and the category decides which knowledge base files
+ * exist in the generation prompt. Two independent passes also keep the
+ * placeholder numbering of each prompt self-consistent — the classifier returns
+ * a number, so nothing here is ever unmasked.
+ */
+export function maskForClassification(
+  context: LoadedDraftContext,
+): { maskedMessages: string[]; categories: SelectedPipelineCategory[] } {
+  const categoryValues = context.applicableCategories.flatMap((category) => [
+    category.name,
+    category.description,
+  ]);
+  const { masked } = maskMessages([
+    ...context.batchMessages.map((message) => message.text),
+    ...categoryValues,
+  ]);
+
+  const maskedMessages = masked.slice(0, context.batchMessages.length);
+  const maskedCategoryValues = masked.slice(context.batchMessages.length);
+
+  return {
+    maskedMessages,
+    categories: context.applicableCategories.map((category, index) => ({
+      ...category,
+      name: maskedCategoryValues[index * 2]!,
+      description: maskedCategoryValues[index * 2 + 1]!,
+    })),
+  };
+}
+
+/**
+ * Builds the knowledge base fragment for the winning category and masks
+ * everything the generation call will see, in one pass so the placeholder map
+ * returned here is the one that unmasks the completion.
+ */
+export function buildGenerationContext(
+  context: LoadedDraftContext,
+  selectedCategory: SelectedPipelineCategory,
+): MaskedDraftContext {
+  // After classification (docs/architecture/07-data-flows.md#пайплайн-генерации,
+  // step 5): the category's own selection wins, `null` inherits `is_enabled`.
+  const knowledgeBase = buildKnowledgeBaseContext(context.knowledgeFiles, {
+    fileIds: selectedCategory.kbFileIds,
+  });
+  const categoryInstruction = selectedCategory.draftInstruction ?? "";
   const values = [
     ...context.messages.map((message) => message.text),
-    context.knowledgeBase.text,
+    knowledgeBase.text,
     context.aiSettings.tone,
     context.aiSettings.language,
     context.aiSettings.signature,
-    context.selectedCategory.name,
-    context.selectedCategory.description,
+    selectedCategory.name,
+    selectedCategory.description,
     categoryInstruction,
     context.contactNotes,
   ];
@@ -539,18 +724,20 @@ function maskContext(context: LoadedDraftContext): MaskedDraftContext {
   const contactNotes = masked[index++]!;
 
   return {
-    ...context,
+    workspaceId: context.workspaceId,
+    conversationId: context.conversationId,
     messages,
     batchMessages,
     contactNotes,
+    channelCapabilities: context.channelCapabilities,
     aiSettings: { ...context.aiSettings, tone, language, signature },
-    knowledgeBase: { ...context.knowledgeBase, text: knowledgeBaseText },
+    knowledgeBase: { ...knowledgeBase, text: knowledgeBaseText },
     selectedCategory: {
-      ...context.selectedCategory,
+      ...selectedCategory,
       name: categoryName,
       description: categoryDescription,
       draftInstruction:
-        context.selectedCategory.draftInstruction === null
+        selectedCategory.draftInstruction === null
           ? null
           : maskedCategoryInstruction,
     },
@@ -558,8 +745,44 @@ function maskContext(context: LoadedDraftContext): MaskedDraftContext {
   };
 }
 
+/**
+ * Persists the classification. The category goes on every message of the batch
+ * (docs/architecture/09-categories.md — one call per batch, one result for the
+ * whole batch) and is denormalized onto the conversation so the dialog list can
+ * filter and badge without a subquery over the last incoming message.
+ */
+async function persistCategory(input: {
+  workspaceId: string;
+  conversationId: string;
+  messageIds: readonly string[];
+  categoryId: string;
+}): Promise<void> {
+  if (input.messageIds.length === 0) {
+    return;
+  }
+
+  const supabase = createAdminSupabaseClient();
+  const [{ error: messagesError }, { error: conversationError }] =
+    await Promise.all([
+      supabase
+        .from("messages")
+        .update({ category_id: input.categoryId })
+        .eq("workspace_id", input.workspaceId)
+        .eq("conversation_id", input.conversationId)
+        .in("id", [...input.messageIds]),
+      supabase
+        .from("conversations")
+        .update({ category_id: input.categoryId })
+        .eq("workspace_id", input.workspaceId)
+        .eq("id", input.conversationId),
+    ]);
+
+  assertQuerySucceeded(messagesError, "Assigning the message category");
+  assertQuerySucceeded(conversationError, "Assigning the conversation category");
+}
+
 async function createGeneratingDraft(input: {
-  context: LoadedDraftContext;
+  context: MaskedDraftContext;
 }): Promise<string> {
   const firstMessage = input.context.batchMessages[0];
   const lastMessage = input.context.batchMessages.at(-1);
@@ -595,6 +818,7 @@ async function finalizeDraft(input: {
   text: string;
   model: string;
   supersedeEdited: boolean;
+  manualReviewReason: string | null;
 }): Promise<void> {
   const supabase = createAdminSupabaseClient();
   const { data, error } = await supabase.rpc("finalize_draft_generation", {
@@ -603,6 +827,7 @@ async function finalizeDraft(input: {
     generated_text: input.text,
     generated_model: input.model,
     supersede_edited: input.supersedeEdited,
+    review_reason: input.manualReviewReason,
   });
   assertQuerySucceeded(error, "Finalizing a generated draft");
 
@@ -632,10 +857,43 @@ export async function cleanupGeneratingDrafts(input: {
   assertQuerySucceeded(error, "Cleaning up generating drafts");
 }
 
+/**
+ * Classification call. Pinned to the small model on purpose: picking one of a
+ * handful of numbered candidates is a much simpler task than writing the reply
+ * (docs/architecture/08-ai-subsystem.md#классификация-по-категориям explicitly
+ * allows the cheaper Mistral model here), and the workspace `ai_settings.model`
+ * keeps governing the draft itself.
+ */
+async function classifyCategory(input: {
+  categories: readonly SelectedPipelineCategory[];
+  maskedMessages: readonly string[];
+  logger?: PromptLogger;
+}): Promise<number | null> {
+  const prompt = buildClassificationPrompt({
+    categories: input.categories,
+    maskedMessages: input.maskedMessages,
+  });
+  logClassificationPromptIfEnabled(
+    prompt,
+    input.logger ? { logger: input.logger } : undefined,
+  );
+
+  const completion = await generateCompletion(prompt, {
+    model: DEFAULT_MISTRAL_MODEL,
+    maxTokens: DEFAULT_CLASSIFICATION_MAX_TOKENS,
+    temperature: 0,
+  });
+
+  return parseCategorySelection(completion, input.categories.length);
+}
+
 export const draftPipelineDependencies: DraftPipelineDependencies = {
   loadDebounceContext,
   isLatestIncoming,
+  clearDebounceDeadline,
   loadContext,
+  classifyCategory,
+  persistCategory,
   createGeneratingDraft,
   resolveModel: resolveGenerationModel,
   generate: (prompt, options) =>
@@ -672,9 +930,30 @@ export async function runDraftPipeline(
     }
 
     // Inngest v4's native debounce period is a static TimeStr, not a CEL
-    // expression. The workspace-specific delay therefore uses a durable
-    // sleep, followed by a last-event check; only the newest event proceeds.
-    await steps.sleep("workspace-debounce", `${debounceContext.debounceSeconds}s`);
+    // expression, so the workspace-specific delay is a durable wait followed by
+    // a last-event check; only the newest event proceeds.
+    //
+    // The wait is `waitForEvent` rather than `sleep` because `sleep` cannot be
+    // interrupted: «Запустить сейчас» sends `draft/run-now.requested`, which
+    // ends the window early. The event wakes every waiting run of the
+    // conversation, and the last-event check below drops all but the newest —
+    // the same filtering that already handled the timeout path.
+    if (debounceContext.debounceSeconds > 0) {
+      await steps.waitForEvent("debounce-window", {
+        event: "draft/run-now.requested",
+        timeout: `${debounceContext.debounceSeconds}s`,
+        match: "data.conversationId",
+      });
+    }
+
+    await steps.run("clear-debounce-deadline", () =>
+      dependencies.clearDebounceDeadline({
+        workspaceId: input.workspaceId,
+        conversationId: input.conversationId,
+        notAfter: debounceContext.debounceUntil,
+      }),
+    );
+
     const isLatest = await steps.run("last-event-check", () =>
       dependencies.isLatestIncoming({
         workspaceId: input.workspaceId,
@@ -694,11 +973,53 @@ export async function runDraftPipeline(
     return { status: "skipped", reason: "empty-batch" };
   }
 
+  // LLM call 1 of 2 (docs/architecture/07-data-flows.md#пайплайн-генерации,
+  // step 3). Skipped in two cases: regeneration, which answers no new incoming
+  // message and keeps the category already on the batch, and a workspace whose
+  // only applicable category is the default — there is nothing to choose
+  // between, so the call would be pure cost.
+  const selectedCategory = await steps.run("classify", async () => {
+    if (input.regenerate) {
+      return context.assignedCategory ?? context.defaultCategory;
+    }
+
+    const candidates = context.applicableCategories;
+    if (candidates.length <= 1) {
+      return context.defaultCategory;
+    }
+
+    const { maskedMessages, categories } = maskForClassification(context);
+    const selection = await dependencies.classifyCategory({
+      categories,
+      maskedMessages,
+      ...(logger ? { logger } : {}),
+    });
+
+    // An unusable answer is not a reason to fail the run: the default category
+    // is exactly the "nothing matched" outcome the classifier is asked for.
+    return selection === null
+      ? context.defaultCategory
+      : (candidates[selection - 1] ?? context.defaultCategory);
+  });
+
+  // Classification is persisted even when no draft follows: every incoming
+  // message must carry a category (docs/architecture/09-categories.md).
+  if (!input.regenerate) {
+    await steps.run("persist-category", () =>
+      dependencies.persistCategory({
+        workspaceId: input.workspaceId,
+        conversationId: input.conversationId,
+        messageIds: context.batchMessages.map((message) => message.id),
+        categoryId: selectedCategory.id,
+      }),
+    );
+  }
+
   const stopReason = await steps.run("stop-check", () => {
     if (!input.regenerate && !context.aiSettings.autoGenerateDm) {
       return "auto-generation-disabled" as const;
     }
-    if (context.selectedCategory.skipDraft) {
+    if (selectedCategory.skipDraft) {
       return "category-skips-draft" as const;
     }
     return null;
@@ -708,9 +1029,11 @@ export async function runDraftPipeline(
   }
 
   const generationModel = dependencies.resolveModel(context.aiSettings.model);
-  const maskedContext = await steps.run("mask", () => maskContext(context));
+  const maskedContext = await steps.run("mask", () =>
+    buildGenerationContext(context, selectedCategory),
+  );
   const draftId = await steps.run("create-generating", () =>
-    dependencies.createGeneratingDraft({ context }),
+    dependencies.createGeneratingDraft({ context: maskedContext }),
   );
   const completion = await steps.run("generate", async () => {
     const prompt = buildDraftPrompt({
@@ -731,17 +1054,23 @@ export async function runDraftPipeline(
       maxTokens: DEFAULT_DRAFT_MAX_TOKENS,
     });
   });
+  // Unmask first, then parse: a refusal reason may itself mention a masked
+  // value, and the marker check is unaffected by placeholder substitution.
   const restoredText = await steps.run("restore", () =>
     unmaskText(completion, maskedContext.entities),
+  );
+  const parsed = await steps.run("parse-completion", () =>
+    parseDraftCompletion(restoredText),
   );
 
   await steps.run("finalize", () =>
     dependencies.finalizeDraft({
       workspaceId: input.workspaceId,
       draftId,
-      text: restoredText,
+      text: parsed.text,
       model: generationModel,
       supersedeEdited: input.regenerate,
+      manualReviewReason: parsed.manualReviewReason,
     }),
   );
 
