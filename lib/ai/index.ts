@@ -2,10 +2,13 @@ export {
   AI_REQUEST_TIMEOUT_MS,
   AiProviderError,
   generateCompletion,
+  generateCompletionWithUsage,
 } from "./client";
 export type {
   AiMessage,
+  AiUsage,
   GenerateCompletionOptions,
+  GenerateCompletionResult,
 } from "./client";
 export {
   AiConfigurationError,

@@ -19,6 +19,26 @@ export type GenerateCompletionOptions = {
   maxTokens?: number;
 };
 
+/**
+ * Token counts as reported by the provider. Not every OpenAI-compatible
+ * endpoint returns a `usage` object, so callers must treat it as optional and
+ * never let a missing one turn into a zero — an absent reading and a genuinely
+ * free call are different facts, and only the former should stay unrecorded.
+ */
+export type AiUsage = {
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+};
+
+export type GenerateCompletionResult = {
+  text: string;
+  provider: AiProvider;
+  /** The model actually used, after `selectProviderModel` had its say. */
+  model: string;
+  usage: AiUsage | null;
+};
+
 export class AiProviderError extends Error {
   constructor(
     message: string,
@@ -77,10 +97,44 @@ function providerError(
   );
 }
 
-export async function generateCompletion(
+function readUsage(usage: unknown): AiUsage | null {
+  if (typeof usage !== "object" || usage === null) {
+    return null;
+  }
+
+  const candidate = usage as {
+    prompt_tokens?: unknown;
+    completion_tokens?: unknown;
+    total_tokens?: unknown;
+  };
+  const promptTokens = candidate.prompt_tokens;
+  const completionTokens = candidate.completion_tokens;
+
+  if (typeof promptTokens !== "number" || typeof completionTokens !== "number") {
+    return null;
+  }
+
+  return {
+    promptTokens,
+    completionTokens,
+    // Providers are inconsistent about sending the sum, so derive it when the
+    // field is missing rather than reporting a total of zero.
+    totalTokens:
+      typeof candidate.total_tokens === "number"
+        ? candidate.total_tokens
+        : promptTokens + completionTokens,
+  };
+}
+
+/**
+ * The full provider round trip: the answer plus what it cost. Used wherever
+ * the spend has to be recorded (`lib/db/ai-usage.ts`); callers that only need
+ * the text keep using `generateCompletion` below.
+ */
+export async function generateCompletionWithUsage(
   messages: readonly AiMessage[],
   options: GenerateCompletionOptions = {},
-): Promise<string> {
+): Promise<GenerateCompletionResult> {
   const config = resolveProvider();
   const model = selectProviderModel(config, options.model);
   const client = new OpenAI({
@@ -111,7 +165,12 @@ export async function generateCompletion(
       );
     }
 
-    return content;
+    return {
+      text: content,
+      provider: config.provider,
+      model,
+      usage: readUsage(completion.usage),
+    };
   } catch (error) {
     if (error instanceof AiProviderError) {
       throw error;
@@ -119,4 +178,13 @@ export async function generateCompletion(
 
     throw providerError(config.provider, error);
   }
+}
+
+export async function generateCompletion(
+  messages: readonly AiMessage[],
+  options: GenerateCompletionOptions = {},
+): Promise<string> {
+  const { text } = await generateCompletionWithUsage(messages, options);
+
+  return text;
 }

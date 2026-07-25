@@ -2,7 +2,7 @@ import "server-only";
 
 import {
   buildCommentDraftPrompt,
-  generateCompletion,
+  generateCompletionWithUsage,
   logPromptIfEnabled,
   maskMessages,
   resolveGenerationModel,
@@ -19,6 +19,7 @@ import {
 } from "@/lib/channels/capabilities";
 import type { ChannelPlatform } from "@/lib/channels/types";
 import { createAdminSupabaseClient } from "@/lib/db/admin";
+import { recordAiUsage } from "@/lib/db/ai-usage";
 import {
   listKnowledgeFiles,
   type KnowledgeFileRow,
@@ -104,7 +105,7 @@ export type CommentDraftsDependencies = {
   resolveModel(requestedModel: string): string;
   generate(
     prompt: readonly AiMessage[],
-    options: { model: string; maxTokens: number },
+    options: { model: string; maxTokens: number; workspaceId: string },
   ): Promise<string>;
   finalizeDraft(input: {
     workspaceId: string;
@@ -469,14 +470,26 @@ export const commentDraftsDependencies: CommentDraftsDependencies = {
   loadContext,
   startDraft,
   resolveModel: resolveGenerationModel,
-  generate: (prompt, options) =>
-    generateCompletion(prompt, {
+  generate: async (prompt, options) => {
+    const completion = await generateCompletionWithUsage(prompt, {
       model: options.model,
       maxTokens: options.maxTokens,
       // Slightly warmer than the DM pipeline's 0.3: several replies under one
       // post must not read as variations of the same sentence.
       temperature: 0.7,
-    }),
+    });
+
+    await recordAiUsage({
+      workspaceId: options.workspaceId,
+      operation: "draft",
+      surface: "comment",
+      provider: completion.provider,
+      model: completion.model,
+      usage: completion.usage,
+    });
+
+    return completion.text;
+  },
   finalizeDraft,
   cleanupGeneratingDrafts: cleanupGeneratingCommentDrafts,
 };
@@ -586,6 +599,7 @@ export async function runCommentDraftsPipeline(
       const text = await dependencies.generate(prompt, {
         model: generationModel,
         maxTokens: DEFAULT_COMMENT_DRAFT_MAX_TOKENS,
+        workspaceId: input.workspaceId,
       });
 
       return unmaskText(text, entities);

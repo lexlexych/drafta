@@ -4,7 +4,7 @@ import {
   DEFAULT_CLASSIFICATION_MAX_TOKENS,
   buildClassificationPrompt,
   buildDraftPrompt,
-  generateCompletion,
+  generateCompletionWithUsage,
   logClassificationPromptIfEnabled,
   logPromptIfEnabled,
   maskMessages,
@@ -32,6 +32,7 @@ import {
   type CategoryRow,
 } from "@/lib/db/categories";
 import { createAdminSupabaseClient } from "@/lib/db/admin";
+import { recordAiUsage } from "@/lib/db/ai-usage";
 import {
   listKnowledgeFiles,
   type KnowledgeFileRow,
@@ -182,6 +183,8 @@ export type DraftPipelineDependencies = {
    * back to the workspace default category rather than acting on a guess.
    */
   classifyCategory(input: {
+    /** Only used to attribute the call's token spend to the tenant. */
+    workspaceId: string;
     categories: readonly SelectedPipelineCategory[];
     maskedMessages: readonly string[];
     logger?: PromptLogger;
@@ -197,7 +200,7 @@ export type DraftPipelineDependencies = {
   resolveModel(requestedModel: string): string;
   generate(
     prompt: readonly AiMessage[],
-    options: { model: string; maxTokens: number },
+    options: { model: string; maxTokens: number; workspaceId: string },
   ): Promise<string>;
   finalizeDraft(input: {
     workspaceId: string;
@@ -865,6 +868,7 @@ export async function cleanupGeneratingDrafts(input: {
  * keeps governing the draft itself.
  */
 async function classifyCategory(input: {
+  workspaceId: string;
   categories: readonly SelectedPipelineCategory[];
   maskedMessages: readonly string[];
   logger?: PromptLogger;
@@ -878,13 +882,25 @@ async function classifyCategory(input: {
     input.logger ? { logger: input.logger } : undefined,
   );
 
-  const completion = await generateCompletion(prompt, {
+  const completion = await generateCompletionWithUsage(prompt, {
     model: DEFAULT_MISTRAL_MODEL,
     maxTokens: DEFAULT_CLASSIFICATION_MAX_TOKENS,
     temperature: 0,
   });
 
-  return parseCategorySelection(completion, input.categories.length);
+  // Recorded inside the same Inngest step as the call itself: if the step is
+  // retried the provider really was asked twice, so a second row is the
+  // truthful accounting, not a duplicate.
+  await recordAiUsage({
+    workspaceId: input.workspaceId,
+    operation: "classification",
+    surface: "message",
+    provider: completion.provider,
+    model: completion.model,
+    usage: completion.usage,
+  });
+
+  return parseCategorySelection(completion.text, input.categories.length);
 }
 
 export const draftPipelineDependencies: DraftPipelineDependencies = {
@@ -896,12 +912,24 @@ export const draftPipelineDependencies: DraftPipelineDependencies = {
   persistCategory,
   createGeneratingDraft,
   resolveModel: resolveGenerationModel,
-  generate: (prompt, options) =>
-    generateCompletion(prompt, {
+  generate: async (prompt, options) => {
+    const completion = await generateCompletionWithUsage(prompt, {
       model: options.model,
       maxTokens: options.maxTokens,
       temperature: 0.3,
-    }),
+    });
+
+    await recordAiUsage({
+      workspaceId: options.workspaceId,
+      operation: "draft",
+      surface: "message",
+      provider: completion.provider,
+      model: completion.model,
+      usage: completion.usage,
+    });
+
+    return completion.text;
+  },
   finalizeDraft,
   cleanupGeneratingDrafts,
   notifyPushReady: (input) => emitPushNotifyRequested(input),
@@ -990,6 +1018,7 @@ export async function runDraftPipeline(
 
     const { maskedMessages, categories } = maskForClassification(context);
     const selection = await dependencies.classifyCategory({
+      workspaceId: input.workspaceId,
       categories,
       maskedMessages,
       ...(logger ? { logger } : {}),
@@ -1052,6 +1081,7 @@ export async function runDraftPipeline(
     return dependencies.generate(prompt, {
       model: generationModel,
       maxTokens: DEFAULT_DRAFT_MAX_TOKENS,
+      workspaceId: input.workspaceId,
     });
   });
   // Unmask first, then parse: a refusal reason may itself mention a masked
