@@ -45,8 +45,41 @@ vi.mock("@/lib/db/workspace", () => ({
     role: "owner",
   }),
 }));
+/**
+ * Мутируемая заготовка ответа `get_dashboard_metrics`: подменяем сам RPC, а не
+ * модуль `@/lib/db/dashboard`, чтобы под тестом осталась настоящая раскладка
+ * ответа в модель представления — плитки, доли полос и блок токенов.
+ */
+const dashboardMetrics = {
+  tokensTrackedSince: "2026-07-01T00:00:00.000Z" as string | null,
+};
+
+function dashboardMetricsPayload() {
+  return {
+    incoming_messages: 128,
+    incoming_comments: 34,
+    drafts_messages: 40,
+    drafts_comments: 12,
+    median_reply_seconds: 780,
+    categories: [
+      { category_id: "cat_spam", total: 80 },
+      { category_id: null, total: 48 },
+    ],
+    tokens: {
+      message_classification: { prompt: 500, completion: 10, total: 510 },
+      message_draft: { prompt: 1200, completion: 300, total: 1500 },
+      comment_classification: { prompt: 0, completion: 0, total: 0 },
+      comment_draft: { prompt: 800, completion: 200, total: 1000 },
+      total: { prompt: 2500, completion: 510, total: 3010 },
+    },
+    tokens_tracked_since: dashboardMetrics.tokensTrackedSince,
+  };
+}
+
 vi.mock("@/lib/db/server", () => ({
-  createServerSupabaseClient: async () => ({}),
+  createServerSupabaseClient: async () => ({
+    rpc: async () => ({ data: dashboardMetricsPayload(), error: null }),
+  }),
 }));
 // Серверные действия меню пользователя: в jsdom важен только их импорт.
 vi.mock("./workspace-actions", () => ({
@@ -112,7 +145,11 @@ const CATEGORIES = [
   },
 ];
 
-vi.mock("@/lib/db/categories", () => ({
+// `categoryBadges` is pure (a palette lookup by list position), so the real one
+// is reused rather than stubbed — the chips and the dashboard chart must agree
+// on colours, and a fake here would hide a mismatch.
+vi.mock("@/lib/db/categories", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/db/categories")>()),
   listCategories: async () => CATEGORIES,
 }));
 
@@ -493,20 +530,56 @@ vi.mock("./contacts/actions", () => ({
 }));
 
 afterEach(cleanup);
+afterEach(() => {
+  dashboardMetrics.tokensTrackedSince = "2026-07-01T00:00:00.000Z";
+});
 
 function searchParams(params: Record<string, string> = {}) {
   return Promise.resolve(params);
 }
 
 describe("dashboard page", () => {
-  it("renders stats, channel load and incoming feed", async () => {
-    render(await DashboardPage());
+  it("renders the stats, the category chart and the token block", async () => {
+    render(await DashboardPage({ searchParams: searchParams() }));
 
     expect(screen.getByRole("heading", { name: "Дашборд" })).toBeDefined();
-    expect(screen.getByText("черновиков ждут проверки")).toBeDefined();
-    expect(screen.getByText("По каналам")).toBeDefined();
-    expect(screen.getByText("Последние входящие")).toBeDefined();
-    expect(screen.getAllByText("Instagram Магазин").length).toBeGreaterThan(0);
+    expect(screen.getByText("Входящих сообщений")).toBeDefined();
+    expect(screen.getByText("Создано черновиков")).toBeDefined();
+    expect(screen.getByText("Комментариев")).toBeDefined();
+    expect(screen.getByText("Медиана времени ответа")).toBeDefined();
+
+    expect(screen.getByText("Сообщения по категориям")).toBeDefined();
+    expect(screen.getByText("Спам")).toBeDefined();
+    // Unclassified messages are charted too, under their own label.
+    expect(screen.getByText("Без категории")).toBeDefined();
+
+    expect(screen.getByText("Расход токенов")).toBeDefined();
+    expect(screen.getByText("Классификация сообщений")).toBeDefined();
+    expect(screen.getByText("Черновики комментариев")).toBeDefined();
+  });
+
+  it("defaults to the day period and marks the requested one instead", async () => {
+    const { unmount } = render(
+      await DashboardPage({ searchParams: searchParams() }),
+    );
+
+    expect(screen.getByRole("link", { name: "День" }).getAttribute("aria-current")).toBe("page");
+    expect(screen.getByRole("link", { name: "Месяц" }).getAttribute("aria-current")).toBeNull();
+    unmount();
+
+    render(await DashboardPage({ searchParams: searchParams({ period: "month" }) }));
+
+    expect(screen.getByRole("link", { name: "Месяц" }).getAttribute("aria-current")).toBe("page");
+    expect(screen.getByText("за последние 30 дней")).toBeDefined();
+  });
+
+  it("explains the empty token block before any usage is recorded", async () => {
+    dashboardMetrics.tokensTrackedSince = null;
+
+    render(await DashboardPage({ searchParams: searchParams() }));
+
+    expect(screen.getByText(/Учёт расхода токенов только что включён/)).toBeDefined();
+    expect(screen.queryByText("Классификация сообщений")).toBeNull();
   });
 });
 

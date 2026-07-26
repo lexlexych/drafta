@@ -25,8 +25,8 @@ import styles from "./_components/shell.module.css";
  * Гейты: аутентификацию проверяет `app/(app)/layout.tsx`, наличие workspace —
  * этот layout (нет workspace → онбординг). Workspace и пользователь — реальные;
  * счётчики «Сообщения» (`lib/db/inbox.ts`, T-05) и «Комментарии»
- * (`lib/db/comments.ts`) — реальные данные; «Дашборд» пока на
- * mock (вне скоупа). Список workspace'ов пользователя уходит в меню подвала
+ * (`lib/db/comments.ts`) — реальные данные, как и показатели «Дашборда»
+ * (`lib/db/dashboard.ts`). Список workspace'ов пользователя уходит в меню подвала
  * (`_components/user-menu.tsx`) — переключение и создание нового.
  * `InboxRealtimeSync` (T-06) держит те же счётчики и открытый инбокс живыми —
  * см. его собственный докстринг.

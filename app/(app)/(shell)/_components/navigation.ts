@@ -48,6 +48,8 @@ export const QUERY_KEYS = {
   post: "post",
   contact: "contact",
   section: "section",
+  /** Окно дашборда: `day` | `week` | `month` (`lib/db/dashboard.ts`). */
+  period: "period",
 } as const;
 
 export function sectionIdForPathname(pathname: string): SectionId {

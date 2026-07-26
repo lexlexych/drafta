@@ -815,3 +815,61 @@ set
   text = excluded.text,
   delivery_status = excluded.delivery_status,
   updated_at = now();
+
+-- Token accounting (public.ai_usage). Two workspaces so the RLS tests can prove
+-- a member of one never sees the other's spend. Written here rather than by the
+-- pipelines because seeding must not call an LLM provider.
+insert into public.ai_usage (
+  id,
+  workspace_id,
+  operation,
+  surface,
+  provider,
+  model,
+  prompt_tokens,
+  completion_tokens,
+  total_tokens
+)
+values
+  (
+    'a0000000-0000-4000-8000-000000000601',
+    'a0000000-0000-4000-8000-000000000001',
+    'classification',
+    'message',
+    'mistral',
+    'mistral-small-latest',
+    480,
+    12,
+    492
+  ),
+  (
+    'a0000000-0000-4000-8000-000000000602',
+    'a0000000-0000-4000-8000-000000000001',
+    'draft',
+    'message',
+    'mistral',
+    'mistral-large-latest',
+    1320,
+    280,
+    1600
+  ),
+  (
+    'b0000000-0000-4000-8000-000000000601',
+    'b0000000-0000-4000-8000-000000000001',
+    'draft',
+    'comment',
+    'mistral',
+    'mistral-large-latest',
+    760,
+    190,
+    950
+  )
+on conflict (id) do update
+set
+  operation = excluded.operation,
+  surface = excluded.surface,
+  provider = excluded.provider,
+  model = excluded.model,
+  prompt_tokens = excluded.prompt_tokens,
+  completion_tokens = excluded.completion_tokens,
+  total_tokens = excluded.total_tokens;
