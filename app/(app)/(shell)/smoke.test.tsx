@@ -785,8 +785,16 @@ describe("settings page", () => {
     render(await SettingsPage({ searchParams: searchParams() }));
 
     expect(screen.getAllByText("Каналы").length).toBeGreaterThan(0);
+    // Instagram и Facebook уже подключены — у них строка канала, у остальных
+    // платформ (включая Email) — кнопка подключения.
     expect(screen.getAllByRole("button", { name: "Переименовать" })).toHaveLength(2);
-    expect(screen.getByRole("button", { name: "+ Подключить канал" })).toBeDefined();
+    expect(
+      screen.getByRole("button", { name: "Подключить Telegram" }),
+    ).toBeDefined();
+    expect(screen.getByRole("button", { name: "Подключить Email" })).toBeDefined();
+    expect(
+      screen.queryByRole("button", { name: "Подключить Instagram" }),
+    ).toBeNull();
   });
 
   it("renders the categories section with the locked default", async () => {

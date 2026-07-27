@@ -22,7 +22,6 @@ describe("lib/channels/connect-state", () => {
   const payload = {
     workspaceId: "ws_1",
     platform: "telegram" as const,
-    name: "Telegram Магазин",
     nonce: "nonce_abc",
   };
 
@@ -34,7 +33,6 @@ describe("lib/channels/connect-state", () => {
     if (!result.ok) return;
     expect(result.state.workspaceId).toBe("ws_1");
     expect(result.state.platform).toBe("telegram");
-    expect(result.state.name).toBe("Telegram Магазин");
     expect(result.state.nonce).toBe("nonce_abc");
     expect(typeof result.state.exp).toBe("number");
   });

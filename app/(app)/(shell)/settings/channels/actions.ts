@@ -50,7 +50,8 @@ import { getAuthenticatedUser, getCurrentWorkspace } from "@/lib/db/workspace";
  * hands back the provider's authorization URL (the row is created later, by
  * the callback route `app/api/channels/[provider]/connect/callback/`, once the
  * account is authorized). The user never sees or touches the provider's own
- * dashboard.
+ * dashboard — and never types a connection name either: the row is named
+ * after the authorized account and can be renamed afterwards.
  */
 
 const SETTINGS_PATH = "/settings";
@@ -92,11 +93,11 @@ async function requireCurrentWorkspaceId(): Promise<
  * that URL for the client to redirect to. The pending intent is signed and
  * stored in an httpOnly cookie (its nonce is echoed in the redirect_url for a
  * CSRF double-submit). No `channel_connections` row is written yet — the
- * callback route creates it once the account is authorized.
+ * callback route creates it once the account is authorized, naming it after
+ * that account.
  */
 export async function startChannelConnectionAction(input: {
   platform: string;
-  name: string;
 }): Promise<StartChannelConnectionResult> {
   const workspace = await requireCurrentWorkspaceId();
 
@@ -104,12 +105,8 @@ export async function startChannelConnectionAction(input: {
     return workspace;
   }
 
-  const name = input.name.trim();
   const platform = input.platform as ChannelPlatform;
 
-  if (!name) {
-    return { ok: false, error: "Введите имя подключения." };
-  }
   if (!SUPPORTED_CHANNEL_PLATFORMS.includes(platform)) {
     return { ok: false, error: "Выберите поддерживаемую платформу." };
   }
@@ -174,7 +171,6 @@ export async function startChannelConnectionAction(input: {
     const state = signConnectState({
       workspaceId: workspace.workspaceId,
       platform,
-      name,
       nonce,
     });
 

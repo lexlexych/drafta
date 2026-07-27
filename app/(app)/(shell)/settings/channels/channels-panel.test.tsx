@@ -1,10 +1,12 @@
 // @vitest-environment jsdom
 
 /**
- * Client-side behavior of the Channels panel (T-04): OAuth add flow, inline
- * rename, disable/enable with confirmation, and the post-OAuth result banner.
- * Server actions (`./actions.ts`) are mocked — the actual DB-backed business
- * logic they delegate to is covered by `lib/db/channel-connections.test.ts`.
+ * Client-side behavior of the Channels panel: one block per platform, the
+ * Instagram onboarding → OAuth flow, the "в разработке" stub for the rest,
+ * inline rename, disable/enable with confirmation, and the post-OAuth result
+ * banner. Server actions (`./actions.ts`) are mocked — the actual DB-backed
+ * business logic they delegate to is covered by
+ * `lib/db/channel-connections.test.ts`.
  */
 
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
@@ -55,61 +57,98 @@ const baseChannels: ChannelConnectionListItem[] = [
   },
 ];
 
-const supportedPlatforms: ChannelConnectionListItem["platform"][] = [
-  "telegram",
-  "whatsapp",
-  "instagram",
-  "facebook",
-];
-
 describe("ChannelsPanel", () => {
-  it("starts the OAuth flow and redirects to the provider's auth url on success", async () => {
+  it("shows one connect button per platform block", () => {
+    render(<ChannelsPanel channels={[]} />);
+
+    for (const label of ["Instagram", "Telegram", "WhatsApp", "Facebook", "Email"]) {
+      expect(
+        screen.getByRole("button", { name: `Подключить ${label}` }),
+      ).toBeDefined();
+    }
+  });
+
+  it("shows the onboarding prerequisites before the Instagram authorization", () => {
+    render(<ChannelsPanel channels={[]} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Подключить Instagram" }));
+
+    expect(screen.getByText(/Перед подключением Instagram/)).toBeDefined();
+    expect(screen.getByText(/профессиональный/)).toBeDefined();
+    expect(screen.getByText(/уже вошли именно в тот аккаунт/)).toBeDefined();
+    // The connect button itself is replaced by the onboarding.
+    expect(
+      screen.queryByRole("button", { name: "Подключить Instagram" }),
+    ).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Войти через Instagram" }),
+    ).toBeDefined();
+    expect(startChannelConnectionAction).not.toHaveBeenCalled();
+  });
+
+  it("starts the OAuth flow from the onboarding and redirects to the provider", async () => {
     startChannelConnectionAction.mockResolvedValue({
       ok: true,
-      url: "https://api.telegram.org/auth?token=abc",
+      url: "https://zernio.com/connect/instagram?token=abc",
     });
 
-    render(<ChannelsPanel channels={baseChannels} supportedPlatforms={supportedPlatforms} />);
+    render(<ChannelsPanel channels={[]} />);
 
-    fireEvent.click(screen.getByRole("button", { name: "+ Подключить канал" }));
-    // No external-id field anymore — only a name.
-    expect(screen.queryByLabelText("Внешний ID аккаунта")).toBeNull();
-    fireEvent.change(screen.getByLabelText("Имя подключения"), {
-      target: { value: "WhatsApp Сервис" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Подключить" }));
+    fireEvent.click(screen.getByRole("button", { name: "Подключить Instagram" }));
+    // The user no longer names the connection — it comes from the account.
+    expect(screen.queryByLabelText("Имя подключения")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Войти через Instagram" }));
 
     await waitFor(() =>
       expect(startChannelConnectionAction).toHaveBeenCalledWith({
-        platform: "whatsapp",
-        name: "WhatsApp Сервис",
+        platform: "instagram",
       }),
     );
     await waitFor(() =>
       expect(assignMock).toHaveBeenCalledWith(
-        "https://api.telegram.org/auth?token=abc",
+        "https://zernio.com/connect/instagram?token=abc",
       ),
     );
   });
 
-  it("shows the error and keeps the form open when starting the flow fails", async () => {
+  it("shows the error and keeps the onboarding open when starting the flow fails", async () => {
     startChannelConnectionAction.mockResolvedValue({
       ok: false,
-      error: "Выберите поддерживаемую платформу.",
+      error: "Не удалось начать подключение канала.",
     });
 
-    render(<ChannelsPanel channels={baseChannels} supportedPlatforms={supportedPlatforms} />);
+    render(<ChannelsPanel channels={[]} />);
 
-    fireEvent.click(screen.getByRole("button", { name: "+ Подключить канал" }));
-    fireEvent.change(screen.getByLabelText("Имя подключения"), {
-      target: { value: "Некорректный" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Подключить" }));
+    fireEvent.click(screen.getByRole("button", { name: "Подключить Instagram" }));
+    fireEvent.click(screen.getByRole("button", { name: "Войти через Instagram" }));
 
     expect(
-      await screen.findByText("Выберите поддерживаемую платформу."),
+      await screen.findByText("Не удалось начать подключение канала."),
     ).toBeDefined();
-    expect(screen.getByLabelText("Имя подключения")).toBeDefined();
+    expect(
+      screen.getByRole("button", { name: "Войти через Instagram" }),
+    ).toBeDefined();
+    expect(assignMock).not.toHaveBeenCalled();
+  });
+
+  it("closes the onboarding on cancel", () => {
+    render(<ChannelsPanel channels={[]} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Подключить Instagram" }));
+    fireEvent.click(screen.getByRole("button", { name: "Отмена" }));
+
+    expect(
+      screen.getByRole("button", { name: "Подключить Instagram" }),
+    ).toBeDefined();
+  });
+
+  it("shows a work-in-progress stub for platforms without a connect flow", () => {
+    render(<ChannelsPanel channels={[]} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Подключить WhatsApp" }));
+
+    expect(screen.getByText(/«WhatsApp» пока в разработке/)).toBeDefined();
+    expect(startChannelConnectionAction).not.toHaveBeenCalled();
     expect(assignMock).not.toHaveBeenCalled();
   });
 
@@ -117,7 +156,6 @@ describe("ChannelsPanel", () => {
     render(
       <ChannelsPanel
         channels={baseChannels}
-        supportedPlatforms={supportedPlatforms}
         connectResult={{ status: "connected", reason: null }}
       />,
     );
@@ -129,7 +167,6 @@ describe("ChannelsPanel", () => {
     render(
       <ChannelsPanel
         channels={baseChannels}
-        supportedPlatforms={supportedPlatforms}
         connectResult={{ status: "error", reason: "duplicate" }}
       />,
     );
@@ -139,19 +176,20 @@ describe("ChannelsPanel", () => {
     ).toBeDefined();
   });
 
-  it("does not offer platforms that already have a connection", () => {
-    render(<ChannelsPanel channels={baseChannels} supportedPlatforms={supportedPlatforms} />);
+  it("replaces the connect button of a connected platform with its channel row", () => {
+    render(<ChannelsPanel channels={baseChannels} />);
 
-    fireEvent.click(screen.getByRole("button", { name: "+ Подключить канал" }));
-
-    expect(screen.queryByRole("option", { name: "Telegram" })).toBeNull();
-    expect(screen.getByRole("option", { name: "WhatsApp" })).toBeDefined();
+    expect(screen.getByText("Telegram Shop")).toBeDefined();
+    expect(screen.queryByRole("button", { name: "Подключить Telegram" })).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Подключить Instagram" }),
+    ).toBeDefined();
   });
 
   it("renames a channel inline", async () => {
     renameChannelConnectionAction.mockResolvedValue({ ok: true, data: {} });
 
-    render(<ChannelsPanel channels={baseChannels} supportedPlatforms={supportedPlatforms} />);
+    render(<ChannelsPanel channels={baseChannels} />);
 
     fireEvent.click(screen.getByRole("button", { name: "Переименовать" }));
     fireEvent.change(screen.getByLabelText("Новое имя для «Telegram Shop»"), {
@@ -172,7 +210,7 @@ describe("ChannelsPanel", () => {
     setChannelConnectionStatusAction.mockResolvedValue({ ok: true, data: {} });
     const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
 
-    render(<ChannelsPanel channels={baseChannels} supportedPlatforms={supportedPlatforms} />);
+    render(<ChannelsPanel channels={baseChannels} />);
     fireEvent.click(screen.getByRole("button", { name: "Отключить" }));
 
     expect(confirmSpy).toHaveBeenCalled();
@@ -189,7 +227,7 @@ describe("ChannelsPanel", () => {
   it("does not change status when the disable confirmation is declined", () => {
     const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
 
-    render(<ChannelsPanel channels={baseChannels} supportedPlatforms={supportedPlatforms} />);
+    render(<ChannelsPanel channels={baseChannels} />);
     fireEvent.click(screen.getByRole("button", { name: "Отключить" }));
 
     expect(setChannelConnectionStatusAction).not.toHaveBeenCalled();
@@ -201,9 +239,7 @@ describe("ChannelsPanel", () => {
       { ...baseChannels[0], status: "disconnected" },
     ];
 
-    const { container } = render(
-      <ChannelsPanel channels={disconnected} supportedPlatforms={supportedPlatforms} />,
-    );
+    const { container } = render(<ChannelsPanel channels={disconnected} />);
 
     expect(screen.getByRole("button", { name: "Включить" })).toBeDefined();
     expect(screen.getByText(/отключён/)).toBeDefined();

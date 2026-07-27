@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { parseZernioConnectCallback, ZernioConnectCallbackError } from "./connect";
 
 describe("parseZernioConnectCallback", () => {
-  it("extracts the connected account's external id and platform", () => {
+  it("extracts the connected account's external id, platform and handle", () => {
     const result = parseZernioConnectCallback({
       connected: "whatsapp",
       accountId: "acct_wa_31207",
@@ -13,7 +13,18 @@ describe("parseZernioConnectCallback", () => {
 
     expect(result.externalAccountId).toBe("acct_wa_31207");
     expect(result.platform).toBe("whatsapp");
+    expect(result.accountUsername).toBe("+491234567");
     expect(result.credentials).toBeUndefined();
+  });
+
+  it("leaves the account handle undefined when the provider omits it", () => {
+    const result = parseZernioConnectCallback({
+      connected: "instagram",
+      accountId: "acct_ig_1",
+      username: "   ",
+    });
+
+    expect(result.accountUsername).toBeUndefined();
   });
 
   it("leaves platform undefined when Zernio reports an unknown one", () => {

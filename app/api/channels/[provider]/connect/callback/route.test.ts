@@ -35,7 +35,6 @@ function mintState(overrides?: Partial<Parameters<typeof signConnectState>[0]>):
   return signConnectState({
     workspaceId: "ws_1",
     platform: "telegram",
-    name: "Telegram Магазин",
     nonce: NONCE,
     ...overrides,
   });
@@ -70,7 +69,7 @@ afterEach(() => {
 });
 
 describe("GET /api/channels/[provider]/connect/callback", () => {
-  it("creates the connection and redirects with a success banner on the happy path", async () => {
+  it("names the connection after the authorized account and redirects with a success banner", async () => {
     createChannelConnectionMock.mockResolvedValue({ ok: true, data: {} });
 
     const location = await callCallback({
@@ -78,6 +77,7 @@ describe("GET /api/channels/[provider]/connect/callback", () => {
         [CONNECT_STATE_NONCE_PARAM]: NONCE,
         connected: "telegram",
         accountId: "acct_tg_98213",
+        username: "tonwerk_shop",
       },
       cookieToken: mintState(),
     });
@@ -89,12 +89,31 @@ describe("GET /api/channels/[provider]/connect/callback", () => {
         provider: "zernio",
         platform: "telegram",
         externalId: "acct_tg_98213",
-        name: "Telegram Магазин",
+        name: "tonwerk_shop",
       },
     );
     expect(location.pathname).toBe("/settings");
     expect(location.searchParams.get("section")).toBe("channels");
     expect(location.searchParams.get("connect")).toBe("connected");
+  });
+
+  it("falls back to the platform label when the provider reports no account name", async () => {
+    createChannelConnectionMock.mockResolvedValue({ ok: true, data: {} });
+
+    await callCallback({
+      search: {
+        [CONNECT_STATE_NONCE_PARAM]: NONCE,
+        connected: "telegram",
+        accountId: "acct_tg_98213",
+      },
+      cookieToken: mintState(),
+    });
+
+    expect(createChannelConnectionMock).toHaveBeenCalledWith(
+      expect.anything(),
+      "ws_1",
+      expect.objectContaining({ name: "Telegram" }),
+    );
   });
 
   it("redirects with reason=duplicate when the account is already connected", async () => {
