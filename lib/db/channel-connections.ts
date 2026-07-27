@@ -82,6 +82,31 @@ export async function listChannelConnections(
   return (data ?? []) as ChannelConnectionRow[];
 }
 
+/**
+ * One connection of the workspace, or `null` when it doesn't exist (or RLS
+ * hides it). The deletion flow needs the row's `provider`/`external_id` to ask
+ * the provider to disconnect the account before the row is gone.
+ */
+export async function getChannelConnection(
+  supabase: SupabaseClient,
+  workspaceId: string,
+  id: string,
+): Promise<ChannelConnectionRow | null> {
+  const { data, error } = await supabase
+    .from("channel_connections")
+    .select(CHANNEL_CONNECTION_COLUMNS)
+    .eq("workspace_id", workspaceId)
+    .eq("id", id)
+    .maybeSingle();
+
+  if (error) {
+    console.error("[settings/channels] failed to load channel_connection", error);
+    throw new Error("Unable to load the channel connection.");
+  }
+
+  return (data as ChannelConnectionRow | null) ?? null;
+}
+
 /** True when this workspace already owns a connection for the platform. */
 export async function hasChannelConnectionForPlatform(
   supabase: SupabaseClient,
@@ -238,6 +263,44 @@ export async function setChannelConnectionStatus(
   }
 
   return { ok: true, data: data as ChannelConnectionRow };
+}
+
+/**
+ * Deletes the connection row. Everything that hangs off it goes with it: the
+ * `conversations` and `posts` of this channel cascade
+ * (`on delete cascade` on the `(workspace_id, channel_connection_id)` FKs),
+ * and their messages/comments/drafts cascade in turn — the channel's
+ * correspondence disappears from drafta while staying untouched on the
+ * platform itself. References from `categories.channel_connection_ids` (an
+ * array, not an FK) are stripped by the
+ * `channel_connections_strip_from_categories` trigger
+ * (supabase/migrations/20260727110000_…).
+ *
+ * Deleting is not the same as disconnecting: «Отключить» only flips `status`
+ * and keeps the history (see `setChannelConnectionStatus`).
+ */
+export async function deleteChannelConnection(
+  supabase: SupabaseClient,
+  workspaceId: string,
+  id: string,
+): Promise<ChannelConnectionResult<{ id: string }>> {
+  const { data, error } = await supabase
+    .from("channel_connections")
+    .delete()
+    .eq("workspace_id", workspaceId)
+    .eq("id", id)
+    .select("id")
+    .maybeSingle();
+
+  if (error) {
+    console.error("[settings/channels] failed to delete channel_connection", error);
+    return { ok: false, error: "Не удалось удалить канал." };
+  }
+  if (!data) {
+    return { ok: false, error: "Подключение не найдено." };
+  }
+
+  return { ok: true, data: data as { id: string } };
 }
 
 function isUniqueViolation(error: { code?: string }): boolean {

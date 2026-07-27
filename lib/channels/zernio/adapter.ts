@@ -1,6 +1,7 @@
 import type {
   ChannelAdapter,
   ConnectCallbackResult,
+  DisconnectAccountInput,
   GetConnectUrlInput,
   GetConnectUrlResult,
   NormalizedEvent,
@@ -12,6 +13,7 @@ import type {
 } from "../types";
 import { ChannelOperationNotImplementedError } from "../types";
 import {
+  deleteZernioAccount,
   getZernioConnectAuthUrl,
   sendZernioCommentReply,
   sendZernioInboxMessage,
@@ -37,8 +39,8 @@ const PROVIDER = "zernio" as const;
  * secret per docs/architecture/13-environments-secrets.md — lives in
  * `./index.ts`, which builds the adapter instance the app registers and uses.
  *
- * `getApiConfig` is optional: the account-connect (OAuth) flow — the
- * `getConnectUrl` half of the adapter contract — is only wired when the REST
+ * `getApiConfig` is optional: the operations that call Zernio's REST API —
+ * `getConnectUrl` and `disconnectAccount` — are only wired when the REST
  * config is supplied, so unit tests that only exercise webhooks can construct
  * the adapter with just the webhook secret. `parseConnectCallback` needs no
  * config (it only parses the redirect's query), so it is always present.
@@ -132,6 +134,12 @@ export function createZernioAdapter(
       });
 
       return { url, providerProfileId };
+    };
+
+    adapter.disconnectAccount = async (
+      input: DisconnectAccountInput,
+    ): Promise<void> => {
+      await deleteZernioAccount(getApiConfig(), input.externalAccountId);
     };
   }
 

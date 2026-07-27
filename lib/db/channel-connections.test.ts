@@ -33,6 +33,8 @@ describe.skipIf(!hasLocalSupabaseConfig)("lib/db/channel-connections", () => {
   let supabase: SupabaseClient;
   let listChannelConnections: typeof import("./channel-connections").listChannelConnections;
   let createChannelConnection: typeof import("./channel-connections").createChannelConnection;
+  let getChannelConnection: typeof import("./channel-connections").getChannelConnection;
+  let deleteChannelConnection: typeof import("./channel-connections").deleteChannelConnection;
   let renameChannelConnection: typeof import("./channel-connections").renameChannelConnection;
   let setChannelConnectionStatus: typeof import("./channel-connections").setChannelConnectionStatus;
   const workspaceIdsToClean: string[] = [];
@@ -41,6 +43,8 @@ describe.skipIf(!hasLocalSupabaseConfig)("lib/db/channel-connections", () => {
     ({
       listChannelConnections,
       createChannelConnection,
+      getChannelConnection,
+      deleteChannelConnection,
       renameChannelConnection,
       setChannelConnectionStatus,
     } = await import("./channel-connections"));
@@ -295,5 +299,166 @@ describe.skipIf(!hasLocalSupabaseConfig)("lib/db/channel-connections", () => {
     const list = await listChannelConnections(supabase, workspaceId);
     expect(list[0].name).toBe("Telegram Scope");
     expect(list[0].status).toBe("active");
+  });
+
+  it("reads one connection, and reports a foreign or unknown id as missing", async () => {
+    const workspaceId = await createTestWorkspace();
+    const foreignWorkspaceId = await createTestWorkspace();
+
+    const created = await createChannelConnection(supabase, workspaceId, {
+      provider: "zernio",
+      platform: "instagram",
+      externalId: "ig_get_001",
+      name: "Instagram Get",
+    });
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    const found = await getChannelConnection(supabase, workspaceId, created.data.id);
+    expect(found?.external_id).toBe("ig_get_001");
+    expect(found?.provider).toBe("zernio");
+
+    expect(
+      await getChannelConnection(supabase, foreignWorkspaceId, created.data.id),
+    ).toBeNull();
+    expect(await getChannelConnection(supabase, workspaceId, randomUUID())).toBeNull();
+  });
+
+  it("deletes a connection and drops its conversations with it", async () => {
+    const workspaceId = await createTestWorkspace();
+
+    const created = await createChannelConnection(supabase, workspaceId, {
+      provider: "zernio",
+      platform: "instagram",
+      externalId: "ig_delete_001",
+      name: "Instagram Delete",
+    });
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    const { error: conversationError } = await supabase
+      .from("conversations")
+      .insert({
+        workspace_id: workspaceId,
+        channel_connection_id: created.data.id,
+        external_id: "ig_thread_delete_001",
+      });
+    expect(conversationError).toBeNull();
+
+    const deleted = await deleteChannelConnection(
+      supabase,
+      workspaceId,
+      created.data.id,
+    );
+    expect(deleted.ok).toBe(true);
+
+    expect(await listChannelConnections(supabase, workspaceId)).toHaveLength(0);
+    const { data: conversations } = await supabase
+      .from("conversations")
+      .select("id")
+      .eq("channel_connection_id", created.data.id);
+    expect(conversations ?? []).toHaveLength(0);
+  });
+
+  it("strips the deleted channel from the categories that referenced it", async () => {
+    const workspaceId = await createTestWorkspace();
+
+    const deletedChannel = await createChannelConnection(supabase, workspaceId, {
+      provider: "zernio",
+      platform: "instagram",
+      externalId: "ig_category_001",
+      name: "Instagram Категории",
+    });
+    const keptChannel = await createChannelConnection(supabase, workspaceId, {
+      provider: "zernio",
+      platform: "telegram",
+      externalId: "tg_category_001",
+      name: "Telegram Категории",
+    });
+    expect(deletedChannel.ok && keptChannel.ok).toBe(true);
+    if (!deletedChannel.ok || !keptChannel.ok) return;
+
+    // A workspace always owns exactly one (last) default category — the
+    // invariant trigger from supabase/migrations/20260721120000_… enforces it.
+    const { error: categoriesError } = await supabase.from("categories").insert([
+      {
+        workspace_id: workspaceId,
+        name: "Только Instagram",
+        description: "Тест удаления канала.",
+        priority: 0,
+        channel_connection_ids: [deletedChannel.data.id],
+        is_default: false,
+      },
+      {
+        workspace_id: workspaceId,
+        name: "Оба канала",
+        description: "Тест удаления канала.",
+        priority: 1,
+        channel_connection_ids: [deletedChannel.data.id, keptChannel.data.id],
+        is_default: false,
+      },
+      {
+        workspace_id: workspaceId,
+        name: "По умолчанию",
+        description: "Всё, что не подошло под правила выше.",
+        priority: 2,
+        channel_connection_ids: [],
+        is_default: true,
+      },
+    ]);
+    expect(categoriesError).toBeNull();
+
+    const deleted = await deleteChannelConnection(
+      supabase,
+      workspaceId,
+      deletedChannel.data.id,
+    );
+    expect(deleted.ok).toBe(true);
+
+    const { data: categories } = await supabase
+      .from("categories")
+      .select("name, channel_connection_ids")
+      .eq("workspace_id", workspaceId)
+      .order("priority");
+
+    // Nothing dangling is left behind — a stale id would make the category
+    // unsaveable (private.validate_category_channels raises 23503).
+    expect(
+      (categories ?? []).map(
+        (category: { name: string; channel_connection_ids: string[] }) => [
+          category.name,
+          category.channel_connection_ids,
+        ],
+      ),
+    ).toEqual([
+      ["Только Instagram", []],
+      ["Оба канала", [keptChannel.data.id]],
+      ["По умолчанию", []],
+    ]);
+  });
+
+  it("reports deleting a foreign or unknown connection as missing", async () => {
+    const workspaceId = await createTestWorkspace();
+    const foreignWorkspaceId = await createTestWorkspace();
+
+    const created = await createChannelConnection(supabase, workspaceId, {
+      provider: "zernio",
+      platform: "telegram",
+      externalId: "tg_delete_scope_001",
+      name: "Telegram Scope Delete",
+    });
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    const foreign = await deleteChannelConnection(
+      supabase,
+      foreignWorkspaceId,
+      created.data.id,
+    );
+    expect(foreign.ok).toBe(false);
+    if (foreign.ok) return;
+    expect(foreign.error).toMatch(/не найдено/i);
+
+    expect(await listChannelConnections(supabase, workspaceId)).toHaveLength(1);
   });
 });

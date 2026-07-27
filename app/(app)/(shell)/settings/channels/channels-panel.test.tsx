@@ -17,6 +17,7 @@ import { ChannelsPanel, type ChannelConnectionListItem } from "./channels-panel"
 const startChannelConnectionAction = vi.fn();
 const renameChannelConnectionAction = vi.fn();
 const setChannelConnectionStatusAction = vi.fn();
+const deleteChannelConnectionAction = vi.fn();
 
 vi.mock("./actions", () => ({
   startChannelConnectionAction: (...args: unknown[]) =>
@@ -25,6 +26,8 @@ vi.mock("./actions", () => ({
     renameChannelConnectionAction(...args),
   setChannelConnectionStatusAction: (...args: unknown[]) =>
     setChannelConnectionStatusAction(...args),
+  deleteChannelConnectionAction: (...args: unknown[]) =>
+    deleteChannelConnectionAction(...args),
 }));
 
 const refresh = vi.fn();
@@ -232,6 +235,89 @@ describe("ChannelsPanel", () => {
 
     expect(setChannelConnectionStatusAction).not.toHaveBeenCalled();
     confirmSpy.mockRestore();
+  });
+
+  it("asks for confirmation before deleting a channel and explains what is lost", () => {
+    render(<ChannelsPanel channels={baseChannels} />);
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Удалить канал «Telegram Shop»" }),
+    );
+
+    expect(screen.getByText("Удалить канал «Telegram Shop»?")).toBeDefined();
+    expect(
+      screen.getByText(/перестанут отображаться в\s+drafta/),
+    ).toBeDefined();
+    expect(screen.getByText(/В Telegram они останутся/)).toBeDefined();
+    expect(deleteChannelConnectionAction).not.toHaveBeenCalled();
+  });
+
+  it("deletes the channel on confirmation", async () => {
+    deleteChannelConnectionAction.mockResolvedValue({ ok: true });
+
+    render(<ChannelsPanel channels={baseChannels} />);
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Удалить канал «Telegram Shop»" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Удалить канал" }));
+
+    await waitFor(() =>
+      expect(deleteChannelConnectionAction).toHaveBeenCalledWith({
+        id: "chc_telegram_shop",
+      }),
+    );
+    await waitFor(() => expect(refresh).toHaveBeenCalled());
+  });
+
+  it("keeps the channel when the deletion is cancelled", () => {
+    render(<ChannelsPanel channels={baseChannels} />);
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Удалить канал «Telegram Shop»" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Отмена" }));
+
+    expect(screen.getByText("Telegram Shop")).toBeDefined();
+    expect(deleteChannelConnectionAction).not.toHaveBeenCalled();
+  });
+
+  it("surfaces the provider warning when the account could not be disconnected", async () => {
+    deleteChannelConnectionAction.mockResolvedValue({
+      ok: true,
+      warning: "Канал удалён, но провайдер не подтвердил отключение аккаунта.",
+    });
+
+    render(<ChannelsPanel channels={baseChannels} />);
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Удалить канал «Telegram Shop»" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Удалить канал" }));
+
+    expect(
+      await screen.findByText(
+        "Канал удалён, но провайдер не подтвердил отключение аккаунта.",
+      ),
+    ).toBeDefined();
+  });
+
+  it("shows the error and keeps the confirmation open when the deletion fails", async () => {
+    deleteChannelConnectionAction.mockResolvedValue({
+      ok: false,
+      error: "Не удалось удалить канал.",
+    });
+
+    render(<ChannelsPanel channels={baseChannels} />);
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Удалить канал «Telegram Shop»" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Удалить канал" }));
+
+    expect(await screen.findByText("Не удалось удалить канал.")).toBeDefined();
+    expect(screen.getByRole("button", { name: "Удалить канал" })).toBeDefined();
+    expect(refresh).not.toHaveBeenCalled();
   });
 
   it("marks a disconnected channel visually and offers to re-enable it", () => {

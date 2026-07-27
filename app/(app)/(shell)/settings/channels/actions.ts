@@ -25,6 +25,8 @@ import {
   getProviderProfileId,
 } from "@/lib/db/channel-provider-profile";
 import {
+  deleteChannelConnection,
+  getChannelConnection,
   hasChannelConnectionForPlatform,
   renameChannelConnection,
   setChannelConnectionStatus,
@@ -229,6 +231,82 @@ export async function renameChannelConnectionAction(input: {
   }
 
   return result;
+}
+
+export type DeleteChannelConnectionResult =
+  | {
+      ok: true;
+      /**
+       * Set when the row is gone but the provider didn't confirm the account
+       * was disconnected — the panel shows it as a non-blocking note.
+       */
+      warning?: string;
+    }
+  | { ok: false; error: string };
+
+/**
+ * Deletes a channel: first asks the provider to disconnect the account (for
+ * Zernio `DELETE /v1/accounts/{accountId}` is both the disconnect and the
+ * removal), then deletes the `channel_connections` row — whose cascade takes
+ * this channel's conversations, posts, messages and comments out of drafta.
+ * Nothing is deleted on the platform itself.
+ *
+ * Provider first, row second: while the row still exists the operation is
+ * retryable, whereas a deleted row would leave no way to find the account id
+ * again. A provider failure does not block the deletion the user asked for —
+ * it is logged and reported back as a warning.
+ */
+export async function deleteChannelConnectionAction(input: {
+  id: string;
+}): Promise<DeleteChannelConnectionResult> {
+  const workspace = await requireCurrentWorkspaceId();
+
+  if (!workspace.ok) {
+    return workspace;
+  }
+
+  const supabase = await createServerSupabaseClient();
+  const connection = await getChannelConnection(
+    supabase,
+    workspace.workspaceId,
+    input.id,
+  );
+
+  if (!connection) {
+    return { ok: false, error: "Подключение не найдено." };
+  }
+
+  let warning: string | undefined;
+  try {
+    const adapter = resolveChannelAdapter(connection.provider);
+
+    if (adapter.disconnectAccount) {
+      await adapter.disconnectAccount({
+        externalAccountId: connection.external_id,
+      });
+    }
+  } catch (error) {
+    console.error(
+      "[settings/channels] failed to disconnect the account at the provider",
+      error,
+    );
+    warning =
+      "Канал удалён, но провайдер не подтвердил отключение аккаунта — попробуйте отозвать доступ в самой соцсети.";
+  }
+
+  const result = await deleteChannelConnection(
+    supabase,
+    workspace.workspaceId,
+    input.id,
+  );
+
+  if (!result.ok) {
+    return result;
+  }
+
+  revalidatePath(SETTINGS_PATH);
+
+  return warning ? { ok: true, warning } : { ok: true };
 }
 
 export async function setChannelConnectionStatusAction(input: {

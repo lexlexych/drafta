@@ -155,6 +155,30 @@ describe("createZernioAdapter", () => {
     ).toBeDefined();
   });
 
+  it("exposes disconnectAccount only when the API config is injected", () => {
+    expect(createZernioAdapter(() => "secret").disconnectAccount).toBeUndefined();
+    expect(
+      createZernioAdapter(() => "secret", () => apiConfig).disconnectAccount,
+    ).toBeDefined();
+  });
+
+  it("disconnectAccount deletes the account at Zernio", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({ message: "Account disconnected successfully" }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const adapter = createZernioAdapter(() => "secret", () => apiConfig);
+    await adapter.disconnectAccount!({ externalAccountId: "acct_ig_55014" });
+
+    expect(new URL(fetchMock.mock.calls[0][0] as string).pathname).toBe(
+      "/api/v1/accounts/acct_ig_55014",
+    );
+    expect(fetchMock.mock.calls[0][1].method).toBe("DELETE");
+  });
+
   it("rejects connect when workspace provisioning did not persist a profile id", async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
