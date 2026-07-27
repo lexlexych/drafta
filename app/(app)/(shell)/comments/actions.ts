@@ -3,10 +3,13 @@
 import { revalidatePath } from "next/cache";
 
 import {
+  POST_PAGE_SIZE,
   acceptCommentDraftForSend,
   discardCommentDraft,
   editCommentDraft,
   findPostForGeneration,
+  getPostListView,
+  listChannelConnections,
   listSendablePostDrafts,
   markCommentSendFailedAfterEmit,
   markPostRead,
@@ -14,6 +17,7 @@ import {
   type CommentDraftMutationResult,
   type CommentsMutationResult,
 } from "@/lib/db/comments";
+import type { PostListItemView } from "@/lib/comments/types";
 import { createServerSupabaseClient } from "@/lib/db/server";
 import {
   getAuthenticatedUser,
@@ -37,6 +41,53 @@ import {
 
 function revalidateCommentsView() {
   revalidatePath("/comments");
+}
+
+/**
+ * Страница списка постов под выбранными каналами — и смена фильтра, и
+ * дозагрузка при скролле. Почему через действие, а не через адрес — см.
+ * `../inbox/actions.ts`.
+ */
+export type PostPageResult =
+  | { ok: true; items: PostListItemView[]; total: number; hasMore: boolean }
+  | { ok: false; error: string };
+
+export async function loadPostsAction(input: {
+  channelIds: string[];
+  offset: number;
+}): Promise<PostPageResult> {
+  const user = await getAuthenticatedUser();
+
+  if (!user) {
+    return { ok: false, error: "Сессия истекла — войдите заново." };
+  }
+
+  const workspace = await getCurrentWorkspace(user.id);
+
+  if (!workspace) {
+    return { ok: false, error: "Рабочее пространство не найдено." };
+  }
+
+  const supabase = await createServerSupabaseClient();
+
+  try {
+    const channels = await listChannelConnections(supabase, workspace.id);
+    const page = await getPostListView(supabase, workspace.id, channels, {
+      channelIds: input.channelIds,
+      offset: input.offset,
+      limit: POST_PAGE_SIZE,
+    });
+
+    return {
+      ok: true,
+      items: page.items,
+      total: page.total,
+      hasMore: page.hasMore,
+    };
+  } catch (error) {
+    console.error("[comments] failed to load a post page", error);
+    return { ok: false, error: "Не удалось загрузить список постов." };
+  }
 }
 
 type ActionContext =

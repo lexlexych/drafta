@@ -53,8 +53,15 @@ export type MergeCandidate = {
 };
 
 export type ContactListFilter = {
-  channelId?: string | null;
+  /** Каналы из мультиселекта в шапке списка; пусто — все. */
+  channelIds?: readonly string[] | null;
+  /** Смещение страницы — дозагрузка при скролле списка. */
+  offset?: number;
+  limit?: number;
 };
+
+/** Размер страницы списка контактов: первая порция и каждая дозагрузка. */
+export const CONTACT_PAGE_SIZE = 40;
 
 type ContactRow = {
   id: string;
@@ -96,6 +103,54 @@ function channelNameForPlatform(
   return channel?.name ?? platformLabel(platform as Platform);
 }
 
+/**
+ * Одна страница контактов, при необходимости суженная до платформ выбранных
+ * каналов.
+ *
+ * Отбор по платформе идёт джойном (`contact_identities!inner`), а не фильтром
+ * в JS после загрузки всех контактов: иначе страницу нельзя было бы отдавать
+ * запросом — пришлось бы вычитать всю таблицу, чтобы отсчитать `offset`.
+ */
+async function loadContactsPage(
+  supabase: SupabaseClient,
+  workspaceId: string,
+  platforms: readonly string[],
+  offset: number,
+  limit: number,
+): Promise<{ rows: ContactRow[]; total: number }> {
+  const narrowed = platforms.length > 0;
+
+  let builder = supabase
+    .from("contacts")
+    .select(
+      narrowed
+        ? `${CONTACT_COLUMNS}, contact_identities!inner(platform)`
+        : CONTACT_COLUMNS,
+      { count: "exact" },
+    )
+    .eq("workspace_id", workspaceId);
+
+  if (narrowed) {
+    builder = builder.in("contact_identities.platform", [...platforms]);
+  }
+
+  const { data, error, count } = await builder
+    .order("display_name", { ascending: true })
+    .range(offset, offset + limit - 1);
+
+  if (error) {
+    console.error("[contacts] failed to list contacts", error);
+    throw new Error("Unable to load contacts.");
+  }
+
+  // Двойное приведение: postgrest-js разбирает строку `select` в тип на этапе
+  // компиляции, а она здесь ветвится — вывод даёт `ParserError`, не строку.
+  const rows = (data ?? []) as unknown as ContactRow[];
+
+  return { rows, total: count ?? rows.length };
+}
+
+/** Все контакты workspace — только для списка кандидатов на склейку. */
 async function loadContacts(
   supabase: SupabaseClient,
   workspaceId: string,
@@ -241,46 +296,65 @@ export type ContactListView = {
   items: ContactListItemView[];
 };
 
-/** Contact list, optionally narrowed to contacts present on one channel's platform. */
+export type ContactListPage = ContactListView & {
+  /** Сколько всего контактов под фильтром — подпись «N контактов» точная. */
+  total: number;
+  hasMore: boolean;
+};
+
+/**
+ * Contact list, optionally narrowed to contacts present on the picked channels'
+ * platforms, one page at a time.
+ *
+ * Контакт хранит identities с `platform`, а не с `channel_connection_id`
+ * (у платформы в workspace не больше одного канала — см. докстринг модуля),
+ * поэтому выбранные каналы разворачиваются в набор платформ.
+ */
 export async function getContactListView(
   supabase: SupabaseClient,
   workspaceId: string,
   channels: ChannelConnectionRow[],
   filter: ContactListFilter = {},
-): Promise<ContactListView> {
-  const channelId = filter.channelId ?? null;
-  const selectedChannel = channelId
-    ? (channels.find((channel) => channel.id === channelId) ?? null)
-    : null;
+): Promise<ContactListPage> {
+  const channelIds = filter.channelIds ?? [];
+  const selectedChannels = channels.filter((channel) =>
+    channelIds.includes(channel.id),
+  );
+  const platforms = [
+    ...new Set(selectedChannels.map((channel) => channel.platform)),
+  ];
+  const offset = Math.max(0, filter.offset ?? 0);
+  const limit = Math.max(1, filter.limit ?? CONTACT_PAGE_SIZE);
 
-  const [contacts, identities] = await Promise.all([
-    loadContacts(supabase, workspaceId),
-    loadIdentities(supabase, workspaceId),
-  ]);
+  const { rows: contacts, total } = await loadContactsPage(
+    supabase,
+    workspaceId,
+    platforms,
+    offset,
+    limit,
+  );
+  // Джойн выше вернул только identities выбранных платформ — для строки списка
+  // (хендлы, точки платформ) нужны все identities этих контактов.
+  const identities = await loadIdentities(
+    supabase,
+    workspaceId,
+    contacts.map((contact) => contact.id),
+  );
   const identitiesByContact = groupIdentitiesByContact(identities);
 
-  const items = contacts
-    .map((contact) => ({
-      contact,
-      identities: identitiesByContact.get(contact.id) ?? [],
-    }))
-    .filter(({ identities: contactIdentities }) =>
-      contactIdentities.some(
-        (identity) =>
-          !selectedChannel || identity.platform === selectedChannel.platform,
-      ),
-    )
-    .map(({ contact, identities: contactIdentities }) =>
-      contactListItem(contact, contactIdentities),
-    );
+  const items = contacts.map((contact) =>
+    contactListItem(contact, identitiesByContact.get(contact.id) ?? []),
+  );
 
   return {
-    title: selectedChannel?.name ?? "Контакты",
+    title: selectedChannels.length === 1 ? selectedChannels[0].name : "Контакты",
     subtitle: [
-      selectedChannel ? "контакты канала" : "все каналы",
-      countWithNoun(items.length, ["контакт", "контакта", "контактов"]),
+      selectedChannels.length === 1 ? "контакты канала" : "все каналы",
+      countWithNoun(total, ["контакт", "контакта", "контактов"]),
     ].join(" · "),
     items,
+    total,
+    hasMore: offset + items.length < total,
   };
 }
 

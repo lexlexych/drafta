@@ -195,7 +195,7 @@ describe.skipIf(!hasLocalSupabaseConfig)("lib/db/inbox", () => {
 
     const channels = await listChannelConnections(supabase, workspaceId);
     const list = await getConversationListView(supabase, workspaceId, channels, {
-      channelId: channelA,
+      channelIds: [channelA],
     });
 
     expect(list.items.map((item) => item.id)).toEqual([conversationA]);

@@ -30,6 +30,8 @@ export function MultiSelect({
   placeholder,
   emptyLabel = "Ничего не выбрано",
   allLabel,
+  countLabel = "Выбрано",
+  showClearAll = true,
   disabled = false,
 }: {
   options: readonly MultiSelectOption[];
@@ -42,6 +44,10 @@ export function MultiSelect({
   emptyLabel?: string;
   /** Текст кнопки, когда выбраны все опции. */
   allLabel?: string;
+  /** Слово перед числом выбранного: «Каналы: 2», «Категории: 2». */
+  countLabel?: string;
+  /** «Снять все» не нужен там, где пустой выбор и так означает «все». */
+  showClearAll?: boolean;
   disabled?: boolean;
 }) {
   const [isOpen, setIsOpen] = useState(false);
@@ -99,7 +105,7 @@ export function MultiSelect({
       );
     }
 
-    return `Выбрано: ${selected.length}`;
+    return `${countLabel}: ${selected.length}`;
   };
 
   return (
@@ -130,13 +136,15 @@ export function MultiSelect({
             >
               Выбрать все
             </button>
-            <button
-              type="button"
-              className={`${uiStyles.button} ${uiStyles.buttonGhost} ${uiStyles.buttonSmall}`}
-              onClick={() => onChange([])}
-            >
-              Снять все
-            </button>
+            {showClearAll ? (
+              <button
+                type="button"
+                className={`${uiStyles.button} ${uiStyles.buttonGhost} ${uiStyles.buttonSmall}`}
+                onClick={() => onChange([])}
+              >
+                Снять все
+              </button>
+            ) : null}
           </div>
 
           <ul

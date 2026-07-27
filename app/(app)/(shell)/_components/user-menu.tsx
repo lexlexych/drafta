@@ -7,7 +7,7 @@
  * `supabase.auth.signOut()`.
  */
 
-import { useEffect, useRef, useState, useTransition, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 
 import { Avatar } from "./avatar";
 import { CheckIcon, ChevronIcon, LogoutIcon, PlusIcon } from "./icons";
@@ -17,6 +17,7 @@ import {
   type WorkspaceActionResult,
 } from "../workspace-actions";
 import styles from "./shell.module.css";
+import { useActivityTransition } from "./activity";
 
 export type WorkspaceOption = {
   id: string;
@@ -38,7 +39,7 @@ export function UserMenu({
   const [isCreating, setIsCreating] = useState(false);
   const [newWorkspaceName, setNewWorkspaceName] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [isPending, startTransition] = useTransition();
+  const [isPending, startTransition] = useActivityTransition("Обновляем рабочее пространство…");
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {

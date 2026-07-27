@@ -3,7 +3,6 @@ import Link from "next/link";
 import {
   SETTINGS_SECTIONS,
   getSettingsTeam,
-  getWorkspace,
   isSettingsSectionId,
   type SettingsSectionId,
 } from "@/lib/mock";
@@ -26,12 +25,32 @@ import {
   type KnowledgeFileRow,
 } from "@/lib/db/knowledge-base";
 import { createServerSupabaseClient } from "@/lib/db/server";
-import { getAuthenticatedUser, getCurrentWorkspace } from "@/lib/db/workspace";
+import {
+  getAuthenticatedUser,
+  getCurrentWorkspace,
+  listUserWorkspaces,
+} from "@/lib/db/workspace";
 
+import { LinkActivity } from "../_components/activity";
 import { Avatar } from "../_components/avatar";
-import { BackIcon, SettingsIcon } from "../_components/icons";
+import {
+  AccountIcon,
+  BackIcon,
+  BellIcon,
+  BookIcon,
+  DeviceIcon,
+  PlugIcon,
+  ShieldIcon,
+  SparkIcon,
+  TagIcon,
+  TeamIcon,
+} from "../_components/icons";
 import { QUERY_KEYS, buildHref, firstParam } from "../_components/navigation";
 import { StubButton } from "../_components/stub";
+import {
+  AccountPanel,
+  type AccountWorkspaceOption,
+} from "./account/account-panel";
 import {
   ChannelsPanel,
   type ChannelConnectionListItem,
@@ -55,7 +74,27 @@ import uiStyles from "../_components/ui.module.css";
 
 const PATHNAME = "/settings";
 
+/** Свой значок у каждого раздела — строки списка различимы с одного взгляда. */
+const SECTION_ICONS: Record<SettingsSectionId, typeof PlugIcon> = {
+  channels: PlugIcon,
+  categories: TagIcon,
+  ai: SparkIcon,
+  knowledge: BookIcon,
+  team: TeamIcon,
+  notifications: BellIcon,
+  app: DeviceIcon,
+  privacy: ShieldIcon,
+  account: AccountIcon,
+};
+
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
+
+type AccountSectionData = {
+  userName: string;
+  userRole: string;
+  workspaces: AccountWorkspaceOption[];
+  currentWorkspaceId: string;
+};
 
 type AiSectionData = {
   settings: AiSettingsRow;
@@ -181,6 +220,36 @@ async function loadNotificationsSectionData(): Promise<NotificationSettingsView 
   return getNotificationSettings(supabase, workspace.id, user.id);
 }
 
+/**
+ * Раздел «Аккаунт» (мобайл): те же данные, что уходят в меню пользователя
+ * левого меню — список workspace'ов пользователя и текущий workspace.
+ */
+async function loadAccountSectionData(): Promise<AccountSectionData | null> {
+  const user = await getAuthenticatedUser();
+
+  if (!user) {
+    return null;
+  }
+
+  const workspace = await getCurrentWorkspace(user.id);
+
+  if (!workspace) {
+    return null;
+  }
+
+  const workspaces = await listUserWorkspaces(user.id);
+
+  return {
+    userName: user.email?.split("@")[0] ?? "Пользователь",
+    userRole: workspace.role,
+    workspaces: workspaces.map((entry) => ({
+      id: entry.id,
+      name: entry.name,
+    })),
+    currentWorkspaceId: workspace.id,
+  };
+}
+
 async function loadAiSectionData(): Promise<AiSectionData | null> {
   const user = await getAuthenticatedUser();
 
@@ -242,36 +311,40 @@ export default async function SettingsPage({
   const aiData = sectionId === "ai" ? await loadAiSectionData() : null;
   const notificationsData =
     sectionId === "notifications" ? await loadNotificationsSectionData() : null;
+  const accountData =
+    sectionId === "account" ? await loadAccountSectionData() : null;
   const connectResult =
     sectionId === "channels" ? readConnectResult(params) : null;
 
   return (
     <div className={styles.panes} data-detail={isDetail}>
-      {/* На десктопе список разделов скрыт — его дублирует расхлоп в меню. */}
-      <section className={`${styles.paneList} ${setStyles.sectionList}`}>
+      <section className={styles.paneList}>
         <div className={styles.paneHead}>
           <h2>Настройки</h2>
-          <span className={styles.paneSubtitle}>
-            workspace {getWorkspace().name}
-          </span>
         </div>
         <div className={styles.list}>
-          {SETTINGS_SECTIONS.map((entry) => (
-            <Link
-              key={entry.id}
-              className={setStyles.sectionRow}
-              data-active={entry.id === sectionId}
-              href={buildHref(PATHNAME, { [QUERY_KEYS.section]: entry.id })}
-            >
-              <span className={setStyles.sectionIcon}>
-                <SettingsIcon />
-              </span>
-              <span className={setStyles.sectionBody}>
-                <b>{entry.title}</b>
-                <span>{entry.description}</span>
-              </span>
-            </Link>
-          ))}
+          {SETTINGS_SECTIONS.map((entry) => {
+            const Icon = SECTION_ICONS[entry.id];
+
+            return (
+              <Link
+                key={entry.id}
+                className={setStyles.sectionRow}
+                data-active={entry.id === sectionId}
+                data-mobile-only={entry.mobileOnly === true}
+                href={buildHref(PATHNAME, { [QUERY_KEYS.section]: entry.id })}
+              >
+                <span className={setStyles.sectionIcon}>
+                  <Icon size={17} />
+                </span>
+                <span className={setStyles.sectionBody}>
+                  <b>{entry.title}</b>
+                  <span>{entry.description}</span>
+                </span>
+                <LinkActivity label={`Открываем «${entry.title}»…`} />
+              </Link>
+            );
+          })}
         </div>
       </section>
 
@@ -288,6 +361,7 @@ export default async function SettingsPage({
           <div className={setStyles.inner}>
             <SectionDetail
               sectionId={sectionId}
+              accountData={accountData}
               aiData={aiData}
               notificationsData={notificationsData}
               categoriesData={categoriesData}
@@ -304,6 +378,7 @@ export default async function SettingsPage({
 
 function SectionDetail({
   sectionId,
+  accountData,
   aiData,
   notificationsData,
   categoriesData,
@@ -312,6 +387,7 @@ function SectionDetail({
   knowledgeFiles,
 }: {
   sectionId: SettingsSectionId;
+  accountData: AccountSectionData | null;
   aiData: AiSectionData | null;
   notificationsData: NotificationSettingsView | null;
   categoriesData: CategoriesSectionData | null;
@@ -346,7 +422,24 @@ function SectionDetail({
       return <AppSection />;
     case "privacy":
       return <PrivacySection />;
+    case "account":
+      return <AccountSection data={accountData} />;
   }
+}
+
+function AccountSection({ data }: { data: AccountSectionData | null }) {
+  if (!data) {
+    return <p className={setStyles.formError}>Данные аккаунта недоступны.</p>;
+  }
+
+  return (
+    <AccountPanel
+      userName={data.userName}
+      userRole={data.userRole}
+      workspaces={data.workspaces}
+      currentWorkspaceId={data.currentWorkspaceId}
+    />
+  );
 }
 
 function ChannelsSection({

@@ -57,59 +57,19 @@
   display: block;
 }
 
-/* Мультиселект категорий в шапке списка диалогов (category-filter.tsx).
-   Шириной ограничен так же, как чипы каналов, чтобы шапка не расползалась. */
-.categoryFilter {
-  padding: 8px 16px 0;
-  flex: none;
-  max-width: 220px;
-}
-
-.categorySelect {
-  font: inherit;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--ink2);
-  background: var(--surface);
-  border: 1px solid var(--line2);
-  border-radius: 8px;
-  padding: 4px 8px;
-  max-width: 180px;
-  flex: none;
-}
-
-/* Фильтры по каналам дублируют расхлоп меню — нужны только на мобайле. */
+/* Ряд мультиселектов в шапке списка (list-filters.tsx): каналы и категории. */
 .filters {
-  display: none;
-  gap: 6px;
+  display: flex;
+  gap: 8px;
   padding: 8px 16px;
   border-bottom: 1px solid var(--line);
-  overflow-x: auto;
   flex: none;
-  scrollbar-width: none;
 }
 
-.filters::-webkit-scrollbar {
-  display: none;
-}
-
-.filterChip {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--ink2);
-  border: 1px solid var(--line2);
-  border-radius: 99px;
-  padding: 4px 11px;
-  white-space: nowrap;
-}
-
-.filterChip[data-active="true"] {
-  background: var(--accent-soft);
-  color: var(--accent-soft-ink);
-  border-color: transparent;
+.filterField {
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: 220px;
 }
 
 /* ---------- список ---------- */
@@ -125,6 +85,17 @@
   color: var(--ink3);
   font-size: 13px;
   text-align: center;
+}
+
+/* Подвал списка: место под маячок дозагрузки и подпись «Загружаем ещё…». */
+.listMore {
+  min-height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 16px;
+  color: var(--ink3);
+  font-size: 12px;
 }
 
 /* Правая панель, пока пользователь не выбрал элемент списка. */
@@ -577,10 +548,6 @@
   }
 
   .panes[data-detail="true"] .paneDetail {
-    display: flex;
-  }
-
-  .filters {
     display: flex;
   }
 

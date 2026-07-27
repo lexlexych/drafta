@@ -70,13 +70,30 @@ export type InboxNavigationCounters = {
 };
 
 export type ConversationListFilter = {
-  channelId?: string | null;
+  /**
+   * Channels picked in the dialog list's multi-select. Empty or omitted means
+   * every channel.
+   */
+  channelIds?: readonly string[] | null;
   /**
    * Categories picked in the dialog list's multi-select. Empty or omitted means
    * no narrowing at all, which keeps conversations that were never classified
    * visible; an explicit selection filters strictly.
    */
   categoryIds?: readonly string[] | null;
+  /** Смещение страницы — дозагрузка при скролле списка. */
+  offset?: number;
+  limit?: number;
+};
+
+/** Размер страницы списка диалогов: первая порция и каждая дозагрузка. */
+export const CONVERSATION_PAGE_SIZE = 30;
+
+/** Страница списка: сами записи плюс всё, что нужно для «дозагрузить ещё». */
+export type ConversationListPage = ConversationListView & {
+  /** Сколько всего записей под фильтром — подпись «N диалогов» точная. */
+  total: number;
+  hasMore: boolean;
 };
 
 type ConversationRow = {
@@ -347,18 +364,29 @@ export async function getChannelFiltersView(
   }));
 }
 
-/** Dialog list — sorted by `last_incoming_at` desc, optionally narrowed to one `channel_connection_id`. */
+/**
+ * Dialog list — sorted by `last_incoming_at` desc, narrowed to the picked
+ * channels/categories and returned one page at a time.
+ *
+ * Пагинация — по смещению (`.range`), а не по курсору: сортировка идёт по
+ * `last_incoming_at`, где допустим `null`, и стабильного курсора по такому
+ * ключу нет. Между страницами список может сдвинуться, если придёт новое
+ * входящее; realtime-обновление (T-06) всё равно перечитывает первую страницу.
+ */
 export async function getConversationListView(
   supabase: SupabaseClient,
   workspaceId: string,
   channels: ChannelConnectionRow[],
   filter: ConversationListFilter = {},
   categories: readonly CategoryRow[] = [],
-): Promise<ConversationListView> {
-  const channelId = filter.channelId ?? null;
+): Promise<ConversationListPage> {
+  const channelIds = filter.channelIds ?? [];
   const channelById = new Map(channels.map((channel) => [channel.id, channel]));
-  const selectedChannel = channelId ? (channelById.get(channelId) ?? null) : null;
+  const selectedChannel =
+    channelIds.length === 1 ? (channelById.get(channelIds[0]) ?? null) : null;
   const categoryIds = filter.categoryIds ?? [];
+  const offset = Math.max(0, filter.offset ?? 0);
+  const limit = Math.max(1, filter.limit ?? CONVERSATION_PAGE_SIZE);
   const badgeById = new Map(
     categoryBadges(categories).map((badge) => [badge.id, badge]),
   );
@@ -366,29 +394,33 @@ export async function getConversationListView(
     .map((id) => badgeById.get(id)?.name)
     .filter((name): name is string => Boolean(name));
 
-  // The conditional `.eq()` must run before `.order()`: postgrest-js's
-  // builder narrows from `PostgrestFilterBuilder` (has `.eq()`) to
+  // The conditional `.in()` must run before `.order()`: postgrest-js's
+  // builder narrows from `PostgrestFilterBuilder` (has `.in()`) to
   // `PostgrestTransformBuilder` (doesn't) once a transform method like
   // `.order()` is called, so filtering has to finish first.
   let filterBuilder = supabase
     .from("conversations")
     .select(
       "id, channel_connection_id, contact_id, category_id, status, last_incoming_at, unread_count",
+      { count: "exact" },
     )
     .eq("workspace_id", workspaceId);
 
-  if (channelId) {
-    filterBuilder = filterBuilder.eq("channel_connection_id", channelId);
+  if (channelIds.length > 0) {
+    filterBuilder = filterBuilder.in("channel_connection_id", [...channelIds]);
   }
 
   if (categoryIds.length > 0) {
     filterBuilder = filterBuilder.in("category_id", [...categoryIds]);
   }
 
-  const { data: conversationRows, error: conversationsError } = await filterBuilder.order(
-    "last_incoming_at",
-    { ascending: false, nullsFirst: false },
-  );
+  const {
+    data: conversationRows,
+    error: conversationsError,
+    count,
+  } = await filterBuilder
+    .order("last_incoming_at", { ascending: false, nullsFirst: false })
+    .range(offset, offset + limit - 1);
 
   if (conversationsError) {
     console.error("[inbox] failed to list conversations", conversationsError);
@@ -447,7 +479,8 @@ export async function getConversationListView(
     };
   });
 
-  const countLabel = countWithNoun(items.length, ["диалог", "диалога", "диалогов"]);
+  const total = count ?? items.length;
+  const countLabel = countWithNoun(total, ["диалог", "диалога", "диалогов"]);
   const scope = selectedChannel ? "канал" : "все каналы";
   const categoryScope =
     selectedCategoryNames.length === 0
@@ -460,6 +493,8 @@ export async function getConversationListView(
     title: selectedChannel?.name ?? "Сообщения",
     subtitle: [scope, categoryScope, countLabel].filter(Boolean).join(" · "),
     items,
+    total,
+    hasMore: offset + items.length < total,
   };
 }
 

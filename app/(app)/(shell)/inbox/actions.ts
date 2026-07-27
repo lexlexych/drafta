@@ -2,10 +2,15 @@
 
 import { revalidatePath } from "next/cache";
 
+import { listCategories } from "@/lib/db/categories";
 import {
+  CONVERSATION_PAGE_SIZE,
+  getConversationListView,
+  listChannelConnections,
   markConversationRead,
   type MarkConversationReadResult,
 } from "@/lib/db/inbox";
+import type { ConversationListItemView } from "@/lib/mock";
 import {
   canRegenerateConversationDraft,
   discardConversationDraft,
@@ -72,6 +77,73 @@ export async function markConversationReadAction(
   }
 
   return result;
+}
+
+/**
+ * Страница списка диалогов под выбранным фильтром — источник данных и для
+ * смены фильтра, и для дозагрузки при скролле.
+ *
+ * Фильтр ходит через действие, а не через адрес: значение фильтра — состояние
+ * экрана, а не переход, и в истории браузера ему делать нечего (иначе «Назад»
+ * возвращает к прошлому фильтру вместо предыдущего экрана). Workspace, как и
+ * везде, берётся из сессии, а не из аргументов.
+ */
+export type ConversationPageResult =
+  | {
+      ok: true;
+      items: ConversationListItemView[];
+      total: number;
+      hasMore: boolean;
+    }
+  | { ok: false; error: string };
+
+export async function loadConversationsAction(input: {
+  channelIds: string[];
+  categoryIds: string[];
+  offset: number;
+}): Promise<ConversationPageResult> {
+  const user = await getAuthenticatedUser();
+
+  if (!user) {
+    return { ok: false, error: "Сессия истекла — войдите заново." };
+  }
+
+  const workspace = await getCurrentWorkspace(user.id);
+
+  if (!workspace) {
+    return { ok: false, error: "Рабочее пространство не найдено." };
+  }
+
+  const supabase = await createServerSupabaseClient();
+
+  try {
+    const [channels, categories] = await Promise.all([
+      listChannelConnections(supabase, workspace.id),
+      listCategories(supabase, workspace.id),
+    ]);
+    const page = await getConversationListView(
+      supabase,
+      workspace.id,
+      channels,
+      {
+        channelIds: input.channelIds,
+        categoryIds: input.categoryIds,
+        offset: input.offset,
+        limit: CONVERSATION_PAGE_SIZE,
+      },
+      categories,
+    );
+
+    return {
+      ok: true,
+      items: page.items,
+      total: page.total,
+      hasMore: page.hasMore,
+    };
+  } catch (error) {
+    console.error("[inbox] failed to load a conversation page", error);
+    return { ok: false, error: "Не удалось загрузить список диалогов." };
+  }
 }
 
 type DraftActionContext =

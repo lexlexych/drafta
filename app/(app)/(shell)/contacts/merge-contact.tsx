@@ -6,7 +6,7 @@
  * переезжают сюда, заметки и теги объединяются, а сам он удаляется.
  */
 
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 
 import type { MergeCandidate } from "@/lib/db/contacts";
@@ -14,6 +14,7 @@ import type { MergeCandidate } from "@/lib/db/contacts";
 import uiStyles from "../_components/ui.module.css";
 import cardStyles from "./contacts.module.css";
 import { mergeContactsAction } from "./actions";
+import { useActivityTransition } from "../_components/activity";
 
 export function MergeContact({
   contactId,
@@ -26,7 +27,7 @@ export function MergeContact({
   const [isOpen, setIsOpen] = useState(false);
   const [selectedId, setSelectedId] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [isPending, startTransition] = useTransition();
+  const [isPending, startTransition] = useActivityTransition("Склеиваем контакты…");
 
   if (candidates.length === 0) {
     return null;

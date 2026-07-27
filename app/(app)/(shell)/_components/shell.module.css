@@ -109,15 +109,6 @@
   text-overflow: ellipsis;
 }
 
-/* Весь пункт — кнопка расхлопа: клик по нему, а не только по стрелке. */
-.navToggle {
-  gap: 10px;
-  text-align: left;
-  font: inherit;
-  font-weight: 500;
-  cursor: pointer;
-}
-
 .navCount {
   font-size: 11px;
   font-weight: 700;
@@ -130,61 +121,6 @@
   align-items: center;
   justify-content: center;
   padding: 0 5px;
-}
-
-.chevron {
-  display: inline-flex;
-  color: var(--ink3);
-  padding: 2px;
-  border-radius: 6px;
-  transition: transform 0.15s;
-}
-
-.chevron[data-open="true"] {
-  transform: rotate(180deg);
-}
-
-.subList {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  margin: 1px 0 3px;
-}
-
-.subItem {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  text-align: left;
-  padding: 6px 10px 6px 38px;
-  border-radius: 8px;
-  color: var(--ink2);
-  font-size: 13px;
-}
-
-.subItem:hover {
-  background: var(--hover);
-}
-
-.subItem[data-active="true"] {
-  background: var(--accent-soft);
-  color: var(--accent-soft-ink);
-  font-weight: 600;
-}
-
-.subLabel {
-  flex: 1;
-  min-width: 0;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.subCount {
-  font-size: 11px;
-  font-weight: 700;
-  color: var(--ink3);
 }
 
 .sidebarFooter {

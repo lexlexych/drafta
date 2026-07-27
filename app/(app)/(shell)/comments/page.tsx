@@ -1,6 +1,5 @@
-import Link from "next/link";
-
 import {
+  POST_PAGE_SIZE,
   getCommentsChannelFiltersView,
   getPostListView,
   getPostThreadView,
@@ -9,13 +8,10 @@ import {
 import { createServerSupabaseClient } from "@/lib/db/server";
 import { getAuthenticatedUser, getCurrentWorkspace } from "@/lib/db/workspace";
 
-import { ChannelChip } from "../_components/chips";
-import { FilterChips } from "../_components/filter-chips";
-import { CommentsIcon } from "../_components/icons";
-import { QUERY_KEYS, buildHref, firstParam } from "../_components/navigation";
+import { QUERY_KEYS, firstParam } from "../_components/navigation";
 import styles from "../_components/panes.module.css";
-import uiStyles from "../_components/ui.module.css";
 import { MarkPostRead } from "./_components/mark-post-read";
+import { PostList } from "./_components/post-list";
 import { PostThread } from "./_components/post-thread";
 
 const PATHNAME = "/comments";
@@ -28,7 +24,7 @@ export default async function CommentsPage({
   searchParams: SearchParams;
 }) {
   const params = await searchParams;
-  const channelId = firstParam(params[QUERY_KEYS.channel]);
+  // Фильтр по каналу — клиентское состояние `PostList`, не query-параметр.
   const postId = firstParam(params[QUERY_KEYS.post]);
 
   const user = await getAuthenticatedUser();
@@ -47,8 +43,9 @@ export default async function CommentsPage({
   );
   const hasCommentChannels = commentCapableChannels.length > 0;
 
+  // Первая страница без фильтра — дальше список дозагружает себя сам.
   const [list, filterChannels] = await Promise.all([
-    getPostListView(supabase, workspace.id, channels, { channelId }),
+    getPostListView(supabase, workspace.id, channels, { limit: POST_PAGE_SIZE }),
     getCommentsChannelFiltersView(supabase, workspace.id, channels),
   ]);
 
@@ -58,85 +55,22 @@ export default async function CommentsPage({
     : null;
   const isDetail = postId !== null;
 
-  const listParams = { [QUERY_KEYS.channel]: channelId };
-
   return (
     <div className={styles.panes} data-detail={isDetail}>
-      <section className={styles.paneList}>
-        <div className={styles.paneHead}>
-          <div className={styles.paneHeadRow}>
-            <h2>{list.title}</h2>
-          </div>
-          <span className={styles.paneSubtitle}>{list.subtitle}</span>
-        </div>
-
-        <FilterChips
-          pathname={PATHNAME}
-          channels={filterChannels}
-          activeChannelId={channelId}
-        />
-
-        <div className={styles.list}>
-          {!hasCommentChannels ? (
-            <div className={styles.empty}>
-              <p>Нет каналов с поддержкой комментариев.</p>
-              <Link
-                className={`${uiStyles.button} ${uiStyles.buttonPrimary} ${uiStyles.buttonSmall}`}
-                href={buildHref("/settings", { [QUERY_KEYS.section]: "channels" })}
-              >
-                Настройки → Каналы
-              </Link>
-            </div>
-          ) : list.items.length === 0 ? (
-            <div className={styles.empty}>
-              {channelId
-                ? "В этом канале ещё нет постов."
-                : "Постов пока нет — они появятся здесь сразу после публикации."}
-            </div>
-          ) : null}
-          {list.items.map((item) => (
-            <Link
-              key={item.id}
-              className={styles.listItem}
-              data-active={item.id === postId}
-              data-unread={item.unreadCount > 0}
-              href={buildHref(PATHNAME, {
-                ...listParams,
-                [QUERY_KEYS.post]: item.id,
-              })}
-            >
-              <span
-                className={`${uiStyles.avatar} ${uiStyles.avatarMd} ${styles.postIcon}`}
-                aria-hidden="true"
-              >
-                <CommentsIcon size={17} />
-              </span>
-              <span className={styles.listBody}>
-                <span className={styles.listTitleRow}>
-                  <b>{item.title}</b>
-                  <time className={uiStyles.num}>{item.time}</time>
-                </span>
-                <span className={styles.listPreview}>{item.preview}</span>
-                <span className={styles.listChips}>
-                  <ChannelChip channel={item.channel} />
-                  <span className={styles.listSpacer} />
-                  {item.unreadCount > 0 ? (
-                    <span className={`${uiStyles.unread} ${uiStyles.num}`}>
-                      {item.unreadCount}
-                    </span>
-                  ) : null}
-                </span>
-              </span>
-            </Link>
-          ))}
-        </div>
-      </section>
+      <PostList
+        items={list.items}
+        total={list.total}
+        hasMore={list.hasMore}
+        channels={filterChannels}
+        openedId={postId}
+        hasCommentChannels={hasCommentChannels}
+      />
 
       <section className={styles.paneDetail}>
         {post ? (
           <>
             <MarkPostRead postId={post.postId} />
-            <PostThread post={post} backHref={buildHref(PATHNAME, listParams)} />
+            <PostThread post={post} backHref={PATHNAME} />
           </>
         ) : (
           <div className={styles.paneEmpty}>

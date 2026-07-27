@@ -7,6 +7,7 @@
  */
 
 import { mockDashboardStats, mockWorkspaceData } from "./data";
+import { countWithNoun } from "./plural";
 import {
   formatDayDistance,
   formatDaysUntil,
@@ -209,12 +210,19 @@ export type SettingsSectionId =
   | "team"
   | "notifications"
   | "app"
-  | "privacy";
+  | "privacy"
+  | "account";
 
 export type SettingsSectionView = {
   id: SettingsSectionId;
   title: string;
   description: string;
+  /**
+   * Раздел нужен только на мобайле: на десктопе то же самое лежит в меню
+   * пользователя в подвале левого меню (`_components/user-menu.tsx`), которого
+   * на узком экране нет.
+   */
+  mobileOnly?: boolean;
 };
 
 export type SettingsChannelRowView = {
@@ -278,29 +286,8 @@ export function platformLabel(platform: Platform): string {
   return PLATFORM_LABELS[platform];
 }
 
-function pluralize(count: number, forms: [string, string, string]): string {
-  const lastTwoDigits = Math.abs(count) % 100;
-  const lastDigit = lastTwoDigits % 10;
-
-  if (lastTwoDigits > 10 && lastTwoDigits < 20) {
-    return forms[2];
-  }
-
-  if (lastDigit > 1 && lastDigit < 5) {
-    return forms[1];
-  }
-
-  return lastDigit === 1 ? forms[0] : forms[2];
-}
-
-/**
- * Exported (not just an internal mock helper) because `lib/db/inbox.ts`
- * (T-05) needs the exact same Russian pluralization for real conversation
- * counts — one source of truth instead of a second copy drifting from this one.
- */
-export function countWithNoun(count: number, forms: [string, string, string]): string {
-  return `${count} ${pluralize(count, forms)}`;
-}
+/** Живёт в `./plural` — клиентские компоненты берут его без mock-данных. */
+export { countWithNoun };
 
 /** Детерминированный оттенок аватара: цвет не хранится, а выводится из id. */
 function avatarHue(seed: string): number {
@@ -972,6 +959,12 @@ export const SETTINGS_SECTIONS: SettingsSectionView[] = [
     id: "privacy",
     title: "Приватность",
     description: "Экспорт и удаление данных",
+  },
+  {
+    id: "account",
+    title: "Аккаунт",
+    description: "Рабочие пространства и выход",
+    mobileOnly: true,
   },
 ];
 

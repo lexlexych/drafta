@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition, type FormEvent } from "react";
+import { useMemo, useState, type FormEvent } from "react";
 
 import type { AiModelOption } from "@/lib/ai/config";
 import {
@@ -16,6 +16,7 @@ import {
 import uiStyles from "../../_components/ui.module.css";
 import styles from "../settings.module.css";
 import { saveAiSettingsAction } from "./actions";
+import { useActivityTransition } from "../../_components/activity";
 
 export type AiSettingsFormValue = AiSettingsInput;
 
@@ -53,7 +54,7 @@ export function AiSettingsForm({
   const [savedValue, setSavedValue] = useState(initialValue);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
-  const [isPending, startTransition] = useTransition();
+  const [isPending, startTransition] = useActivityTransition("Сохраняем настройки…");
   const toneOptions = useMemo(
     () => withCurrentOption(TONE_OPTIONS, value.tone),
     [value.tone],

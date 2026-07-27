@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useTransition, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 
 import {
   isIOS,
@@ -22,6 +22,7 @@ import {
   savePushSubscriptionAction,
   saveNotificationSettingsAction,
 } from "./actions";
+import { useActivityTransition } from "../../_components/activity";
 
 export type NotificationsFormValue = NotificationSettingsInput;
 
@@ -45,7 +46,7 @@ export function NotificationsForm({
   const [savedValue, setSavedValue] = useState(initialValue);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
-  const [isPending, startTransition] = useTransition();
+  const [isPending, startTransition] = useActivityTransition("Сохраняем настройки…");
 
   const [pushState, setPushState] = useState<PushState>("loading");
   const [pushBusy, setPushBusy] = useState(false);

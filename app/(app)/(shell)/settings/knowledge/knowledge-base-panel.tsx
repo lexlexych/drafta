@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useMemo, useState, useTransition, type ChangeEvent, type FormEvent } from "react";
+import { useId, useMemo, useState, type ChangeEvent, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -22,6 +22,7 @@ import {
   setKnowledgeFileEnabledAction,
   updateKnowledgeFileAction,
 } from "./actions";
+import { useActivityTransition } from "../../_components/activity";
 
 export type KnowledgeFileListItem = {
   id: string;
@@ -66,7 +67,7 @@ export function KnowledgeBasePanel({
   const uploadInputId = useId();
   const [editor, setEditor] = useState<EditorState | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [isPending, startTransition] = useTransition();
+  const [isPending, startTransition] = useActivityTransition("Сохраняем базу знаний…");
   const usage = useMemo(() => getKnowledgeBaseUsage(files), [files]);
   const progress = Math.min(
     100,

@@ -1,8 +1,7 @@
 "use client";
 
 import {
-  useState,
-  useTransition,
+  useState,
   type DragEvent,
   type FormEvent,
 } from "react";
@@ -20,6 +19,7 @@ import {
   reorderCategoriesAction,
   updateCategoryAction,
 } from "./actions";
+import { useActivityTransition } from "../../_components/activity";
 
 export type CategoryListItem = CategoryRow;
 
@@ -147,7 +147,7 @@ export function CategoriesPanel({
   const [editor, setEditor] = useState<EditorState | null>(null);
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [isPending, startTransition] = useTransition();
+  const [isPending, startTransition] = useActivityTransition("Сохраняем категории…");
 
   function closeEditor() {
     setEditor(null);

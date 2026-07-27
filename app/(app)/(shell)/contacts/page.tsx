@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import {
+  CONTACT_PAGE_SIZE,
   getContactCardView,
   getContactChannelFilters,
   getContactListView,
@@ -12,9 +13,9 @@ import { getAuthenticatedUser, getCurrentWorkspace } from "@/lib/db/workspace";
 
 import { Avatar } from "../_components/avatar";
 import { PlatformDot } from "../_components/chips";
-import { FilterChips } from "../_components/filter-chips";
 import { BackIcon } from "../_components/icons";
 import { QUERY_KEYS, buildHref, firstParam } from "../_components/navigation";
+import { ContactList } from "./_components/contact-list";
 import { ContactNotes } from "./contact-notes";
 import { MergeContact } from "./merge-contact";
 import cardStyles from "./contacts.module.css";
@@ -31,7 +32,7 @@ export default async function ContactsPage({
   searchParams: SearchParams;
 }) {
   const params = await searchParams;
-  const channelId = firstParam(params[QUERY_KEYS.channel]);
+  // Фильтр по каналу — клиентское состояние `ContactList`, не query-параметр.
   const contactId = firstParam(params[QUERY_KEYS.contact]);
 
   const user = await getAuthenticatedUser();
@@ -46,7 +47,10 @@ export default async function ContactsPage({
   const channels = await listChannelConnections(supabase, workspace.id);
   const [filters, list] = await Promise.all([
     getContactChannelFilters(supabase, workspace.id, channels),
-    getContactListView(supabase, workspace.id, channels, { channelId }),
+    // Первая страница без фильтра — дальше список дозагружает себя сам.
+    getContactListView(supabase, workspace.id, channels, {
+      limit: CONTACT_PAGE_SIZE,
+    }),
   ]);
 
   // Карточка открывается только явным выбором пользователя — см. `../inbox/page.tsx`.
@@ -61,55 +65,15 @@ export default async function ContactsPage({
   }
   const isDetail = contactId !== null;
 
-  const listParams = { [QUERY_KEYS.channel]: channelId };
-
   return (
     <div className={styles.panes} data-detail={isDetail}>
-      <section className={styles.paneList}>
-        <div className={styles.paneHead}>
-          <h2>{list.title}</h2>
-          <span className={styles.paneSubtitle}>{list.subtitle}</span>
-        </div>
-
-        <FilterChips
-          pathname={PATHNAME}
-          channels={filters}
-          activeChannelId={channelId}
-        />
-
-        <div className={styles.list}>
-          {list.items.length === 0 ? (
-            <div className={styles.empty}>Нет контактов — измените фильтр</div>
-          ) : null}
-          {list.items.map((item) => (
-            <Link
-              key={item.id}
-              className={styles.listItem}
-              data-active={item.id === openedId}
-              href={buildHref(PATHNAME, {
-                ...listParams,
-                [QUERY_KEYS.contact]: item.id,
-              })}
-            >
-              <Avatar avatar={item.avatar} size="md" />
-              <span className={styles.listBody}>
-                <span className={styles.listTitleRow}>
-                  <b>{item.name}</b>
-                </span>
-                <span className={styles.listPreview}>{item.handles}</span>
-                <span className={styles.listChips}>
-                  {item.platforms.map((platform, index) => (
-                    <PlatformDot key={`${platform}-${index}`} platform={platform} />
-                  ))}
-                  {item.tag ? (
-                    <span className={uiStyles.chip}>{item.tag}</span>
-                  ) : null}
-                </span>
-              </span>
-            </Link>
-          ))}
-        </div>
-      </section>
+      <ContactList
+        items={list.items}
+        total={list.total}
+        hasMore={list.hasMore}
+        channels={filters}
+        openedId={openedId}
+      />
 
       <section className={styles.paneDetail}>
         {card ? (
@@ -117,7 +81,7 @@ export default async function ContactsPage({
             <div className={styles.threadHead}>
               <Link
                 className={styles.backButton}
-                href={buildHref(PATHNAME, listParams)}
+                href={PATHNAME}
                 aria-label="Назад"
               >
                 <BackIcon />

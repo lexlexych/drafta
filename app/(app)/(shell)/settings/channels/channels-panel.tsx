@@ -14,7 +14,7 @@
  * провайдера входящих.
  */
 
-import { useState, useTransition, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 
 import type { ChannelPlatform } from "@/lib/channels/types";
@@ -27,6 +27,7 @@ import {
   setChannelConnectionStatusAction,
   startChannelConnectionAction,
 } from "./actions";
+import { useActivityTransition } from "../../_components/activity";
 
 export type ChannelConnectionListItem = {
   id: string;
@@ -76,7 +77,7 @@ export function ChannelsPanel({
   connectResult?: ChannelConnectResult | null;
 }) {
   const router = useRouter();
-  const [isPending, startTransition] = useTransition();
+  const [isPending, startTransition] = useActivityTransition("Обновляем каналы…");
   const [error, setError] = useState<string | null>(null);
   const connectedPlatforms = new Set(channels.map((channel) => channel.platform));
   const availablePlatforms = supportedPlatforms.filter(

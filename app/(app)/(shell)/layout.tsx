@@ -9,8 +9,8 @@ import {
   getCurrentWorkspace,
   listUserWorkspaces,
 } from "@/lib/db/workspace";
-import { SETTINGS_SECTIONS } from "@/lib/mock";
 
+import { ActivityIndicator } from "./_components/activity";
 import { InboxRealtimeSync } from "./_components/inbox-realtime-sync";
 import { InstallPrompt } from "./_components/install-prompt";
 import { PwaRegister } from "./_components/pwa-register";
@@ -71,7 +71,6 @@ export default async function ShellLayout({
           userRole={workspace.role}
           messagesCounters={messagesCounters}
           commentsCounters={commentsCounters}
-          settingsSections={SETTINGS_SECTIONS}
         />
       </Suspense>
       <div className={styles.main}>{children}</div>
@@ -81,6 +80,7 @@ export default async function ShellLayout({
           commentsCounters={commentsCounters}
         />
       </Suspense>
+      <ActivityIndicator />
       <InboxRealtimeSync workspaceId={workspace.id} />
       <PwaRegister />
       <InstallPrompt />

@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { listCategories, categoryBadges } from "@/lib/db/categories";
 import {
+  CONVERSATION_PAGE_SIZE,
   getChannelFiltersView,
   getConversationListView,
   getThreadView,
@@ -11,22 +12,15 @@ import { createServerSupabaseClient } from "@/lib/db/server";
 import { getAuthenticatedUser, getCurrentWorkspace } from "@/lib/db/workspace";
 
 import { Avatar } from "../_components/avatar";
-import { CategoryFilter } from "../_components/category-filter";
-import { CategoryChip, ChannelChip } from "../_components/chips";
+import { ChannelChip } from "../_components/chips";
 import { Composer } from "../_components/composer";
 import { DraftPanel } from "../_components/draft-panel";
-import { FilterChips } from "../_components/filter-chips";
 import { BackIcon, ClockIcon, PictureIcon } from "../_components/icons";
-import {
-  QUERY_KEYS,
-  buildHref,
-  firstParam,
-  parseIdList,
-  serializeIdList,
-} from "../_components/navigation";
+import { QUERY_KEYS, buildHref, firstParam } from "../_components/navigation";
 import { RetrySendButton } from "../_components/retry-send-button";
 import styles from "../_components/panes.module.css";
 import uiStyles from "../_components/ui.module.css";
+import { ConversationList } from "./_components/conversation-list";
 import { MarkThreadRead } from "./mark-thread-read";
 
 const PATHNAME = "/inbox";
@@ -39,8 +33,8 @@ export default async function InboxPage({
   searchParams: SearchParams;
 }) {
   const params = await searchParams;
-  const channelId = firstParam(params[QUERY_KEYS.channel]);
-  const categoryIds = parseIdList(firstParam(params[QUERY_KEYS.category]));
+  // Фильтры по каналу и категории — клиентское состояние `ConversationList`,
+  // а не query-параметры: см. его докстринг.
   const conversationId = firstParam(params[QUERY_KEYS.conversation]);
 
   const user = await getAuthenticatedUser();
@@ -59,12 +53,14 @@ export default async function InboxPage({
 
   const categories = await listCategories(supabase, workspace.id);
 
+  // Первая страница без фильтра: дальше список дозагружает себя сам через
+  // `loadConversationsAction` (см. `_components/conversation-list.tsx`).
   const [list, filterChannels] = await Promise.all([
     getConversationListView(
       supabase,
       workspace.id,
       channels,
-      { channelId, categoryIds },
+      { limit: CONVERSATION_PAGE_SIZE },
       categories,
     ),
     getChannelFiltersView(supabase, workspace.id, channels),
@@ -78,80 +74,17 @@ export default async function InboxPage({
     : null;
   const isDetail = conversationId !== null;
 
-  const listParams = {
-    [QUERY_KEYS.channel]: channelId,
-    [QUERY_KEYS.category]: serializeIdList(categoryIds),
-  };
-
   return (
     <div className={styles.panes} data-detail={isDetail}>
-      <section className={styles.paneList}>
-        <div className={styles.paneHead}>
-          <div className={styles.paneHeadRow}>
-            <h2>{list.title}</h2>
-          </div>
-          <span className={styles.paneSubtitle}>{list.subtitle}</span>
-        </div>
-
-        <FilterChips
-          pathname={PATHNAME}
-          channels={filterChannels}
-          activeChannelId={channelId}
-        />
-
-        <CategoryFilter categories={categoryBadges(categories)} />
-
-        <div className={styles.list}>
-          {!hasChannels ? (
-            <div className={styles.empty}>
-              <p>Нет подключённых каналов.</p>
-              <Link
-                className={`${uiStyles.button} ${uiStyles.buttonPrimary} ${uiStyles.buttonSmall}`}
-                href={buildHref("/settings", { [QUERY_KEYS.section]: "channels" })}
-              >
-                Настройки → Каналы
-              </Link>
-            </div>
-          ) : list.items.length === 0 ? (
-            <div className={styles.empty}>
-              {channelId
-                ? "Нет диалогов с этим каналом."
-                : "Нет диалогов — сообщения появятся здесь, когда придёт первое входящее."}
-            </div>
-          ) : null}
-          {list.items.map((item) => (
-            <Link
-              key={item.id}
-              className={styles.listItem}
-              data-active={item.id === openedId}
-              data-unread={item.unreadCount > 0}
-              href={buildHref(PATHNAME, {
-                ...listParams,
-                [QUERY_KEYS.conversation]: item.id,
-              })}
-            >
-              {item.avatar ? <Avatar avatar={item.avatar} size="md" /> : null}
-              <span className={styles.listBody}>
-                <span className={styles.listTitleRow}>
-                  <b>{item.title}</b>
-                  <time className={uiStyles.num}>{item.time}</time>
-                </span>
-                <span className={styles.listPreview}>{item.preview}</span>
-                <span className={styles.listChips}>
-                  <ChannelChip channel={item.channel} />
-                  {item.category ? <CategoryChip category={item.category} /> : null}
-                  <span className={styles.listSpacer} />
-                  {item.unreadCount > 0 ? (
-                    <span className={`${uiStyles.unread} ${uiStyles.num}`}>
-                      {item.unreadCount}
-                    </span>
-                  ) : null}
-                </span>
-              </span>
-            </Link>
-          ))}
-        </div>
-      </section>
+      <ConversationList
+        items={list.items}
+        total={list.total}
+        hasMore={list.hasMore}
+        channels={filterChannels}
+        categories={categoryBadges(categories)}
+        openedId={openedId}
+        hasChannels={hasChannels}
+      />
 
       <section className={styles.paneDetail}>
         {thread ? (
@@ -160,7 +93,7 @@ export default async function InboxPage({
             <div className={styles.threadHead}>
               <Link
                 className={styles.backButton}
-                href={buildHref(PATHNAME, listParams)}
+                href={PATHNAME}
                 aria-label="Назад"
               >
                 <BackIcon />

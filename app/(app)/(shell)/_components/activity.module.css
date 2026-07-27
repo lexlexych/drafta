@@ -1,0 +1,87 @@
+/* Плашка «идёт действие» (activity.tsx): правый нижний угол, поверх всего,
+   но без блокировки экрана. */
+
+.indicator {
+  position: fixed;
+  right: 16px;
+  bottom: calc(16px + env(safe-area-inset-bottom));
+  z-index: 90;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 14px;
+  border: 1px solid var(--line2);
+  border-radius: 99px;
+  color: var(--ink);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(6px) scale(0.96);
+  transition:
+    opacity 160ms ease,
+    transform 160ms ease;
+}
+
+.indicator[data-visible="true"] {
+  opacity: 1;
+  transform: none;
+}
+
+.label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.spinner {
+  flex: none;
+  color: var(--accent);
+  animation: activity-spin 900ms linear infinite;
+}
+
+.spinnerTrack {
+  stroke: currentColor;
+  opacity: 0.2;
+}
+
+.spinnerArc {
+  stroke: currentColor;
+}
+
+@keyframes activity-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Над мобильным таббаром, чтобы плашка не легла на его кнопки. */
+@media (max-width: 899px) {
+  .indicator {
+    right: 12px;
+    bottom: calc(70px + env(safe-area-inset-bottom));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .indicator {
+    transition: none;
+  }
+
+  .spinner {
+    animation: activity-pulse 1.4s ease-in-out infinite;
+  }
+
+  @keyframes activity-pulse {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.35;
+    }
+  }
+}

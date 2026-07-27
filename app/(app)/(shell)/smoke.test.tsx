@@ -10,7 +10,13 @@
  * ниже.
  */
 
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { SETTINGS_SECTIONS } from "@/lib/mock";
@@ -44,6 +50,9 @@ vi.mock("@/lib/db/workspace", () => ({
     name: "Tonwerk Keramik",
     role: "owner",
   }),
+  listUserWorkspaces: async () => [
+    { id: "wsp_tonwerk", name: "Tonwerk Keramik", role: "owner" },
+  ],
 }));
 /**
  * Мутируемая заготовка ответа `get_dashboard_metrics`: подменяем сам RPC, а не
@@ -269,7 +278,18 @@ const INBOX_THREAD_ANNA_IG = {
   ],
 };
 
+/** Отбор, который в бою делает запрос: списки фильтруются по `channelIds`. */
+function filterByChannels<T extends { channel: { id: string } }>(
+  items: T[],
+  channelIds: string[] | undefined,
+): T[] {
+  return channelIds && channelIds.length > 0
+    ? items.filter((item) => channelIds.includes(item.channel.id))
+    : items;
+}
+
 vi.mock("@/lib/db/inbox", () => ({
+  CONVERSATION_PAGE_SIZE: 30,
   listChannelConnections: async () => INBOX_CHANNELS,
   getChannelFiltersView: async () => [
     { id: "chc_instagram_shop", name: "Instagram Магазин", platform: "instagram", count: 4 },
@@ -286,20 +306,16 @@ vi.mock("@/lib/db/inbox", () => ({
     _supabase: unknown,
     _workspaceId: string,
     _channels: unknown,
-    filter: { channelId?: string | null } = {},
+    filter: { channelIds?: string[] } = {},
   ) => {
-    const channelId = filter.channelId ?? null;
-    const items = channelId
-      ? INBOX_LIST_ITEMS.filter((item) => item.channel.id === channelId)
-      : INBOX_LIST_ITEMS;
-    const channel = channelId
-      ? INBOX_CHANNELS.find((candidate) => candidate.id === channelId)
-      : null;
+    const items = filterByChannels(INBOX_LIST_ITEMS, filter.channelIds);
 
     return {
-      title: channel?.name ?? "Сообщения",
-      subtitle: `${channel ? "канал" : "все каналы"} · ${items.length} диалог(а/ов)`,
+      title: "Сообщения",
+      subtitle: `все каналы · ${items.length} диалог(а/ов)`,
       items,
+      total: items.length,
+      hasMore: false,
     };
   },
   getThreadView: async (
@@ -317,6 +333,11 @@ vi.mock("@/lib/db/inbox", () => ({
 
 vi.mock("./inbox/actions", () => ({
   markConversationReadAction: async () => ({ ok: true }),
+  loadConversationsAction: async (input: { channelIds: string[] }) => {
+    const items = filterByChannels(INBOX_LIST_ITEMS, input.channelIds);
+
+    return { ok: true, items, total: items.length, hasMore: false };
+  },
 }));
 
 const POST_LIST_ITEMS = [
@@ -378,6 +399,7 @@ const POST_THREAD = {
 };
 
 vi.mock("@/lib/db/comments", () => ({
+  POST_PAGE_SIZE: 30,
   listChannelConnections: async () => INBOX_CHANNELS,
   getCommentsChannelFiltersView: async () => [
     {
@@ -391,11 +413,22 @@ vi.mock("@/lib/db/comments", () => ({
     totalUnread: 2,
     channels: [],
   }),
-  getPostListView: async () => ({
-    title: "Комментарии",
-    subtitle: "все каналы · 2 поста",
-    items: POST_LIST_ITEMS,
-  }),
+  getPostListView: async (
+    _supabase: unknown,
+    _workspaceId: string,
+    _channels: unknown,
+    filter: { channelIds?: string[] } = {},
+  ) => {
+    const items = filterByChannels(POST_LIST_ITEMS, filter.channelIds);
+
+    return {
+      title: "Комментарии",
+      subtitle: `все каналы · ${items.length} поста`,
+      items,
+      total: items.length,
+      hasMore: false,
+    };
+  },
   getPostThreadView: async (
     _supabase: unknown,
     _workspaceId: string,
@@ -412,6 +445,11 @@ vi.mock("./comments/actions", () => ({
   discardCommentDraftAction: async () => ({ ok: true }),
   sendCommentDraftAction: async () => ({ ok: true }),
   sendAllCommentDraftsAction: async () => ({ ok: true, sent: 0, failed: 0 }),
+  loadPostsAction: async (input: { channelIds: string[] }) => {
+    const items = filterByChannels(POST_LIST_ITEMS, input.channelIds);
+
+    return { ok: true, items, total: items.length, hasMore: false };
+  },
 }));
 
 const CONTACT_LIST_ALL = [
@@ -433,7 +471,23 @@ const CONTACT_LIST_ALL = [
   },
 ];
 
-const CONTACT_LIST_FACEBOOK = [CONTACT_LIST_ALL[1]];
+/**
+ * Контакт привязан к платформе, а не к подключению — как и в `lib/db/contacts`,
+ * выбранные каналы разворачиваются в набор платформ.
+ */
+function contactsForChannels(channelIds: string[] | undefined) {
+  if (!channelIds || channelIds.length === 0) {
+    return CONTACT_LIST_ALL;
+  }
+
+  const platforms = INBOX_CHANNELS.filter((channel) =>
+    channelIds.includes(channel.id),
+  ).map((channel) => channel.platform);
+
+  return CONTACT_LIST_ALL.filter((contact) =>
+    contact.platforms.some((platform) => platforms.includes(platform)),
+  );
+}
 
 const CONTACT_CARDS: Record<string, unknown> = {
   con_sofia: {
@@ -487,6 +541,7 @@ const CONTACT_CARDS: Record<string, unknown> = {
 };
 
 vi.mock("@/lib/db/contacts", () => ({
+  CONTACT_PAGE_SIZE: 40,
   listChannelConnections: async () => INBOX_CHANNELS,
   getContactChannelFilters: async () => [
     { id: "chc_instagram_shop", name: "Instagram Магазин", platform: "instagram", count: 2 },
@@ -496,15 +551,16 @@ vi.mock("@/lib/db/contacts", () => ({
     _supabase: unknown,
     _workspaceId: string,
     _channels: unknown,
-    filter: { channelId?: string | null } = {},
+    filter: { channelIds?: string[] } = {},
   ) => {
-    const channelId = filter.channelId ?? null;
-    const items = channelId ? CONTACT_LIST_FACEBOOK : CONTACT_LIST_ALL;
+    const items = contactsForChannels(filter.channelIds);
 
     return {
-      title: channelId ? "Facebook Страница" : "Контакты",
-      subtitle: `${channelId ? "контакты канала" : "все каналы"} · ${items.length} контакта`,
+      title: "Контакты",
+      subtitle: `все каналы · ${items.length} контакта`,
       items,
+      total: items.length,
+      hasMore: false,
     };
   },
   getContactCardView: async (
@@ -527,6 +583,11 @@ vi.mock("@/lib/db/contacts", () => ({
 vi.mock("./contacts/actions", () => ({
   updateContactNotesAction: async () => ({ ok: true, data: null }),
   mergeContactsAction: async () => ({ ok: true, data: null }),
+  loadContactsAction: async (input: { channelIds: string[] }) => {
+    const items = contactsForChannels(input.channelIds);
+
+    return { ok: true, items, total: items.length, hasMore: false };
+  },
 }));
 
 afterEach(cleanup);
@@ -615,17 +676,22 @@ describe("inbox page", () => {
     expect(screen.getByLabelText("Ответ")).toBeDefined();
   });
 
-  it("filters the list by channel", async () => {
-    render(
-      await InboxPage({
-        searchParams: searchParams({ channel: "chc_facebook_page" }),
-      }),
-    );
+  // Фильтр — состояние списка, а не query-параметр: страница рендерится без
+  // фильтра, отбор делает серверное действие по выбору в мультиселекте.
+  it("filters the list by channel through the multi-select", async () => {
+    render(await InboxPage({ searchParams: searchParams() }));
 
+    expect(screen.getAllByText("Максим Литвинов").length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getByRole("button", { name: "Фильтр по каналам" }));
+    fireEvent.click(screen.getByLabelText(/Facebook Страница/));
+
+    await waitFor(() =>
+      expect(screen.queryByText("Максим Литвинов")).toBeNull(),
+    );
     expect(
-      screen.getByRole("heading", { name: "Facebook Страница" }),
-    ).toBeDefined();
-    expect(screen.queryByText("Максим Литвинов")).toBeNull();
+      screen.getByRole("button", { name: "Фильтр по каналам" }).textContent,
+    ).toContain("Facebook Страница");
   });
 
   it("opens the requested conversation", async () => {
@@ -699,15 +765,18 @@ describe("contacts page", () => {
     expect(screen.getByRole("button", { name: "Склеить с другим…" })).toBeDefined();
   });
 
-  it("filters contacts by channel", async () => {
-    render(
-      await ContactsPage({
-        searchParams: searchParams({ channel: "chc_facebook_page" }),
-      }),
-    );
+  it("filters contacts by channel through the multi-select", async () => {
+    render(await ContactsPage({ searchParams: searchParams() }));
 
-    expect(screen.getByText(/контакты канала/)).toBeDefined();
-    expect(screen.queryByText("Sofia Marchetti")).toBeNull();
+    expect(screen.getAllByText("Sofia Marchetti").length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getByRole("button", { name: "Фильтр по каналам" }));
+    fireEvent.click(screen.getByLabelText(/Facebook Страница/));
+
+    // Контакт привязан к платформе, а не к подключению — Sofia не на Facebook.
+    await waitFor(() =>
+      expect(screen.queryByText("Sofia Marchetti")).toBeNull(),
+    );
   });
 });
 
@@ -777,56 +846,29 @@ function renderSidebar() {
       userRole="owner"
       messagesCounters={messagesCounters}
       commentsCounters={commentsCounters}
-      settingsSections={SETTINGS_SECTIONS}
     />,
   );
 }
 
 describe("shell navigation", () => {
-  it("renders sidebar sections with counters and no channel expands", () => {
+  it("renders sidebar sections with counters and no expandable items", () => {
     renderSidebar();
 
     expect(screen.getByText("Дашборд")).toBeDefined();
     expect(screen.getByText("Сообщения")).toBeDefined();
     expect(screen.getByText("Комментарии")).toBeDefined();
     expect(screen.getByText("Контакты")).toBeDefined();
-    expect(screen.getByText("Настройки")).toBeDefined();
     expect(screen.getByText(String(messagesCounters.totalUnread))).toBeDefined();
     // Разделы больше не расхлопываются в каналы — списки показывают все каналы.
     expect(screen.queryByText("Все каналы")).toBeNull();
     expect(screen.queryByText("Instagram Магазин")).toBeNull();
-    // Подменю настроек закрыто, пока пункт не раскрыт кликом.
-    expect(screen.queryByText("База знаний")).toBeNull();
-  });
-
-  it("toggles the settings submenu by clicking the item itself", () => {
-    renderSidebar();
-
-    const settingsToggle = screen.getByRole("button", { name: /Настройки/ });
-
-    expect(settingsToggle.getAttribute("aria-expanded")).toBe("false");
-    // «Настройки» не ведут на страницу — только раскрывают подменю.
+    // «Настройки» — обычная ссылка: подразделов в меню нет, они на экране.
     expect(
-      screen.queryAllByRole("link", { name: /Настройки/ }),
-    ).toHaveLength(0);
-
-    fireEvent.click(settingsToggle);
-
-    expect(settingsToggle.getAttribute("aria-expanded")).toBe("true");
-    expect(screen.getByText("База знаний")).toBeDefined();
-    // Ни один подпункт не выбран, пока пользователь не кликнул по нему.
+      screen.getByRole("link", { name: /Настройки/ }).getAttribute("href"),
+    ).toBe("/settings");
     SETTINGS_SECTIONS.forEach((section) => {
-      expect(
-        screen
-          .getByText(section.title)
-          .closest("a")
-          ?.getAttribute("data-active"),
-      ).toBe("false");
+      expect(screen.queryByText(section.title)).toBeNull();
     });
-
-    fireEvent.click(settingsToggle);
-
-    expect(screen.queryByText("База знаний")).toBeNull();
   });
 
   it("offers workspace switching, creation and logout in the user menu", () => {

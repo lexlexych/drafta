@@ -45,7 +45,20 @@ export type CommentsNavigationCounters = {
 };
 
 export type CommentsListFilter = {
-  channelId?: string | null;
+  /** Каналы из мультиселекта в шапке списка; пусто — все. */
+  channelIds?: readonly string[] | null;
+  /** Смещение страницы — дозагрузка при скролле списка. */
+  offset?: number;
+  limit?: number;
+};
+
+/** Размер страницы списка постов: первая порция и каждая дозагрузка. */
+export const POST_PAGE_SIZE = 30;
+
+export type PostListPage = PostListView & {
+  /** Сколько всего постов под фильтром — подпись «N постов» точная. */
+  total: number;
+  hasMore: boolean;
 };
 
 export type CommentsMutationResult =
@@ -329,24 +342,32 @@ export async function getPostListView(
   workspaceId: string,
   channels: ChannelConnectionRow[],
   filter: CommentsListFilter = {},
-): Promise<PostListView> {
-  const channelId = filter.channelId ?? null;
+): Promise<PostListPage> {
+  const channelIds = filter.channelIds ?? [];
   const channelById = new Map(channels.map((channel) => [channel.id, channel]));
-  const selectedChannel = channelId ? (channelById.get(channelId) ?? null) : null;
+  const selectedChannel =
+    channelIds.length === 1 ? (channelById.get(channelIds[0]) ?? null) : null;
+  const offset = Math.max(0, filter.offset ?? 0);
+  const limit = Math.max(1, filter.limit ?? POST_PAGE_SIZE);
 
   let filterBuilder = supabase
     .from("posts")
-    .select(POST_COLUMNS)
+    .select(POST_COLUMNS, { count: "exact" })
     .eq("workspace_id", workspaceId);
 
-  if (channelId) {
-    filterBuilder = filterBuilder.eq("channel_connection_id", channelId);
+  if (channelIds.length > 0) {
+    filterBuilder = filterBuilder.in("channel_connection_id", [...channelIds]);
   }
 
-  const { data: postRows, error: postsError } = await filterBuilder
+  const {
+    data: postRows,
+    error: postsError,
+    count,
+  } = await filterBuilder
     .order("last_comment_at", { ascending: false, nullsFirst: false })
     .order("published_at", { ascending: false, nullsFirst: false })
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: false })
+    .range(offset, offset + limit - 1);
 
   if (postsError) {
     console.error("[comments] failed to list posts", postsError);
@@ -383,13 +404,16 @@ export async function getPostListView(
     };
   });
 
-  const countLabel = countWithNoun(items.length, ["пост", "поста", "постов"]);
+  const total = count ?? items.length;
+  const countLabel = countWithNoun(total, ["пост", "поста", "постов"]);
   const scope = selectedChannel ? "канал" : "все каналы";
 
   return {
     title: selectedChannel?.name ?? "Комментарии",
     subtitle: [scope, countLabel].join(" · "),
     items,
+    total,
+    hasMore: offset + items.length < total,
   };
 }
 

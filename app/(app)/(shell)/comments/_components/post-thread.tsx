@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
@@ -23,6 +23,7 @@ import {
 import styles from "../comments.module.css";
 import { CommentDraftCard } from "./comment-draft-card";
 import { DraftBriefDialog } from "./draft-brief-dialog";
+import { useActivityTransition } from "../../_components/activity";
 
 /**
  * The open post: its comments and, under each of them, its own draft reply.
@@ -46,7 +47,7 @@ export function PostThread({
   const router = useRouter();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [pendingCommentId, setPendingCommentId] = useState<string | null>(null);
-  const [isPending, startTransition] = useTransition();
+  const [isPending, startTransition] = useActivityTransition("Работаем с черновиками…");
 
   const openDialog = () => setIsDialogOpen(true);
 

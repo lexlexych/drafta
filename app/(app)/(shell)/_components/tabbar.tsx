@@ -5,6 +5,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
+import { LinkActivity } from "./activity";
 import {
   CommentsIcon,
   ContactsIcon,
@@ -67,6 +68,7 @@ export function Tabbar({
             {count > 0 ? (
               <span className={`${styles.tabCount} ${uiStyles.num}`}>{count}</span>
             ) : null}
+            <LinkActivity label={`Открываем «${section.label}»…`} />
           </Link>
         );
       })}

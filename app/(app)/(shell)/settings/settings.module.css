@@ -1,8 +1,11 @@
-/* Настройки: список разделов (мобайл) + детальная панель с формами-заглушками. */
+/* Настройки: список разделов + детальная панель с формами-заглушками.
+   Меню «Настройки» больше не расхлопывается, поэтому список разделов —
+   единственный вход в них и виден на всех ширинах. */
 
-/* На десктопе список разделов дублирует расхлопнутое меню — прячем. */
+/* «Аккаунт» дублирует меню пользователя из подвала левого меню — на десктопе
+   он там и остаётся. */
 @media (min-width: 900px) {
-  .sectionList {
+  .sectionRow[data-mobile-only="true"] {
     display: none;
   }
 }
@@ -432,6 +435,64 @@
   width: 18px;
   height: 18px;
   flex: none;
+}
+
+/* Раздел «Аккаунт»: список workspace'ов, создание нового, выход. */
+.accountRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  padding: 10px 0;
+  border-top: 1px solid var(--line);
+  font: inherit;
+  font-size: 13.5px;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.accountRow:first-of-type {
+  border-top: 0;
+}
+
+.accountRow:disabled {
+  cursor: default;
+}
+
+.accountRow[data-active="true"] {
+  font-weight: 700;
+}
+
+.accountIcon {
+  display: inline-flex;
+  justify-content: center;
+  width: 16px;
+  flex: none;
+  color: var(--accent);
+}
+
+.accountLabel {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.accountHint {
+  flex: none;
+  color: var(--ink3);
+  font-size: 11.5px;
+  font-weight: 400;
+}
+
+.accountForm {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
 }
 
 /* Строки-переключатели. */

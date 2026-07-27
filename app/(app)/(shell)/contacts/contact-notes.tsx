@@ -2,12 +2,13 @@
 
 /** Редактор заметок контакта. Заметки попадают в промпт черновика (этап 7). */
 
-import { useState, useTransition, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 
 import uiStyles from "../_components/ui.module.css";
 import cardStyles from "./contacts.module.css";
 import { updateContactNotesAction } from "./actions";
+import { useActivityTransition } from "../_components/activity";
 
 export function ContactNotes({
   contactId,
@@ -19,7 +20,7 @@ export function ContactNotes({
   const router = useRouter();
   const [value, setValue] = useState(notes);
   const [error, setError] = useState<string | null>(null);
-  const [isPending, startTransition] = useTransition();
+  const [isPending, startTransition] = useActivityTransition("Сохраняем заметку…");
 
   const isDirty = value.trim() !== notes.trim();
 
