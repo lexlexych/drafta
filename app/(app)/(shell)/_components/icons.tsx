@@ -218,6 +218,24 @@ export function MailIcon(props: IconProps) {
   );
 }
 
+/** Удаление: корзина. */
+export function TrashIcon(props: IconProps) {
+  return (
+    <Icon
+      size={15}
+      {...stroke}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      {...props}
+    >
+      <path d="M4.5 6.5h15" />
+      <path d="M9.5 6.5V4.8a1.3 1.3 0 0 1 1.3-1.3h2.4a1.3 1.3 0 0 1 1.3 1.3v1.7" />
+      <path d="M6.5 6.5 7.4 19a1.6 1.6 0 0 0 1.6 1.5h6a1.6 1.6 0 0 0 1.6-1.5l.9-12.5" />
+      <path d="M10.5 10v6.5M13.5 10v6.5" />
+    </Icon>
+  );
+}
+
 export function ChevronIcon(props: IconProps) {
   return (
     <Icon

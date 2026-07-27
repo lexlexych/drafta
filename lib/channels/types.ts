@@ -246,6 +246,15 @@ export interface GetConnectUrlResult {
   providerProfileId: string;
 }
 
+/** Input to the optional `disconnectAccount` — which connected account to drop at the provider. */
+export interface DisconnectAccountInput {
+  /**
+   * External ID of the connected social account — `channel_connections.external_id`,
+   * the same value `parseConnectCallback` returned when it was connected.
+   */
+  externalAccountId: string;
+}
+
 /** Input to the optional `parseConnectCallback` — the query parameters the provider appended to the redirect. */
 export interface ParseConnectCallbackInput {
   /** Query-string parameters of the provider's redirect back to us (keys as-is). */
@@ -318,6 +327,15 @@ export interface ChannelAdapter {
   parseConnectCallback?(
     input: ParseConnectCallbackInput,
   ): ConnectCallbackResult | Promise<ConnectCallbackResult>;
+
+  /**
+   * Optional: disconnect the account at the provider when the user deletes the
+   * channel in drafta, so the provider stops holding the platform tokens and
+   * stops sending webhooks for it. Providers whose disconnect is also a
+   * removal (Zernio's `DELETE /v1/accounts/{accountId}`) do both here.
+   * Idempotent: an account the provider no longer knows is a success.
+   */
+  disconnectAccount?(input: DisconnectAccountInput): Promise<void>;
 }
 
 /**

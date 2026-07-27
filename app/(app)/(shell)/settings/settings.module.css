@@ -207,6 +207,21 @@
   line-height: 1.45;
 }
 
+/* Удаление канала — только корзина, без подписи. */
+.channelDeleteButton {
+  padding: 5px 6px;
+}
+
+/* Подтверждение необратимого удаления. */
+.buttonDangerFilled {
+  color: #fff;
+  background: var(--cat-2);
+}
+
+.buttonDangerFilled:hover {
+  filter: brightness(0.94);
+}
+
 .formError {
   font-size: 12.5px;
   color: var(--cat-2);

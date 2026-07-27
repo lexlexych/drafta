@@ -15,8 +15,10 @@
  * переименовывает позже. Остальные платформы пока показывают заглушку
  * «в разработке».
  *
- * Подключённый блок — строка канала с переименованием и
- * отключением/включением через Server Actions (`./actions.ts`).
+ * Подключённый блок — строка канала с переименованием,
+ * отключением/включением и удалением через Server Actions (`./actions.ts`).
+ * Удаление необратимо (переписка канала уходит вместе с ним) и потому
+ * спрашивает подтверждение прямо в блоке.
  */
 
 import { useState, type FormEvent } from "react";
@@ -30,11 +32,13 @@ import {
   InstagramIcon,
   MailIcon,
   TelegramIcon,
+  TrashIcon,
   WhatsAppIcon,
 } from "../../_components/icons";
 import setStyles from "../settings.module.css";
 import uiStyles from "../../_components/ui.module.css";
 import {
+  deleteChannelConnectionAction,
   renameChannelConnectionAction,
   setChannelConnectionStatusAction,
   startChannelConnectionAction,
@@ -148,6 +152,10 @@ export function ChannelsPanel({
 
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
+  /** Канал, для которого показано подтверждение удаления. */
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  /** Провайдер не подтвердил отключение аккаунта — канал всё равно удалён. */
+  const [notice, setNotice] = useState<string | null>(null);
 
   /** Блок, раскрытый в онбординг перед авторизацией. */
   const [onboardingKey, setOnboardingKey] = useState<ChannelBlockKey | null>(null);
@@ -156,6 +164,7 @@ export function ChannelsPanel({
 
   function startRename(channel: ChannelConnectionListItem) {
     setError(null);
+    setDeletingId(null);
     setRenamingId(channel.id);
     setRenameValue(channel.name);
   }
@@ -208,6 +217,42 @@ export function ChannelsPanel({
         return;
       }
 
+      router.refresh();
+    });
+  }
+
+  function startDelete(channel: ChannelConnectionListItem) {
+    setError(null);
+    setNotice(null);
+    setRenamingId(null);
+    setDeletingId(channel.id);
+  }
+
+  function cancelDelete() {
+    setDeletingId(null);
+  }
+
+  /**
+   * Удаление канала: строка `channel_connections` уходит вместе со своей
+   * перепиской, а аккаунт отключается у провайдера. В соцсети ничего не
+   * удаляется.
+   */
+  function confirmDelete(channel: ChannelConnectionListItem) {
+    setError(null);
+    setNotice(null);
+
+    startTransition(async () => {
+      const result = await deleteChannelConnectionAction({ id: channel.id });
+
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+
+      setDeletingId(null);
+      if (result.warning) {
+        setNotice(result.warning);
+      }
       router.refresh();
     });
   }
@@ -280,6 +325,11 @@ export function ChannelsPanel({
           {error}
         </p>
       ) : null}
+      {notice ? (
+        <p aria-live="polite" className={setStyles.description}>
+          {notice}
+        </p>
+      ) : null}
 
       <div className={uiStyles.card}>
         {CHANNEL_BLOCKS.map((block) => {
@@ -289,18 +339,29 @@ export function ChannelsPanel({
           return (
             <section key={block.key} className={setStyles.channelBlock}>
               {channel ? (
-                <ConnectedChannel
-                  block={block}
-                  channel={channel}
-                  isPending={isPending}
-                  isRenaming={renamingId === channel.id}
-                  onCancelRename={cancelRename}
-                  onRenameChange={setRenameValue}
-                  onStartRename={startRename}
-                  onSubmitRename={submitRename}
-                  onToggleStatus={toggleStatus}
-                  renameValue={renameValue}
-                />
+                deletingId === channel.id ? (
+                  <DeleteConfirmation
+                    block={block}
+                    channel={channel}
+                    isPending={isPending}
+                    onCancel={cancelDelete}
+                    onConfirm={() => confirmDelete(channel)}
+                  />
+                ) : (
+                  <ConnectedChannel
+                    block={block}
+                    channel={channel}
+                    isPending={isPending}
+                    isRenaming={renamingId === channel.id}
+                    onCancelRename={cancelRename}
+                    onRenameChange={setRenameValue}
+                    onStartDelete={startDelete}
+                    onStartRename={startRename}
+                    onSubmitRename={submitRename}
+                    onToggleStatus={toggleStatus}
+                    renameValue={renameValue}
+                  />
+                )
               ) : onboardingKey === block.key && connectPlatform ? (
                 <ConnectOnboarding
                   block={block}
@@ -398,7 +459,62 @@ function ConnectOnboarding({
   );
 }
 
-/** Подключённый канал: имя из аккаунта, статус, переименование и отключение. */
+/**
+ * Подтверждение удаления канала: что именно исчезнет и где останется. Стоит
+ * вместо строки канала — как онбординг вместо кнопки подключения.
+ */
+function DeleteConfirmation({
+  block,
+  channel,
+  isPending,
+  onCancel,
+  onConfirm,
+}: {
+  block: ChannelBlock;
+  channel: ChannelConnectionListItem;
+  isPending: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <div
+      aria-label={`Удалить канал «${channel.name}»`}
+      className={setStyles.channelOnboarding}
+      role="alertdialog"
+    >
+      <b>
+        <ChannelIcon block={block} />
+        Удалить канал «{channel.name}»?
+      </b>
+      <p className={setStyles.channelStub}>
+        Все сообщения и комментарии этого канала перестанут отображаться в
+        drafta, а новые приходить не будут. В {block.label} они останутся —
+        оттуда ничего не удаляется. Подключить канал заново можно в любой
+        момент.
+      </p>
+      <div className={uiStyles.cardRow}>
+        <button
+          className={`${uiStyles.button} ${setStyles.buttonDangerFilled}`}
+          disabled={isPending}
+          onClick={onConfirm}
+          type="button"
+        >
+          {isPending ? "Удаляем…" : "Удалить канал"}
+        </button>
+        <button
+          className={`${uiStyles.button} ${uiStyles.buttonSecondary}`}
+          disabled={isPending}
+          onClick={onCancel}
+          type="button"
+        >
+          Отмена
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/** Подключённый канал: имя из аккаунта, статус, переименование, отключение, удаление. */
 function ConnectedChannel({
   block,
   channel,
@@ -406,6 +522,7 @@ function ConnectedChannel({
   isRenaming,
   onCancelRename,
   onRenameChange,
+  onStartDelete,
   onStartRename,
   onSubmitRename,
   onToggleStatus,
@@ -417,6 +534,7 @@ function ConnectedChannel({
   isRenaming: boolean;
   onCancelRename: () => void;
   onRenameChange: (value: string) => void;
+  onStartDelete: (channel: ChannelConnectionListItem) => void;
   onStartRename: (channel: ChannelConnectionListItem) => void;
   onSubmitRename: (event: FormEvent, id: string) => void;
   onToggleStatus: (channel: ChannelConnectionListItem) => void;
@@ -478,6 +596,16 @@ function ConnectedChannel({
             type="button"
           >
             {channel.status === "active" ? "Отключить" : "Включить"}
+          </button>
+          <button
+            aria-label={`Удалить канал «${channel.name}»`}
+            className={`${uiStyles.button} ${uiStyles.buttonSmall} ${uiStyles.buttonGhost} ${uiStyles.buttonDanger} ${setStyles.channelDeleteButton}`}
+            disabled={isPending}
+            onClick={() => onStartDelete(channel)}
+            title="Удалить канал"
+            type="button"
+          >
+            <TrashIcon />
           </button>
         </>
       )}

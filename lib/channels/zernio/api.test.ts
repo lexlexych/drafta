@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   createZernioProfile,
+  deleteZernioAccount,
   deleteZernioProfile,
   getZernioConnectAuthUrl,
   sendZernioInboxMessage,
@@ -62,6 +63,36 @@ describe("createZernioProfile", () => {
 
     await expect(createZernioProfile(config, { name: "Acme" })).rejects.toThrow(
       ZernioApiError,
+    );
+  });
+});
+
+describe("deleteZernioAccount", () => {
+  it("DELETEs the account with Bearer auth", async () => {
+    const fetchMock = mockFetch({
+      ok: true,
+      json: { message: "Account disconnected successfully" },
+    });
+
+    await deleteZernioAccount(config, "acct_ig_17841");
+
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe("https://zernio.com/api/v1/accounts/acct_ig_17841");
+    expect(init.method).toBe("DELETE");
+    expect(init.headers.Authorization).toBe("Bearer zk_test_123");
+  });
+
+  it("treats a 404 as success — the account is already disconnected", async () => {
+    mockFetch({ ok: false, status: 404, text: '{"error":"Account not found"}' });
+
+    await expect(deleteZernioAccount(config, "acct_gone")).resolves.toBeUndefined();
+  });
+
+  it("throws ZernioApiError on any other failure", async () => {
+    mockFetch({ ok: false, status: 500, text: '{"error":"Internal error"}' });
+
+    await expect(deleteZernioAccount(config, "acct_x")).rejects.toThrowError(
+      /HTTP 500.*Internal error/,
     );
   });
 });

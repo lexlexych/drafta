@@ -16,6 +16,8 @@ import type { ChannelPlatform } from "../types";
  *       -> 200 { message }
  *   - GET  /v1/connect/{platform}  ?profileId&redirect_url
  *       -> 200 { authUrl, state }                       (authUrl at top level)
+ *   - DELETE /v1/accounts/{accountId}
+ *       -> 200 { message }                              (404 = already gone)
  *   - POST /v1/inbox/conversations/{conversationId}/messages  { accountId, message }
  *       -> 200 { success, data: { messageId } }        (id at data.messageId)
  *   - POST /v1/inbox/comments/{commentId}/replies  { accountId, message }
@@ -111,6 +113,34 @@ export async function createZernioProfile(
   }
 
   return id;
+}
+
+/**
+ * Disconnects a connected social account at Zernio (`deleteAccount`:
+ * `DELETE /v1/accounts/{accountId}` — "Disconnects and removes a connected
+ * social account", per the OpenAPI spec). One call is both the disconnect and
+ * the removal on Zernio's side; it also fires their `account.disconnected`
+ * webhook.
+ *
+ * A 404 is treated as success: the account is already gone at the provider,
+ * which is exactly the state the caller wants.
+ */
+export async function deleteZernioAccount(
+  config: ZernioApiConfig,
+  accountId: string,
+): Promise<void> {
+  const response = await fetch(
+    joinUrl(config.apiBaseUrl, `accounts/${encodeURIComponent(accountId)}`),
+    { method: "DELETE", headers: authHeaders(config) },
+  );
+
+  if (response.status === 404) {
+    return;
+  }
+
+  if (!response.ok) {
+    throw await zernioHttpError(response, "Zernio account disconnect failed");
+  }
 }
 
 /** Deletes an empty Zernio profile when workspace bootstrap needs compensation. */
