@@ -1,7 +1,28 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
+
+const migrationsDirectory = join(process.cwd(), "supabase", "migrations");
+
+const migrationFileNames = readdirSync(migrationsDirectory)
+  .filter((fileName) => fileName.endsWith(".sql"))
+  .sort();
+
+function readMigration(fileName: string): string {
+  return readFileSync(join(migrationsDirectory, fileName), "utf8");
+}
+
+const UNQUALIFIED_SET_CONSTRAINTS =
+  "set constraints categories_workspace_priority_key";
+const QUALIFIED_SET_CONSTRAINTS =
+  "set constraints public.categories_workspace_priority_key";
+
+function lastMigrationContaining(needle: string): string | undefined {
+  return migrationFileNames
+    .filter((candidate) => readMigration(candidate).includes(needle))
+    .at(-1);
+}
 
 const migration = readFileSync(
   join(
@@ -54,6 +75,37 @@ describe("categories migration contract", () => {
     );
     expect(constraintResolutionFix).toContain(
       "public.reorder_categories(uuid,uuid[])",
+    );
+  });
+
+  // Пересоздание create_category в поздней миграции однажды уже вернуло
+  // неквалифицированное имя ограничения и сломало создание категории (42704),
+  // потому что исправление жило только в развёрнутой функции. Ни одна миграция
+  // после последнего исправления не имеет права снова писать имя без схемы.
+  it("never reintroduces the unqualified constraint after a fix", () => {
+    const latestFix = lastMigrationContaining(QUALIFIED_SET_CONSTRAINTS);
+
+    expect(latestFix, "no migration qualifies the deferred constraint").toBeDefined();
+
+    const regressions = migrationFileNames
+      .filter((fileName) => fileName > (latestFix as string))
+      .filter((fileName) =>
+        readMigration(fileName).includes(UNQUALIFIED_SET_CONSTRAINTS),
+      );
+
+    expect(regressions).toEqual([]);
+  });
+
+  it("re-creates create_category with the qualified constraint", () => {
+    const latestDefinition = lastMigrationContaining(
+      "function public.create_category(",
+    );
+
+    expect(latestDefinition).toBe(
+      "20260727100000_requalify_create_category_constraint.sql",
+    );
+    expect(readMigration(latestDefinition as string)).toContain(
+      `${QUALIFIED_SET_CONSTRAINTS} deferred`,
     );
   });
 });
