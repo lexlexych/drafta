@@ -1,25 +1,37 @@
 "use client";
 
 /**
- * Настройки → Каналы: интерактивная часть на реальных данных
- * (docs/epics/epic_02/T-04-channels-settings.md). Список подключений,
- * форма добавления, инлайн-переименование, отключение/включение с
- * подтверждением — через Server Actions (`./actions.ts`).
+ * Настройки → Каналы: по блоку на платформу, разделённых горизонтальной
+ * чертой (Instagram, Telegram, WhatsApp, Facebook, Email).
  *
- * Подключение канала — OAuth-флоу: пользователь выбирает платформу и имя и
- * жмёт «Подключить», после чего `startChannelConnectionAction` возвращает
- * ссылку авторизации провайдера, и мы уходим на неё
- * (docs/architecture/05-channels.md). Строку подключения создаёт callback-роут
- * после авторизации. Пользователь нигде не вводит внешний ID и не видит
- * провайдера входящих.
+ * Пока платформа не подключена, блок — это одна кнопка «Подключить <канал>»
+ * со значком мессенджера. Для Instagram она раскрывает короткий онбординг с
+ * предусловиями (профессиональный аккаунт, вход в нужный аккаунт в этом
+ * браузере) и кнопкой «Войти через Instagram», которая запускает OAuth-флоу:
+ * `startChannelConnectionAction` возвращает ссылку авторизации провайдера, и
+ * мы уходим на неё (docs/architecture/05-channels.md). Строку подключения
+ * создаёт callback-роут после авторизации — **имя канала подставляется из
+ * имени аккаунта**, пользователь его не вводит и при необходимости
+ * переименовывает позже. Остальные платформы пока показывают заглушку
+ * «в разработке».
+ *
+ * Подключённый блок — строка канала с переименованием и
+ * отключением/включением через Server Actions (`./actions.ts`).
  */
 
 import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 
+import { CHANNEL_PLATFORM_LABELS } from "@/lib/channels/labels";
 import type { ChannelPlatform } from "@/lib/channels/types";
 
-import { PlatformDot } from "../../_components/chips";
+import {
+  FacebookIcon,
+  InstagramIcon,
+  MailIcon,
+  TelegramIcon,
+  WhatsAppIcon,
+} from "../../_components/icons";
 import setStyles from "../settings.module.css";
 import uiStyles from "../../_components/ui.module.css";
 import {
@@ -42,11 +54,67 @@ export type ChannelConnectResult = {
   reason: string | null;
 };
 
-const PLATFORM_LABELS: Record<ChannelPlatform, string> = {
-  telegram: "Telegram",
-  whatsapp: "WhatsApp",
-  instagram: "Instagram",
-  facebook: "Facebook",
+/**
+ * Ключ блока. Email — пока только UI-заглушка: своего `ChannelPlatform` (и
+ * адаптера) у него нет, он появится вместе с почтовым провайдером
+ * (docs/architecture/05-channels.md).
+ */
+type ChannelBlockKey = ChannelPlatform | "email";
+
+type ChannelBlock = {
+  key: ChannelBlockKey;
+  label: string;
+  Icon: typeof InstagramIcon;
+  /**
+   * Платформа, для которой запускается подключение; `null` — флоу ещё не
+   * готов, блок показывает заглушку «в разработке».
+   */
+  connect: ChannelPlatform | null;
+};
+
+/** Порядок блоков на странице. */
+const CHANNEL_BLOCKS: readonly ChannelBlock[] = [
+  {
+    key: "instagram",
+    label: CHANNEL_PLATFORM_LABELS.instagram,
+    Icon: InstagramIcon,
+    connect: "instagram",
+  },
+  {
+    key: "telegram",
+    label: CHANNEL_PLATFORM_LABELS.telegram,
+    Icon: TelegramIcon,
+    connect: null,
+  },
+  {
+    key: "whatsapp",
+    label: CHANNEL_PLATFORM_LABELS.whatsapp,
+    Icon: WhatsAppIcon,
+    connect: null,
+  },
+  {
+    key: "facebook",
+    label: CHANNEL_PLATFORM_LABELS.facebook,
+    Icon: FacebookIcon,
+    connect: null,
+  },
+  { key: "email", label: "Email", Icon: MailIcon, connect: null },
+];
+
+/**
+ * Предусловия, без которых подключение аккаунта сорвётся или подключится не
+ * тот аккаунт. Показываем их до ухода на авторизацию — вернуться и всё
+ * переделать дороже.
+ */
+const CONNECT_PREREQUISITES: Readonly<Record<ChannelPlatform, string[]>> = {
+  instagram: [
+    "Аккаунт Instagram переведён в профессиональный — Business или Creator. Личные аккаунты подключить нельзя.",
+    "В этом браузере вы уже вошли именно в тот аккаунт Instagram, который подключаете, — иначе на следующем шаге легко подключить чужой аккаунт.",
+    "У вас есть права на управление этим аккаунтом.",
+  ],
+  telegram: [],
+  whatsapp: [],
+  facebook: [],
 };
 
 const STATUS_LABELS: Record<ChannelConnectionListItem["status"], string> = {
@@ -64,34 +132,27 @@ const CONNECT_ERROR_MESSAGES: Record<string, string> = {
 };
 
 function statusLine(channel: ChannelConnectionListItem): string {
-  return `${PLATFORM_LABELS[channel.platform]} · ${STATUS_LABELS[channel.status]}`;
+  return `${CHANNEL_PLATFORM_LABELS[channel.platform]} · ${STATUS_LABELS[channel.status]}`;
 }
 
 export function ChannelsPanel({
   channels,
-  supportedPlatforms,
   connectResult = null,
 }: {
   channels: ChannelConnectionListItem[];
-  supportedPlatforms: ChannelPlatform[];
   connectResult?: ChannelConnectResult | null;
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useActivityTransition("Обновляем каналы…");
   const [error, setError] = useState<string | null>(null);
-  const connectedPlatforms = new Set(channels.map((channel) => channel.platform));
-  const availablePlatforms = supportedPlatforms.filter(
-    (candidate) => !connectedPlatforms.has(candidate),
-  );
 
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
 
-  const [isAdding, setIsAdding] = useState(false);
-  const [platform, setPlatform] = useState<ChannelPlatform>(
-    availablePlatforms[0] ?? "telegram",
-  );
-  const [name, setName] = useState("");
+  /** Блок, раскрытый в онбординг перед авторизацией. */
+  const [onboardingKey, setOnboardingKey] = useState<ChannelBlockKey | null>(null);
+  /** Блок, для которого показана заглушка «в разработке». */
+  const [stubKey, setStubKey] = useState<ChannelBlockKey | null>(null);
 
   function startRename(channel: ChannelConnectionListItem) {
     setError(null);
@@ -151,12 +212,31 @@ export function ChannelsPanel({
     });
   }
 
-  function submitCreate(event: FormEvent) {
-    event.preventDefault();
+  /** Кнопка «Подключить …»: онбординг для готовых платформ, заглушка для остальных. */
+  function openConnect(block: ChannelBlock) {
+    setError(null);
+
+    if (!block.connect) {
+      setOnboardingKey(null);
+      setStubKey(block.key);
+      return;
+    }
+
+    setStubKey(null);
+    setOnboardingKey(block.key);
+  }
+
+  function closeConnect() {
+    setOnboardingKey(null);
+    setStubKey(null);
+  }
+
+  /** «Войти через …» — уходим на страницу авторизации провайдера. */
+  function submitConnect(platform: ChannelPlatform) {
     setError(null);
 
     startTransition(async () => {
-      const result = await startChannelConnectionAction({ platform, name });
+      const result = await startChannelConnectionAction({ platform });
 
       if (!result.ok) {
         setError(result.error);
@@ -202,142 +282,205 @@ export function ChannelsPanel({
       ) : null}
 
       <div className={uiStyles.card}>
-        {channels.length === 0 ? (
-          <p className={setStyles.description}>
-            Пока нет ни одного подключённого канала.
-          </p>
-        ) : null}
-        {channels.map((channel) => (
-          <div
-            key={channel.id}
-            className={setStyles.connectionRow}
-            data-disconnected={channel.status !== "active"}
-          >
-            <PlatformDot platform={channel.platform} />
-            {renamingId === channel.id ? (
-              <form
-                className={setStyles.renameForm}
-                onSubmit={(event) => submitRename(event, channel.id)}
-              >
-                <input
-                  autoFocus
-                  aria-label={`Новое имя для «${channel.name}»`}
-                  className={setStyles.renameInput}
-                  onChange={(event) => setRenameValue(event.target.value)}
-                  type="text"
-                  value={renameValue}
-                />
-                <button
-                  className={`${uiStyles.button} ${uiStyles.buttonSmall} ${uiStyles.buttonPrimary}`}
-                  disabled={isPending}
-                  type="submit"
-                >
-                  Сохранить
-                </button>
-                <button
-                  className={`${uiStyles.button} ${uiStyles.buttonSmall} ${uiStyles.buttonGhost}`}
-                  disabled={isPending}
-                  onClick={cancelRename}
-                  type="button"
-                >
-                  Отмена
-                </button>
-              </form>
-            ) : (
-              <>
-                <div className={setStyles.connectionBody}>
-                  <b>{channel.name}</b>
-                  <span>{statusLine(channel)}</span>
-                </div>
-                <button
-                  className={`${uiStyles.button} ${uiStyles.buttonSmall} ${uiStyles.buttonSecondary}`}
-                  disabled={isPending}
-                  onClick={() => startRename(channel)}
-                  type="button"
-                >
-                  Переименовать
-                </button>
-                <button
-                  className={`${uiStyles.button} ${uiStyles.buttonSmall} ${uiStyles.buttonGhost}`}
-                  disabled={isPending}
-                  onClick={() => toggleStatus(channel)}
-                  type="button"
-                >
-                  {channel.status === "active" ? "Отключить" : "Включить"}
-                </button>
-              </>
-            )}
-          </div>
-        ))}
-      </div>
+        {CHANNEL_BLOCKS.map((block) => {
+          const channel = channels.find((entry) => entry.platform === block.key);
+          const connectPlatform = block.connect;
 
-      {isAdding ? (
-        <form
-          className={`${uiStyles.card} ${uiStyles.cardStack}`}
-          onSubmit={submitCreate}
-        >
-          <div className={uiStyles.field}>
-            <label htmlFor="channel-platform">Платформа</label>
-            <select
-              id="channel-platform"
-              onChange={(event) => setPlatform(event.target.value as ChannelPlatform)}
-              value={platform}
-            >
-              {availablePlatforms.map((option) => (
-                <option key={option} value={option}>
-                  {PLATFORM_LABELS[option]}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className={uiStyles.field}>
-            <label htmlFor="channel-name">Имя подключения</label>
-            <input
-              id="channel-name"
-              onChange={(event) => setName(event.target.value)}
-              placeholder="Например, «WhatsApp Магазин»"
-              type="text"
-              value={name}
-            />
-            <span className={setStyles.fieldHint}>
-              Дальше вы авторизуете аккаунт в выбранной соцсети — вводить ID
-              вручную не нужно.
-            </span>
-          </div>
-          <div className={uiStyles.cardRow}>
-            <button
-              className={`${uiStyles.button} ${uiStyles.buttonPrimary}`}
-              disabled={isPending}
-              type="submit"
-            >
-              {isPending ? "Открываем авторизацию…" : "Подключить"}
-            </button>
-            <button
-              className={`${uiStyles.button} ${uiStyles.buttonSecondary}`}
-              disabled={isPending}
-              onClick={() => setIsAdding(false)}
-              type="button"
-            >
-              Отмена
-            </button>
-          </div>
-        </form>
-      ) : availablePlatforms.length > 0 ? (
+          return (
+            <section key={block.key} className={setStyles.channelBlock}>
+              {channel ? (
+                <ConnectedChannel
+                  block={block}
+                  channel={channel}
+                  isPending={isPending}
+                  isRenaming={renamingId === channel.id}
+                  onCancelRename={cancelRename}
+                  onRenameChange={setRenameValue}
+                  onStartRename={startRename}
+                  onSubmitRename={submitRename}
+                  onToggleStatus={toggleStatus}
+                  renameValue={renameValue}
+                />
+              ) : onboardingKey === block.key && connectPlatform ? (
+                <ConnectOnboarding
+                  block={block}
+                  isPending={isPending}
+                  onCancel={closeConnect}
+                  onSubmit={() => submitConnect(connectPlatform)}
+                />
+              ) : (
+                <>
+                  <button
+                    className={`${uiStyles.button} ${uiStyles.buttonSecondary} ${setStyles.channelConnectButton}`}
+                    disabled={isPending}
+                    onClick={() => openConnect(block)}
+                    type="button"
+                  >
+                    <ChannelIcon block={block} />
+                    Подключить {block.label}
+                  </button>
+                  {stubKey === block.key ? (
+                    <p aria-live="polite" className={setStyles.channelStub}>
+                      Подключение канала «{block.label}» пока в разработке — мы
+                      добавим его в одном из ближайших обновлений.
+                    </p>
+                  ) : null}
+                </>
+              )}
+            </section>
+          );
+        })}
+      </div>
+    </>
+  );
+}
+
+function ChannelIcon({ block }: { block: ChannelBlock }) {
+  const { Icon } = block;
+
+  return (
+    <span className={setStyles.channelIcon} data-platform={block.key}>
+      <Icon size={16} />
+    </span>
+  );
+}
+
+/** Онбординг перед авторизацией: предусловия + «Войти через …». */
+function ConnectOnboarding({
+  block,
+  isPending,
+  onCancel,
+  onSubmit,
+}: {
+  block: ChannelBlock;
+  isPending: boolean;
+  onCancel: () => void;
+  onSubmit: () => void;
+}) {
+  const prerequisites = block.connect
+    ? CONNECT_PREREQUISITES[block.connect]
+    : [];
+
+  return (
+    <div className={setStyles.channelOnboarding}>
+      <b>
+        <ChannelIcon block={block} />
+        Перед подключением {block.label} проверьте
+      </b>
+      <ul>
+        {prerequisites.map((item) => (
+          <li key={item}>{item}</li>
+        ))}
+      </ul>
+      <p className={setStyles.channelStub}>
+        Имя канала подставится автоматически из имени аккаунта — переименовать
+        его можно позже.
+      </p>
+      <div className={uiStyles.cardRow}>
         <button
-          className={`${uiStyles.button} ${uiStyles.buttonPrimary} ${uiStyles.buttonSelfStart}`}
-          onClick={() => {
-            setError(null);
-            setIsAdding(true);
-          }}
+          className={`${uiStyles.button} ${uiStyles.buttonPrimary}`}
+          disabled={isPending}
+          onClick={onSubmit}
           type="button"
         >
-          + Подключить канал
+          {isPending ? "Открываем авторизацию…" : `Войти через ${block.label}`}
         </button>
+        <button
+          className={`${uiStyles.button} ${uiStyles.buttonSecondary}`}
+          disabled={isPending}
+          onClick={onCancel}
+          type="button"
+        >
+          Отмена
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/** Подключённый канал: имя из аккаунта, статус, переименование и отключение. */
+function ConnectedChannel({
+  block,
+  channel,
+  isPending,
+  isRenaming,
+  onCancelRename,
+  onRenameChange,
+  onStartRename,
+  onSubmitRename,
+  onToggleStatus,
+  renameValue,
+}: {
+  block: ChannelBlock;
+  channel: ChannelConnectionListItem;
+  isPending: boolean;
+  isRenaming: boolean;
+  onCancelRename: () => void;
+  onRenameChange: (value: string) => void;
+  onStartRename: (channel: ChannelConnectionListItem) => void;
+  onSubmitRename: (event: FormEvent, id: string) => void;
+  onToggleStatus: (channel: ChannelConnectionListItem) => void;
+  renameValue: string;
+}) {
+  return (
+    <div
+      className={setStyles.connectionRow}
+      data-disconnected={channel.status !== "active"}
+    >
+      <ChannelIcon block={block} />
+      {isRenaming ? (
+        <form
+          className={setStyles.renameForm}
+          onSubmit={(event) => onSubmitRename(event, channel.id)}
+        >
+          <input
+            autoFocus
+            aria-label={`Новое имя для «${channel.name}»`}
+            className={setStyles.renameInput}
+            onChange={(event) => onRenameChange(event.target.value)}
+            type="text"
+            value={renameValue}
+          />
+          <button
+            className={`${uiStyles.button} ${uiStyles.buttonSmall} ${uiStyles.buttonPrimary}`}
+            disabled={isPending}
+            type="submit"
+          >
+            Сохранить
+          </button>
+          <button
+            className={`${uiStyles.button} ${uiStyles.buttonSmall} ${uiStyles.buttonGhost}`}
+            disabled={isPending}
+            onClick={onCancelRename}
+            type="button"
+          >
+            Отмена
+          </button>
+        </form>
       ) : (
-        <p className={setStyles.description}>
-          Все поддерживаемые платформы уже подключены.
-        </p>
+        <>
+          <div className={setStyles.connectionBody}>
+            <b>{channel.name}</b>
+            <span>{statusLine(channel)}</span>
+          </div>
+          <button
+            className={`${uiStyles.button} ${uiStyles.buttonSmall} ${uiStyles.buttonSecondary}`}
+            disabled={isPending}
+            onClick={() => onStartRename(channel)}
+            type="button"
+          >
+            Переименовать
+          </button>
+          <button
+            className={`${uiStyles.button} ${uiStyles.buttonSmall} ${uiStyles.buttonGhost}`}
+            disabled={isPending}
+            onClick={() => onToggleStatus(channel)}
+            type="button"
+          >
+            {channel.status === "active" ? "Отключить" : "Включить"}
+          </button>
+        </>
       )}
-    </>
+    </div>
   );
 }

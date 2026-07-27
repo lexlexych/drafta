@@ -13,6 +13,7 @@ import {
   CONNECT_STATE_NONCE_PARAM,
   verifyConnectState,
 } from "@/lib/channels/connect-state";
+import { buildChannelConnectionName } from "@/lib/channels/labels";
 import { createChannelConnection } from "@/lib/db/channel-connections";
 import { createServerSupabaseClient } from "@/lib/db/server";
 
@@ -28,10 +29,11 @@ export const dynamic = "force-dynamic";
  * requires the nonce echoed in the URL (`cn`) to match the token's nonce (a
  * CSRF double-submit — the provider doesn't round-trip our state). It then
  * asks the provider's adapter to turn its callback query into the connected
- * account's external ID (`parseConnectCallback` — provider-specific parsing
- * stays in `lib/channels/<provider>/`, rule 4), creates the
- * `channel_connections` row under the user's RLS session, and redirects back
- * to Settings → Channels with a result banner. The user never touches the
+ * account's external ID and handle (`parseConnectCallback` —
+ * provider-specific parsing stays in `lib/channels/<provider>/`, rule 4),
+ * creates the `channel_connections` row under the user's RLS session — named
+ * after that account, the user types no name — and redirects back to
+ * Settings → Channels with a result banner. The user never touches the
  * provider's own dashboard.
  *
  * Mirrors the auth-callback pattern in app/(auth)/auth/confirm/route.ts
@@ -81,10 +83,12 @@ export async function GET(
 
   let externalAccountId: string;
   let reportedPlatform: string | undefined;
+  let accountUsername: string | undefined;
   try {
     const parsed = await adapter.parseConnectCallback({ query });
     externalAccountId = parsed.externalAccountId;
     reportedPlatform = parsed.platform;
+    accountUsername = parsed.accountUsername;
   } catch (error) {
     console.error(
       `[channels/${provider}] connect callback did not yield an account`,
@@ -104,7 +108,9 @@ export async function GET(
     provider,
     platform: verified.state.platform,
     externalId: externalAccountId,
-    name: verified.state.name,
+    // The connection is named after the authorized account — the user picks
+    // no name up front and renames later if needed.
+    name: buildChannelConnectionName(verified.state.platform, accountUsername),
   });
 
   if (!result.ok) {

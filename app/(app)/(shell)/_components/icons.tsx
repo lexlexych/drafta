@@ -159,6 +159,65 @@ export function AccountIcon(props: IconProps) {
   );
 }
 
+/* ---------- значки платформ (настройки → каналы) ---------- */
+
+/** Instagram: скруглённый квадрат с объективом. */
+export function InstagramIcon(props: IconProps) {
+  return (
+    <Icon {...stroke} strokeWidth={1.9} {...props}>
+      <rect x="3.6" y="3.6" width="16.8" height="16.8" rx="5" />
+      <circle cx="12" cy="12" r="4" />
+      <circle cx="16.9" cy="7.1" r="1.15" fill="currentColor" stroke="none" />
+    </Icon>
+  );
+}
+
+/** Telegram: бумажный самолётик. */
+export function TelegramIcon(props: IconProps) {
+  return (
+    <Icon {...stroke} strokeWidth={1.8} strokeLinejoin="round" {...props}>
+      <path d="M21 4 3 10.8l6.2 2.4L21 4Z" />
+      <path d="M21 4 9.2 13.2V20l3.3-4L21 4Z" />
+    </Icon>
+  );
+}
+
+/** WhatsApp: трубка в облачке сообщения. */
+export function WhatsAppIcon(props: IconProps) {
+  return (
+    <Icon
+      {...stroke}
+      strokeWidth={1.8}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      {...props}
+    >
+      <path d="M20.4 11.8a8.4 8.4 0 0 1-12.5 7.3l-4.3 1.3 1.3-4.3A8.4 8.4 0 1 1 20.4 11.8Z" />
+      <path d="M9.4 8.9c.3-.5.9-.5 1.2 0l.7 1.3-.9 1a4.9 4.9 0 0 0 2.4 2.4l1-.9 1.3.7c.5.3.5.9 0 1.2-1 .6-2.2.4-3.5-.5a9 9 0 0 1-2.4-2.6c-.9-1.4-1-2.6-.4-3.6Z" />
+    </Icon>
+  );
+}
+
+/** Facebook: «f» в круге. */
+export function FacebookIcon(props: IconProps) {
+  return (
+    <Icon {...stroke} strokeWidth={1.9} strokeLinecap="round" {...props}>
+      <circle cx="12" cy="12" r="8.5" />
+      <path d="M14 7.9h-1.3a1.9 1.9 0 0 0-1.9 1.9v6.6M9.5 12.1h4" />
+    </Icon>
+  );
+}
+
+/** Email: конверт. */
+export function MailIcon(props: IconProps) {
+  return (
+    <Icon {...stroke} strokeWidth={1.8} strokeLinejoin="round" {...props}>
+      <rect x="3" y="5.5" width="18" height="13" rx="2.5" />
+      <path d="m4.2 8.2 7.8 5 7.8-5" />
+    </Icon>
+  );
+}
+
 export function ChevronIcon(props: IconProps) {
   return (
     <Icon

@@ -7,10 +7,7 @@ import {
   type SettingsSectionId,
 } from "@/lib/mock";
 import { getAiModelOptions, type AiModelOption } from "@/lib/ai/config";
-import {
-  SUPPORTED_CHANNEL_PLATFORMS,
-  listChannelConnections,
-} from "@/lib/db/channel-connections";
+import { listChannelConnections } from "@/lib/db/channel-connections";
 import { listCategories, type CategoryRow } from "@/lib/db/categories";
 import {
   getWorkspaceAiSettings,
@@ -453,13 +450,10 @@ function ChannelsSection({
     <>
       <p className={setStyles.description}>
         В рабочем пространстве можно подключить по одному каналу каждой
-        платформы. Имя подключения видно в списках, тредах и меню.
+        платформы. Имя канала подставляется из имени аккаунта и видно в
+        списках, тредах и меню — переименовать его можно в любой момент.
       </p>
-      <ChannelsPanel
-        channels={channels}
-        supportedPlatforms={SUPPORTED_CHANNEL_PLATFORMS}
-        connectResult={connectResult}
-      />
+      <ChannelsPanel channels={channels} connectResult={connectResult} />
     </>
   );
 }

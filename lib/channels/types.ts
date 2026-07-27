@@ -264,28 +264,11 @@ export interface ConnectCallbackResult {
   /** Platform the provider reports the account was connected for (cross-check against the pending state). */
   platform?: ChannelPlatform;
   /**
-   * Optional provider credentials/tokens to persist encrypted
-   * (channel_connections.encrypted_credentials). Empty for Zernio — Zernio
-   * holds the platform tokens; drafta only stores the account ID.
+   * Display name / handle of the authorized account, when the provider
+   * reports one. The connection is named after it — the user never types a
+   * name (`lib/channels/labels.ts`, docs/architecture/05-channels.md).
    */
-  credentials?: Record<string, unknown>;
-}
-
-/** Input to the optional `parseConnectCallback` — the query parameters the provider appended to the redirect. */
-export interface ParseConnectCallbackInput {
-  /** Query-string parameters of the provider's redirect back to us (keys as-is). */
-  query: Record<string, string>;
-}
-
-/** Result of `parseConnectCallback` — what the callback route needs to create the `channel_connections` row. */
-export interface ConnectCallbackResult {
-  /**
-   * External ID of the connected social account — must equal what the
-   * provider reports as `externalAccountId` on inbound webhooks
-   * (NormalizedEvent.externalAccountId), so (provider, externalAccountId)
-   * keeps resolving the same connection.
-   */
-  externalAccountId: string;
+  accountUsername?: string;
   /**
    * Optional provider credentials/tokens to persist encrypted
    * (channel_connections.encrypted_credentials). Empty for Zernio — Zernio

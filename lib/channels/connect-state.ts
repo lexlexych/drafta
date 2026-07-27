@@ -8,8 +8,8 @@ import type { ChannelPlatform } from "./types";
  * Signed `state` for the channel account-connect (OAuth) flow.
  *
  * When a user starts connecting a channel, the server action encodes the
- * pending intent (which workspace, which platform, the chosen connection
- * name) into a compact token, HMAC-signs it with `CHANNEL_CONNECT_STATE_SECRET`,
+ * pending intent (which workspace, which platform) into a compact token,
+ * HMAC-signs it with `CHANNEL_CONNECT_STATE_SECRET`,
  * and stores it in an httpOnly cookie. The provider (Zernio) does not
  * round-trip an arbitrary `state` back to our callback, so instead the
  * signed token's `nonce` is echoed in the `redirect_url` (query param `cn`);
@@ -35,7 +35,6 @@ export const CONNECT_STATE_NONCE_PARAM = "cn";
 export interface ConnectStatePayload {
   workspaceId: string;
   platform: ChannelPlatform;
-  name: string;
   /** Random per-attempt value; mirrored into an httpOnly cookie and re-checked on callback. */
   nonce: string;
 }
