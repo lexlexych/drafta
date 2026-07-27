@@ -84,6 +84,7 @@
 .connectionRow {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 12px;
   padding: 11px 0;
   border-top: 1px solid var(--line);
@@ -102,12 +103,30 @@
   display: flex;
   align-items: center;
   gap: 8px;
+  min-width: 0;
   font-size: 13.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .connectionBody span {
+  display: block;
   font-size: 11.5px;
   color: var(--ink3);
+}
+
+/* Кнопки строки канала — одной группой, чтобы переноситься целиком. */
+.connectionActions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  margin-left: auto;
+}
+
+.connectionActions button {
+  white-space: nowrap;
 }
 
 .connectionDot {
@@ -629,6 +648,45 @@
 
   .aiFormFooter button {
     width: 100%;
+  }
+}
+
+/* Узкий экран: кнопки строки канала не помещаются рядом с именем — уводим их
+   на собственную строку под ним, вместо наползания на текст. */
+@media (max-width: 600px) {
+  .connectionRow {
+    row-gap: 10px;
+  }
+
+  .connectionBody {
+    flex: 1 0 calc(100% - 36px);
+  }
+
+  .connectionActions {
+    flex: 1 0 100%;
+    margin-left: 0;
+  }
+
+  .connectionActions button {
+    flex: 1;
+    justify-content: center;
+  }
+
+  .connectionActions .channelDeleteButton {
+    flex: none;
+  }
+
+  .renameForm {
+    flex-wrap: wrap;
+  }
+
+  .renameInput {
+    flex: 1 0 100%;
+  }
+
+  .renameForm button {
+    flex: 1;
+    justify-content: center;
   }
 }
 
