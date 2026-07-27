@@ -14,7 +14,10 @@ import {
   verifyConnectState,
 } from "@/lib/channels/connect-state";
 import { buildChannelConnectionName } from "@/lib/channels/labels";
-import { createChannelConnection } from "@/lib/db/channel-connections";
+import {
+  createChannelConnection,
+  findChannelConnectionByExternalId,
+} from "@/lib/db/channel-connections";
 import { createServerSupabaseClient } from "@/lib/db/server";
 
 export const dynamic = "force-dynamic";
@@ -114,9 +117,27 @@ export async function GET(
   });
 
   if (!result.ok) {
-    // A duplicate (workspace, provider, external_id) is the one expected
-    // business error; everything else (e.g. RLS rejecting because the session
-    // isn't a member) is a generic failure.
+    // This callback can legitimately run more than once for a single connect:
+    // the provider's redirect gets re-fetched (an in-app browser prefetching
+    // the URL, a retried navigation, a double tap that started two flows).
+    // The later run then hits the unique constraint — but the account the user
+    // just authorized *is* connected, by the earlier run. Reporting a conflict
+    // there is wrong and reads as "уже подключён" right after a reconnect, so
+    // check who actually holds the row first.
+    const existing = await findChannelConnectionByExternalId(
+      supabase,
+      verified.state.workspaceId,
+      provider,
+      externalAccountId,
+    );
+
+    if (existing) {
+      return redirectToChannels(request, "connected");
+    }
+
+    // A different account of this platform is connected — a real conflict
+    // (one channel per platform). Anything else (e.g. RLS rejecting because
+    // the session isn't a member) is a generic failure.
     const reason = /уже подключён/.test(result.error) ? "duplicate" : "failed";
     return redirectToChannels(request, "error", reason);
   }

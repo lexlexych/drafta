@@ -13,9 +13,12 @@ process.env.CHANNEL_CONNECT_STATE_SECRET = "test-connect-state-secret";
 // cookie state + nonce CSRF, provider resolution, callback parsing, redirect
 // targets — not the create query (covered by lib/db/channel-connections.test.ts).
 const createChannelConnectionMock = vi.fn();
+const findChannelConnectionByExternalIdMock = vi.fn().mockResolvedValue(null);
 vi.mock("@/lib/db/channel-connections", () => ({
   createChannelConnection: (...args: unknown[]) =>
     createChannelConnectionMock(...args),
+  findChannelConnectionByExternalId: (...args: unknown[]) =>
+    findChannelConnectionByExternalIdMock(...args),
 }));
 vi.mock("@/lib/db/server", () => ({
   createServerSupabaseClient: vi.fn().mockResolvedValue({}),
@@ -66,6 +69,7 @@ async function callCallback(opts: {
 
 afterEach(() => {
   vi.clearAllMocks();
+  findChannelConnectionByExternalIdMock.mockResolvedValue(null);
 });
 
 describe("GET /api/channels/[provider]/connect/callback", () => {
@@ -116,11 +120,13 @@ describe("GET /api/channels/[provider]/connect/callback", () => {
     );
   });
 
-  it("redirects with reason=duplicate when the account is already connected", async () => {
+  it("redirects with reason=duplicate when another account of the platform is connected", async () => {
     createChannelConnectionMock.mockResolvedValue({
       ok: false,
-      error: "Этот аккаунт уже подключён к рабочему пространству.",
+      error: "Канал этой платформы уже подключён к рабочему пространству.",
     });
+    // The row that blocks the insert belongs to a different account.
+    findChannelConnectionByExternalIdMock.mockResolvedValue(null);
 
     const location = await callCallback({
       search: { [CONNECT_STATE_NONCE_PARAM]: NONCE, accountId: "acct_dup" },
@@ -129,6 +135,38 @@ describe("GET /api/channels/[provider]/connect/callback", () => {
 
     expect(location.searchParams.get("connect")).toBe("error");
     expect(location.searchParams.get("reason")).toBe("duplicate");
+  });
+
+  it("reports success when the account being connected is already the connected one", async () => {
+    // The callback can run twice for one connect (a re-fetched redirect, a
+    // double tap): the second run hits the unique constraint even though the
+    // account the user authorized is connected — that is not a conflict.
+    createChannelConnectionMock.mockResolvedValue({
+      ok: false,
+      error: "Канал этой платформы уже подключён к рабочему пространству.",
+    });
+    findChannelConnectionByExternalIdMock.mockResolvedValue({
+      id: "chc_1",
+      external_id: "acct_tg_98213",
+    });
+
+    const location = await callCallback({
+      search: {
+        [CONNECT_STATE_NONCE_PARAM]: NONCE,
+        connected: "telegram",
+        accountId: "acct_tg_98213",
+      },
+      cookieToken: mintState(),
+    });
+
+    expect(findChannelConnectionByExternalIdMock).toHaveBeenCalledWith(
+      expect.anything(),
+      "ws_1",
+      "zernio",
+      "acct_tg_98213",
+    );
+    expect(location.searchParams.get("connect")).toBe("connected");
+    expect(location.searchParams.get("reason")).toBeNull();
   });
 
   it("redirects with reason=failed on a generic create failure", async () => {

@@ -107,6 +107,37 @@ export async function getChannelConnection(
   return (data as ChannelConnectionRow | null) ?? null;
 }
 
+/**
+ * The workspace's connection for one provider account, or `null`. Used by the
+ * connect callback to tell "this very account is already connected" (a repeat
+ * of the same callback — nothing to do) from "another account of this platform
+ * is connected" (a real conflict).
+ */
+export async function findChannelConnectionByExternalId(
+  supabase: SupabaseClient,
+  workspaceId: string,
+  provider: string,
+  externalId: string,
+): Promise<ChannelConnectionRow | null> {
+  const { data, error } = await supabase
+    .from("channel_connections")
+    .select(CHANNEL_CONNECTION_COLUMNS)
+    .eq("workspace_id", workspaceId)
+    .eq("provider", provider)
+    .eq("external_id", externalId)
+    .maybeSingle();
+
+  if (error) {
+    console.error(
+      "[settings/channels] failed to look up a channel_connection by external id",
+      error,
+    );
+    return null;
+  }
+
+  return (data as ChannelConnectionRow | null) ?? null;
+}
+
 /** True when this workspace already owns a connection for the platform. */
 export async function hasChannelConnectionForPlatform(
   supabase: SupabaseClient,
