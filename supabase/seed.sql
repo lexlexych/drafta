@@ -150,11 +150,12 @@ set
   role = excluded.role,
   updated_at = now();
 
+-- Промпты в сидах короткие и разные: так в локальной разработке сразу видно,
+-- какой workspace попал в промпт. Полный шаблон приходит из дефолта колонки.
 insert into public.ai_settings (
   workspace_id,
-  tone,
-  language,
-  signature,
+  system_prompt,
+  comment_system_prompt,
   debounce_seconds,
   model,
   auto_generate_dm
@@ -162,27 +163,24 @@ insert into public.ai_settings (
 values
   (
     'a0000000-0000-4000-8000-000000000001',
-    'friendly',
-    'de',
-    'Viele Grüße, Demo A',
+    'Пиши от лица Demo A. Отражай тон клиента и не выдумывай фактов.',
+    'Отвечай на комментарии Demo A коротко и дружелюбно.',
     45,
     'mistral-large-latest',
     true
   ),
   (
     'b0000000-0000-4000-8000-000000000001',
-    'professional',
-    'de',
-    'Mit freundlichen Grüßen, Demo B',
+    'Пиши от лица Demo B. Держи деловой стиль и не выдумывай фактов.',
+    'Отвечай на комментарии Demo B коротко и в деловом стиле.',
     60,
     'mistral-large-latest',
     true
   )
 on conflict (workspace_id) do update
 set
-  tone = excluded.tone,
-  language = excluded.language,
-  signature = excluded.signature,
+  system_prompt = excluded.system_prompt,
+  comment_system_prompt = excluded.comment_system_prompt,
   debounce_seconds = excluded.debounce_seconds,
   model = excluded.model,
   auto_generate_dm = excluded.auto_generate_dm,

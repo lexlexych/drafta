@@ -183,9 +183,8 @@ vi.mock("@/lib/db/ai-settings", () => ({
   getWorkspaceAiSettings: async () => ({
     id: "ais_tonwerk",
     workspace_id: "wsp_tonwerk",
-    tone: "friendly",
-    language: "de",
-    signature: "Viele Grüße",
+    system_prompt: "Пиши от лица мастерской Tonwerk.",
+    comment_system_prompt: "Отвечай на комментарии Tonwerk коротко.",
     debounce_seconds: 45,
     model: "mistral-large-latest",
     auto_generate_dm: true,
@@ -810,7 +809,8 @@ describe("settings page", () => {
   it("renders the ai section with switches", async () => {
     render(await SettingsPage({ searchParams: searchParams({ section: "ai" }) }));
 
-    expect(screen.getByLabelText("Тон ответов")).toBeDefined();
+    expect(screen.getByLabelText("Черновики сообщений")).toBeDefined();
+    expect(screen.getByLabelText("Черновики комментариев")).toBeDefined();
     expect(
       screen.getByRole("switch", { name: "Авто-генерация для сообщений" }),
     ).toBeDefined();

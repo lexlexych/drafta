@@ -942,7 +942,11 @@ export const SETTINGS_SECTIONS: SettingsSectionView[] = [
     title: "Категории",
     description: "Правила классификации входящих",
   },
-  { id: "ai", title: "AI", description: "Тон, язык, дебаунс, авто-генерация" },
+  {
+    id: "ai",
+    title: "AI",
+    description: "Системные промпты, модель, дебаунс",
+  },
   {
     id: "knowledge",
     title: "База знаний",

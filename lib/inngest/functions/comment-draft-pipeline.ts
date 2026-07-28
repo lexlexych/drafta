@@ -65,9 +65,7 @@ type PromptLogger = {
 };
 
 export type CommentPipelineAiSettings = {
-  tone: string;
-  language: string;
-  signature: string;
+  commentSystemPrompt: string;
   model: string;
 };
 
@@ -173,18 +171,14 @@ function normalizeAiSettings(
   row: Record<string, unknown>,
 ): CommentPipelineAiSettings {
   if (
-    typeof row.tone !== "string" ||
-    typeof row.language !== "string" ||
-    typeof row.signature !== "string" ||
+    typeof row.comment_system_prompt !== "string" ||
     typeof row.model !== "string"
   ) {
     throw new Error("Workspace AI settings are invalid.");
   }
 
   return {
-    tone: row.tone,
-    language: row.language,
-    signature: row.signature,
+    commentSystemPrompt: row.comment_system_prompt,
     model: row.model,
   };
 }
@@ -263,7 +257,7 @@ async function loadContext(
   ] = await Promise.all([
     supabase
       .from("ai_settings")
-      .select("tone, language, signature, model")
+      .select("comment_system_prompt, model")
       .eq("workspace_id", input.workspaceId)
       .maybeSingle(),
     supabase
@@ -509,9 +503,9 @@ function maskCommentPrompt(
     context.brief.description,
     context.brief.instruction,
     context.knowledgeBase.text,
-    context.aiSettings.tone,
-    context.aiSettings.language,
-    context.aiSettings.signature,
+    // Промпт маскируется вместе с остальным: в него могли вписать контакты,
+    // а `unmaskText` вернёт их в готовый ответ.
+    context.aiSettings.commentSystemPrompt,
     target.authorName,
     target.text,
     target.parent?.authorName ?? "",
@@ -524,9 +518,7 @@ function maskCommentPrompt(
   const description = masked[index++]!;
   const instruction = masked[index++]!;
   const knowledgeBaseText = masked[index++]!;
-  const tone = masked[index++]!;
-  const language = masked[index++]!;
-  const signature = masked[index++]!;
+  const commentSystemPrompt = masked[index++]!;
   const targetAuthorName = masked[index++]!;
   const targetText = masked[index++]!;
   const parentAuthorName = masked[index++]!;
@@ -536,7 +528,7 @@ function maskCommentPrompt(
   return {
     entities,
     prompt: buildCommentDraftPrompt({
-      aiSettings: { tone, language, signature },
+      aiSettings: { commentSystemPrompt },
       channelCapabilities: context.channelCapabilities,
       knowledgeBase: {
         text: knowledgeBaseText,

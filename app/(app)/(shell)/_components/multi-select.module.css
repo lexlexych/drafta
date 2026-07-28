@@ -7,6 +7,18 @@
   min-width: 0;
 }
 
+/* Контрол живёт внутри лейблов полей, которые задают капс, разрядку, жирность и
+   приглушённый цвет для собственного текста (например `.categoryField` в
+   settings.module.css). Без явного сброса эта типографика наследуется внутрь
+   выпадашки, и имена файлов базы знаний превращаются в нечитаемый блёклый капс.
+   Инпуты и textarea тех же полей защищены такими же сбросами. */
+.panel {
+  color: var(--ink);
+  font-weight: 400;
+  letter-spacing: normal;
+  text-transform: none;
+}
+
 .trigger {
   display: inline-flex;
   align-items: center;
@@ -18,9 +30,14 @@
   border-radius: 8px;
   background: var(--surface);
   color: var(--ink);
+  /* `font: inherit` заново подтягивает жирность лейбла-родителя, поэтому сброс
+     идёт строго после него. */
   font: inherit;
   font-size: 13px;
+  font-weight: 400;
+  letter-spacing: normal;
   line-height: 1.3;
+  text-transform: none;
   cursor: pointer;
 }
 
