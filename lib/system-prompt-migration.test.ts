@@ -4,18 +4,25 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import {
+  AI_SYSTEM_PROMPT_MAX_LENGTH,
   DEFAULT_COMMENT_SYSTEM_PROMPT,
   DEFAULT_SYSTEM_PROMPT,
 } from "./ai/default-prompts";
 
-const migration = readFileSync(
-  join(
-    process.cwd(),
-    "supabase",
-    "migrations",
-    "20260728100000_workspace_system_prompts.sql",
-  ),
-  "utf8",
+function migrationSql(name: string): string {
+  return readFileSync(
+    join(process.cwd(), "supabase", "migrations", name),
+    "utf8",
+  );
+}
+
+const migration = migrationSql("20260728100000_workspace_system_prompts.sql");
+/**
+ * Шаблоны правятся новой миграцией, а не правкой уже применённой: та не
+ * выполняется повторно, и дефолт колонки в базе остался бы старым.
+ */
+const templates = migrationSql(
+  "20260728120000_default_prompt_language_and_channel.sql",
 );
 
 describe("workspace system prompts migration", () => {
@@ -23,8 +30,31 @@ describe("workspace system prompts migration", () => {
     // Дефолт колонки — единственный способ, которым новый workspace получает
     // шаблон, а форма настроек предлагает «Вернуть шаблон» из TS-константы.
     // Разъезд этих двух текстов был бы незаметен до первого сброса промпта.
-    expect(migration).toContain(DEFAULT_SYSTEM_PROMPT);
-    expect(migration).toContain(DEFAULT_COMMENT_SYSTEM_PROMPT);
+    expect(templates).toContain(DEFAULT_SYSTEM_PROMPT);
+    expect(templates).toContain(DEFAULT_COMMENT_SYSTEM_PROMPT);
+    expect(templates).toContain(
+      "alter column system_prompt set default $prompt$",
+    );
+    expect(templates).toContain(
+      "alter column comment_system_prompt set default $prompt$",
+    );
+    // Бэкфилла быть не должно: system_prompt редактируемый, и перезапись
+    // стёрла бы текст, который workspace уже настроил под себя.
+    expect(templates).not.toContain("update public.ai_settings");
+  });
+
+  it("ships templates the settings form would accept", () => {
+    // Шаблон длиннее лимита прошёл бы тесты, но упал бы на сохранении формы и
+    // на check-констрейнте колонки.
+    expect(DEFAULT_SYSTEM_PROMPT.length).toBeLessThanOrEqual(
+      AI_SYSTEM_PROMPT_MAX_LENGTH,
+    );
+    expect(DEFAULT_COMMENT_SYSTEM_PROMPT.length).toBeLessThanOrEqual(
+      AI_SYSTEM_PROMPT_MAX_LENGTH,
+    );
+  });
+
+  it("creates the columns with a template default in the original migration", () => {
     expect(migration).toContain(
       "add column system_prompt text not null default $prompt$",
     );
@@ -42,6 +72,29 @@ describe("workspace system prompts migration", () => {
     // сообщения, см. groundingRules() без refusalMarker.
     expect(DEFAULT_COMMENT_SYSTEM_PROMPT).not.toContain("NEEDS_MANUAL_REVIEW");
     expect(DEFAULT_COMMENT_SYSTEM_PROMPT).toContain("в личные сообщения");
+  });
+
+  it("puts the language rule ahead of tone in both templates", () => {
+    // Правило языка стояло последней строкой блока про тон, и приветствие,
+    // скопированное у клиента, уезжало в язык базы знаний:
+    // «Привет! Für die Teilnahme…».
+    for (const template of [
+      DEFAULT_SYSTEM_PROMPT,
+      DEFAULT_COMMENT_SYSTEM_PROMPT,
+    ]) {
+      const language = template.indexOf("## Язык ответа");
+      expect(language).toBeGreaterThan(-1);
+      expect(language).toBeLessThan(template.indexOf("## Тон и приветствие"));
+      expect(template).toContain("не смешивай языки в одном");
+    }
+  });
+
+  it("keeps the template from redirecting a customer into the channel they used", () => {
+    expect(DEFAULT_SYSTEM_PROMPT).toContain("## Клиент уже написал вам");
+    expect(DEFAULT_SYSTEM_PROMPT).toContain("schreiben Sie uns per Direct");
+    // Источник, отвечающий только «напишите нам — пришлём условия», не
+    // отвечает на вопрос об условиях: это работа оператора.
+    expect(DEFAULT_SYSTEM_PROMPT).toContain("только обещанием связаться");
   });
 
   it("drops the settings that moved into the prompt text", () => {
