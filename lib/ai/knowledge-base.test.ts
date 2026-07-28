@@ -65,9 +65,10 @@ describe("knowledge-base prompt context", () => {
   });
 
   it("uses the category's own file selection, including files disabled in the KB", () => {
-    const result = buildKnowledgeBaseContext(files, { fileIds: ["hidden"] });
+    // Именно id, а не имя файла: `categories.kb_file_ids` — массив uuid.
+    const result = buildKnowledgeBaseContext(files, { fileIds: ["disabled"] });
 
-    expect(result.usedFileIds).toEqual(["hidden"]);
+    expect(result.usedFileIds).toEqual(["disabled"]);
     expect(result.text).toContain("03-hidden.md");
     expect(result.text).not.toContain("01-about.md");
   });
