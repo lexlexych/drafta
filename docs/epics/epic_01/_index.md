@@ -1,4 +1,4 @@
----
+--- 
 id: E-001
 title: "Фундамент: Next.js + Supabase Auth, схема БД v1, RLS"
 status: done
