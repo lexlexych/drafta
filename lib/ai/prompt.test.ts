@@ -16,9 +16,8 @@ const rawPhone = "+49 151 23456789";
 function promptInput(overrides: Partial<PromptInput> = {}): PromptInput {
   return {
     aiSettings: {
-      tone: "warm and professional",
-      language: "German",
-      signature: "— Team Tonwerk",
+      systemPrompt:
+        "Пиши от лица мастерской Tonwerk. Здоровайся так же, как клиент.",
     },
     maskedMessages: [
       { direction: "outgoing", text: "Wie können wir helfen?" },
@@ -68,7 +67,7 @@ describe("buildDraftPrompt", () => {
   it("keeps the architecture sections in order and fills their real data", () => {
     const { system, user } = contents();
     const headings = [
-      "## 1. Role and tone",
+      "## 1. Business system prompt",
       "## 2. Knowledge base",
       "## 3. Facts, grounding and refusal",
       "## 4. Contact notes",
@@ -85,6 +84,12 @@ describe("buildDraftPrompt", () => {
       previousIndex = index;
     }
 
+    // Промпт workspace идёт как инструкции, а не в UNTRUSTED-блоке: его пишет
+    // владелец workspace, от чьего лица и создаётся черновик.
+    expect(system).toContain(
+      "Пиши от лица мастерской Tonwerk. Здоровайся так же, как клиент.",
+    );
+    expect(system).not.toContain("UNTRUSTED_SYSTEM_PROMPT_JSON");
     expect(system).toContain("Der Versand kostet 4,90 EUR.");
     expect(system).toContain("Preisfrage");
     expect(system).toContain("Nenne den Preis klar");

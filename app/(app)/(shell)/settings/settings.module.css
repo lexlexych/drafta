@@ -278,6 +278,41 @@
   gap: 12px;
 }
 
+/* Системный промпт — длинный редактируемый текст, а не подпись в одну строку:
+   моноширинный шрифт помогает видеть отступы списков и структуру секций. */
+.aiPromptInput {
+  width: 100%;
+  min-height: 220px;
+  resize: vertical;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--line2);
+  border-radius: 9px;
+  padding: 10px 12px;
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 12.5px;
+  line-height: 1.55;
+  tab-size: 2;
+}
+
+.aiPromptInput:focus {
+  border-color: transparent;
+  outline: 2px solid var(--accent);
+}
+
+.aiPromptInput:disabled {
+  color: var(--ink3);
+  background: var(--surface2);
+}
+
+.aiPromptFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
 .aiDebounceField {
   display: flex;
   align-items: center;

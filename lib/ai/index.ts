@@ -51,7 +51,13 @@ export type {
 } from "./classification";
 export { buildCommentDraftPrompt } from "./comment-prompt";
 export type {
+  CommentPromptAiSettings,
   CommentPromptBrief,
   CommentPromptInput,
   CommentPromptTarget,
 } from "./comment-prompt";
+export {
+  AI_SYSTEM_PROMPT_MAX_LENGTH,
+  DEFAULT_COMMENT_SYSTEM_PROMPT,
+  DEFAULT_SYSTEM_PROMPT,
+} from "./default-prompts";

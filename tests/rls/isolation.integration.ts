@@ -269,7 +269,7 @@ describe("workspace RLS isolation", () => {
     const updateAttempt = await ownerAClient
       .from("ai_settings")
       .update({
-        tone: "hijacked",
+        system_prompt: "hijacked",
         debounce_seconds: 0,
         auto_generate_dm: false,
       })
@@ -287,13 +287,14 @@ describe("workspace RLS isolation", () => {
 
     const stillIntact = await ownerBClient
       .from("ai_settings")
-      .select("tone, debounce_seconds, auto_generate_dm")
+      .select("system_prompt, debounce_seconds, auto_generate_dm")
       .eq("workspace_id", rlsSeedFixtures.ownerB.workspaceId)
       .single();
 
     expect(stillIntact.error, "owner B re-reading their AI settings").toBeNull();
     expect(stillIntact.data).toMatchObject({
-      tone: "professional",
+      system_prompt:
+        "Пиши от лица Demo B. Держи деловой стиль и не выдумывай фактов.",
       debounce_seconds: 60,
       auto_generate_dm: true,
     });
