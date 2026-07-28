@@ -21,7 +21,7 @@
  * спрашивает подтверждение прямо в блоке.
  */
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 
 import { CHANNEL_PLATFORM_LABELS } from "@/lib/channels/labels";
@@ -139,6 +139,29 @@ function statusLine(channel: ChannelConnectionListItem): string {
   return `${CHANNEL_PLATFORM_LABELS[channel.platform]} · ${STATUS_LABELS[channel.status]}`;
 }
 
+type ConnectBanner = { kind: "success" | "error"; text: string };
+
+function connectBannerFor(
+  result: ChannelConnectResult | null,
+): ConnectBanner | null {
+  if (result?.status === "connected") {
+    return { kind: "success", text: "Канал подключён." };
+  }
+  if (result?.status === "error") {
+    return {
+      kind: "error",
+      text:
+        CONNECT_ERROR_MESSAGES[result.reason ?? ""] ??
+        "Не удалось подключить канал.",
+    };
+  }
+
+  return null;
+}
+
+/** Query-параметры результата подключения, которые дописывает callback-роут. */
+const CONNECT_RESULT_PARAMS = ["connect", "reason"] as const;
+
 export function ChannelsPanel({
   channels,
   connectResult = null,
@@ -161,6 +184,30 @@ export function ChannelsPanel({
   const [onboardingKey, setOnboardingKey] = useState<ChannelBlockKey | null>(null);
   /** Блок, для которого показана заглушка «в разработке». */
   const [stubKey, setStubKey] = useState<ChannelBlockKey | null>(null);
+
+  /**
+   * Итог возврата из OAuth. Живёт в состоянии, а не читается из URL при каждом
+   * рендере: `connect`/`reason` остаются в адресе и иначе всплывали бы снова
+   * после любого `router.refresh()` — например, показывали бы «канал уже
+   * подключён» уже после того, как канал удалили и подключили заново.
+   */
+  const [banner, setBanner] = useState<ConnectBanner | null>(() =>
+    connectBannerFor(connectResult),
+  );
+
+  useEffect(() => {
+    if (!connectResult || typeof window === "undefined") {
+      return;
+    }
+
+    // Параметры одноразовые: показали баннер — убрали их из адреса.
+    const url = new URL(window.location.href);
+    for (const param of CONNECT_RESULT_PARAMS) {
+      url.searchParams.delete(param);
+    }
+
+    router.replace(`${url.pathname}${url.search}`, { scroll: false });
+  }, [connectResult, router]);
 
   function startRename(channel: ChannelConnectionListItem) {
     setError(null);
@@ -224,6 +271,8 @@ export function ChannelsPanel({
   function startDelete(channel: ChannelConnectionListItem) {
     setError(null);
     setNotice(null);
+    // Итог прошлого подключения к тому, что происходит дальше, отношения не имеет.
+    setBanner(null);
     setRenamingId(null);
     setDeletingId(channel.id);
   }
@@ -260,6 +309,7 @@ export function ChannelsPanel({
   /** Кнопка «Подключить …»: онбординг для готовых платформ, заглушка для остальных. */
   function openConnect(block: ChannelBlock) {
     setError(null);
+    setBanner(null);
 
     if (!block.connect) {
       setOnboardingKey(null);
@@ -294,30 +344,16 @@ export function ChannelsPanel({
     });
   }
 
-  const connectBanner =
-    connectResult?.status === "connected"
-      ? { kind: "success" as const, text: "Канал подключён." }
-      : connectResult?.status === "error"
-        ? {
-            kind: "error" as const,
-            text:
-              CONNECT_ERROR_MESSAGES[connectResult.reason ?? ""] ??
-              "Не удалось подключить канал.",
-          }
-        : null;
-
   return (
     <>
-      {connectBanner ? (
+      {banner ? (
         <p
           aria-live="polite"
           className={
-            connectBanner.kind === "success"
-              ? setStyles.description
-              : setStyles.formError
+            banner.kind === "success" ? setStyles.description : setStyles.formError
           }
         >
-          {connectBanner.text}
+          {banner.text}
         </p>
       ) : null}
       {error ? (
@@ -581,32 +617,36 @@ function ConnectedChannel({
             <b>{channel.name}</b>
             <span>{statusLine(channel)}</span>
           </div>
-          <button
-            className={`${uiStyles.button} ${uiStyles.buttonSmall} ${uiStyles.buttonSecondary}`}
-            disabled={isPending}
-            onClick={() => onStartRename(channel)}
-            type="button"
-          >
-            Переименовать
-          </button>
-          <button
-            className={`${uiStyles.button} ${uiStyles.buttonSmall} ${uiStyles.buttonGhost}`}
-            disabled={isPending}
-            onClick={() => onToggleStatus(channel)}
-            type="button"
-          >
-            {channel.status === "active" ? "Отключить" : "Включить"}
-          </button>
-          <button
-            aria-label={`Удалить канал «${channel.name}»`}
-            className={`${uiStyles.button} ${uiStyles.buttonSmall} ${uiStyles.buttonGhost} ${uiStyles.buttonDanger} ${setStyles.channelDeleteButton}`}
-            disabled={isPending}
-            onClick={() => onStartDelete(channel)}
-            title="Удалить канал"
-            type="button"
-          >
-            <TrashIcon />
-          </button>
+          {/* Действия — одной группой: на узком экране она переносится на
+              свою строку целиком, а не разъезжается поверх имени канала. */}
+          <div className={setStyles.connectionActions}>
+            <button
+              className={`${uiStyles.button} ${uiStyles.buttonSmall} ${uiStyles.buttonSecondary}`}
+              disabled={isPending}
+              onClick={() => onStartRename(channel)}
+              type="button"
+            >
+              Переименовать
+            </button>
+            <button
+              className={`${uiStyles.button} ${uiStyles.buttonSmall} ${uiStyles.buttonGhost}`}
+              disabled={isPending}
+              onClick={() => onToggleStatus(channel)}
+              type="button"
+            >
+              {channel.status === "active" ? "Отключить" : "Включить"}
+            </button>
+            <button
+              aria-label={`Удалить канал «${channel.name}»`}
+              className={`${uiStyles.button} ${uiStyles.buttonSmall} ${uiStyles.buttonGhost} ${uiStyles.buttonDanger} ${setStyles.channelDeleteButton}`}
+              disabled={isPending}
+              onClick={() => onStartDelete(channel)}
+              title="Удалить канал"
+              type="button"
+            >
+              <TrashIcon />
+            </button>
+          </div>
         </>
       )}
     </div>

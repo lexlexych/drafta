@@ -31,9 +31,10 @@ vi.mock("./actions", () => ({
 }));
 
 const refresh = vi.fn();
+const replace = vi.fn();
 
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ refresh }),
+  useRouter: () => ({ refresh, replace }),
 }));
 
 let assignMock: ReturnType<typeof vi.fn>;
@@ -42,7 +43,10 @@ beforeEach(() => {
   assignMock = vi.fn();
   Object.defineProperty(window, "location", {
     configurable: true,
-    value: { assign: assignMock },
+    value: {
+      assign: assignMock,
+      href: "http://localhost/settings?section=channels&connect=error&reason=duplicate",
+    },
   });
 });
 
@@ -177,6 +181,53 @@ describe("ChannelsPanel", () => {
     expect(
       screen.getByText("Канал этой платформы уже подключён к рабочему пространству."),
     ).toBeDefined();
+  });
+
+  it("strips the one-shot result params from the url so the banner cannot come back", () => {
+    render(
+      <ChannelsPanel
+        channels={baseChannels}
+        connectResult={{ status: "error", reason: "duplicate" }}
+      />,
+    );
+
+    // Otherwise every later router.refresh() (rename, disable, delete) would
+    // re-render the same params and resurrect the banner.
+    expect(replace).toHaveBeenCalledWith("/settings?section=channels", {
+      scroll: false,
+    });
+  });
+
+  it("drops the banner as soon as the user starts another connect", () => {
+    render(
+      <ChannelsPanel
+        channels={[]}
+        connectResult={{ status: "error", reason: "duplicate" }}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Подключить Instagram" }));
+
+    expect(
+      screen.queryByText(
+        "Канал этой платформы уже подключён к рабочему пространству.",
+      ),
+    ).toBeNull();
+  });
+
+  it("drops the banner when the user starts deleting a channel", () => {
+    render(
+      <ChannelsPanel
+        channels={baseChannels}
+        connectResult={{ status: "connected", reason: null }}
+      />,
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Удалить канал «Telegram Shop»" }),
+    );
+
+    expect(screen.queryByText("Канал подключён.")).toBeNull();
   });
 
   it("replaces the connect button of a connected platform with its channel row", () => {
