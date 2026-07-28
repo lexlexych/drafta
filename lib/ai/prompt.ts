@@ -134,7 +134,12 @@ export function groundingRules(
   options: { refusalMarker?: string } = {},
 ): string[] {
   const rules = [
-    "Every business fact in your answer must come verbatim from one of these sources: the UNTRUSTED_KNOWLEDGE_BASE_JSON block, the UNTRUSTED_CONTACT_NOTES_JSON block, the UNTRUSTED_CONVERSATION_JSON block, or the category `draftInstruction`. There is no other permitted source.",
+    "Every business fact in your answer must be stated by one of these sources: the UNTRUSTED_KNOWLEDGE_BASE_JSON block, the UNTRUSTED_CONTACT_NOTES_JSON block, the UNTRUSTED_CONVERSATION_JSON block, or the category `draftInstruction`. There is no other permitted source.",
+    // Grounding used to demand facts "verbatim", which quietly made copying the
+    // source's own wording the safest move — and with a German knowledge base
+    // that produced German replies to Russian customers. Translation is the
+    // faithful move here, not a deviation from the source.
+    "Sources are often written in a language the customer does not use. Translate their facts into the language of your reply; a translated fact is still the same grounded fact. Never switch the language of the reply to match a source, and never paste a source's wording in a language the customer did not write in.",
     "Never use your own world knowledge, training data, or assumptions about how such a business usually works to supply a fact.",
     "This covers in particular: prices, discounts, fees, delivery and turnaround times, stock and availability, sizes, materials, guarantees, refund and cancellation terms, addresses, opening hours, links, payment or bank details, staff names, and any date or deadline.",
     "Do not approximate, round, generalize, or hedge a missing fact. Phrasings like «usually around», «typically 2-3 days», «as a rule», or «should be about» are inventions and are forbidden.",
@@ -148,6 +153,10 @@ export function groundingRules(
       // отказа фиксирован и не зависит от языка переписки.
       `If answering would require any fact the sources do not contain, do not write a draft at all. Reply with exactly one line and nothing else: ${options.refusalMarker} <one short sentence in Russian naming the missing data>.`,
       "Prefer that single line over a polite generic reply. A vague answer with no facts still reads to the customer as a promise, so it is the worse failure.",
+      // Инструкции «напишите нам» база знаний пишет для витрины, а не для этого
+      // диалога: клиент уже написал. Пересказ такой строки выглядел ответом и
+      // молча уводил вопрос от оператора, хотя ответа в источниках не было.
+      "A source that answers the question only by inviting the customer to get in touch — «write to us», «contact us for the terms», «we will send you the conditions» — is not an answer to a customer who is already writing to you. If that referral is all the sources offer for what was actually asked, return the refusal line instead of repeating it back.",
     );
   }
 
@@ -170,6 +179,10 @@ function channelRules(capabilities: ChannelCapabilities): string[] {
     maxLength,
     threadingStyle,
     "This is a private direct-message conversation.",
+    // Требование написать в личные сообщения база знаний адресует посетителю
+    // сайта или зрителю поста. В диалоге, который уже идёт в личных сообщениях,
+    // тот же текст превращается в просьбу сделать уже сделанное.
+    "The customer is already writing to you in this direct-message conversation. Never tell them to write to you in a direct message, to contact you, to get in touch, or to reach out through this same channel — from their side that has already happened. Redirect them only to a genuinely different place that actually resolves the question, such as visiting a physical location or ordering on the website; anything they can simply send you (a photo, an item number, an order number) they can send right here.",
     capabilities.responseWindowHours === null
       ? "The channel has no known response-window limit."
       : `The channel response window is ${capabilities.responseWindowHours} hours after the last incoming message.`,
