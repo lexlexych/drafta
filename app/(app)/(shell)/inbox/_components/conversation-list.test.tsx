@@ -48,7 +48,7 @@ function item(id: string, title: string, channelId = "chc_ig"): ConversationList
       name: channelId === "chc_ig" ? "Instagram Магазин" : "Facebook Страница",
       platform: channelId === "chc_ig" ? "instagram" : "facebook",
     },
-    category: null,
+    categories: [],
     avatar: { initials: "AA", hue: 10 },
   };
 }

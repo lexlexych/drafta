@@ -23,6 +23,7 @@ export type {
   MaskedResult,
 } from "./masking";
 export {
+  CATEGORIES_MARKER,
   MANUAL_REVIEW_MARKER,
   buildDraftPrompt,
   groundingRules,
@@ -33,22 +34,11 @@ export type {
   ParsedDraftCompletion,
   MaskedPromptMessage,
   PromptAiSettings,
-  PromptCategory,
   PromptInput,
   PromptKnowledgeBase,
   PromptLogger,
   PromptLogOptions,
 } from "./prompt";
-export {
-  DEFAULT_CLASSIFICATION_MAX_TOKENS,
-  buildClassificationPrompt,
-  logClassificationPromptIfEnabled,
-  parseCategorySelection,
-} from "./classification";
-export type {
-  ClassificationCategory,
-  ClassificationInput,
-} from "./classification";
 export { buildCommentDraftPrompt } from "./comment-prompt";
 export type {
   CommentPromptAiSettings,

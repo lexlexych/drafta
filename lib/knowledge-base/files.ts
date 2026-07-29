@@ -1,50 +1,51 @@
 export const MAX_KNOWLEDGE_FILE_BYTES = 512 * 1024;
 export const MAX_KNOWLEDGE_FILE_NAME_LENGTH = 120;
 
-export type MarkdownFileValidationResult =
+export type CategoryValidationResult =
   | { ok: true; name: string; content: string }
   | { ok: false; error: string };
 
 /**
- * Keeps the browser upload flow and server actions on the same contract.
- * Names without an extension get `.md`; a different extension is rejected.
+ * Slashes and control characters mirror the `kb_files_name_characters_check`
+ * constraint; the comma is ours — it separates names in the `CATEGORIES:` line
+ * the model returns, so a name containing one could not be resolved back.
  */
-export function normalizeMarkdownFileName(value: string): string {
-  const name = value.trim();
+const FORBIDDEN_NAME_CHARACTERS = /[\\/,]|\p{Cc}/u;
 
-  if (!name || name.toLowerCase().endsWith(".md")) {
-    return name;
-  }
-
-  return name.includes(".") ? name : `${name}.md`;
-}
-
-export function validateMarkdownFile(
+/**
+ * Keeps the browser editor and the server actions on the same contract.
+ *
+ * A category is edited in the app and never uploaded, so its name is a human
+ * title («Прайс и доставка»), not a file name: no extension is added or
+ * required. The limits mirror the `kb_files` constraints, so a value that
+ * passes here cannot fail on the database side.
+ */
+export function validateCategory(
   rawName: string,
   rawContent: string,
-): MarkdownFileValidationResult {
-  const name = normalizeMarkdownFileName(rawName);
+): CategoryValidationResult {
+  const name = rawName.trim();
   const content = rawContent.replace(/\r\n?/g, "\n");
 
   if (!name) {
-    return { ok: false, error: "Введите имя файла." };
+    return { ok: false, error: "Введите название категории." };
   }
   if (name.length > MAX_KNOWLEDGE_FILE_NAME_LENGTH) {
     return {
       ok: false,
-      error: `Имя файла не должно быть длиннее ${MAX_KNOWLEDGE_FILE_NAME_LENGTH} символов.`,
+      error: `Название не должно быть длиннее ${MAX_KNOWLEDGE_FILE_NAME_LENGTH} символов.`,
     };
   }
-  if (/[\\/\u0000-\u001f\u007f]/u.test(name)) {
-    return { ok: false, error: "Имя файла содержит недопустимые символы." };
-  }
-  if (!name.toLowerCase().endsWith(".md")) {
-    return { ok: false, error: "Можно добавлять только файлы Markdown (.md)." };
+  if (FORBIDDEN_NAME_CHARACTERS.test(name)) {
+    return {
+      ok: false,
+      error: "Название не должно содержать запятую и символы / \\.",
+    };
   }
   if (new TextEncoder().encode(content).length > MAX_KNOWLEDGE_FILE_BYTES) {
     return {
       ok: false,
-      error: "Файл слишком большой. Максимальный размер — 512 КБ.",
+      error: "Описание слишком большое. Максимальный размер — 512 КБ.",
     };
   }
 

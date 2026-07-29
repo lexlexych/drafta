@@ -9,10 +9,11 @@ import {
 } from "@/lib/db/channel-connections";
 import { getActiveConversationDraft } from "@/lib/db/drafts";
 import type { ActiveDraftView } from "@/lib/drafts/types";
-import { categoryBadges, type CategoryRow } from "@/lib/db/categories";
+import { categoryBadges, type KnowledgeFileRow } from "@/lib/db/knowledge-base";
 import {
   avatarFor,
   countWithNoun,
+  type CategoryBadgeView,
   type ChannelBadgeView,
   type ChannelFilterView,
   type ConversationListView,
@@ -41,10 +42,11 @@ import {
  * (`ConversationListView`, `ThreadView`, `ChannelFilterView`…) — per that
  * module's own docstring, this is the intended migration path: "когда mock
  * заменят реальные запросы lib/db, поменяется только этот слой: форма
- * моделей представления останется прежней". `category` is filled from
- * `conversations.category_id` (written by the pipeline's classification step)
- * once the caller passes the workspace categories; `debounceNote` stays `null`
- * — the live countdown is `draftDebounceUntil` plus a client component.
+ * моделей представления останется прежней". `categories` are filled from
+ * `conversations.matched_kb_file_ids` (written by the pipeline when it
+ * finalizes a draft) once the caller passes the workspace categories;
+ * `debounceNote` stays `null` — the live countdown is `draftDebounceUntil` plus
+ * a client component.
  *
  * Callers pass in an already-loaded `channels: ChannelConnectionRow[]`
  * (from `listChannelConnections`) instead of each function re-fetching it,
@@ -77,8 +79,9 @@ export type ConversationListFilter = {
   channelIds?: readonly string[] | null;
   /**
    * Categories picked in the dialog list's multi-select. Empty or omitted means
-   * no narrowing at all, which keeps conversations that were never classified
-   * visible; an explicit selection filters strictly.
+   * no narrowing at all, which keeps conversations without a draft yet visible;
+   * an explicit selection keeps conversations whose last draft named at least
+   * one of them.
    */
   categoryIds?: readonly string[] | null;
   /** Смещение страницы — дозагрузка при скролле списка. */
@@ -100,7 +103,7 @@ type ConversationRow = {
   id: string;
   channel_connection_id: string;
   contact_id: string | null;
-  category_id: string | null;
+  matched_kb_file_ids: string[] | null;
   status: string;
   last_incoming_at: string | null;
   unread_count: number;
@@ -378,7 +381,7 @@ export async function getConversationListView(
   workspaceId: string,
   channels: ChannelConnectionRow[],
   filter: ConversationListFilter = {},
-  categories: readonly CategoryRow[] = [],
+  categories: readonly KnowledgeFileRow[] = [],
 ): Promise<ConversationListPage> {
   const channelIds = filter.channelIds ?? [];
   const channelById = new Map(channels.map((channel) => [channel.id, channel]));
@@ -401,7 +404,7 @@ export async function getConversationListView(
   let filterBuilder = supabase
     .from("conversations")
     .select(
-      "id, channel_connection_id, contact_id, category_id, status, last_incoming_at, unread_count",
+      "id, channel_connection_id, contact_id, matched_kb_file_ids, status, last_incoming_at, unread_count",
       { count: "exact" },
     )
     .eq("workspace_id", workspaceId);
@@ -411,7 +414,11 @@ export async function getConversationListView(
   }
 
   if (categoryIds.length > 0) {
-    filterBuilder = filterBuilder.in("category_id", [...categoryIds]);
+    // `overlaps`, not `in`: a conversation carries every category its last
+    // draft named, and picking one of them must keep the conversation.
+    filterBuilder = filterBuilder.overlaps("matched_kb_file_ids", [
+      ...categoryIds,
+    ]);
   }
 
   const {
@@ -472,9 +479,9 @@ export async function getConversationListView(
       channel: channel
         ? channelBadge(channel)
         : { id: conversation.channel_connection_id, name: "—", platform: "telegram" as const },
-      category: conversation.category_id
-        ? (badgeById.get(conversation.category_id) ?? null)
-        : null,
+      categories: (conversation.matched_kb_file_ids ?? [])
+        .map((id) => badgeById.get(id))
+        .filter((badge): badge is CategoryBadgeView => Boolean(badge)),
       avatar: avatarFor(contact?.id ?? conversation.id, name),
     };
   });
@@ -504,12 +511,12 @@ export async function getThreadView(
   workspaceId: string,
   channels: ChannelConnectionRow[],
   conversationId: string,
-  categories: readonly CategoryRow[] = [],
+  categories: readonly KnowledgeFileRow[] = [],
 ): Promise<InboxThreadView | null> {
   const { data: conversation, error: conversationError } = await supabase
     .from("conversations")
     .select(
-      "id, channel_connection_id, contact_id, category_id, last_incoming_at, draft_debounce_until",
+      "id, channel_connection_id, contact_id, matched_kb_file_ids, last_incoming_at, draft_debounce_until",
     )
     .eq("workspace_id", workspaceId)
     .eq("id", conversationId)
@@ -555,17 +562,21 @@ export async function getThreadView(
       ? null
       : hoursLeftInReplyWindow(conversation.last_incoming_at, nowIso, responseWindowHours);
 
+  const badgeById = new Map(
+    categoryBadges(categories).map((badge) => [badge.id, badge]),
+  );
+  const threadCategoryBadges = ((conversation.matched_kb_file_ids ??
+    []) as string[])
+    .map((id) => badgeById.get(id))
+    .filter((badge): badge is CategoryBadgeView => Boolean(badge));
+
   return {
     conversationId: conversation.id,
     contactId: contact?.id ?? null,
     title: name,
     avatar: avatarFor(contact?.id ?? conversation.id, name),
     channel: channelBadge(channel),
-    category: conversation.category_id
-      ? (categoryBadges(categories).find(
-          (badge) => badge.id === conversation.category_id,
-        ) ?? null)
-      : null,
+    categories: threadCategoryBadges,
     replyWindowLabel:
       hoursLeft !== null && hoursLeft > 0 ? `Окно ответа: ${Math.round(hoursLeft)} ч` : null,
     replyWindowWarning:

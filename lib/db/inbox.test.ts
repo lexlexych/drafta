@@ -280,7 +280,7 @@ describe.skipIf(!hasLocalSupabaseConfig)("lib/db/inbox", () => {
     expect(thread?.messages[2]?.attachmentName).toBe("photo.jpg");
     // No real categories/drafts at this stage — see this ticket's
     // "Существенные факты" and lib/db/inbox.ts's module docstring.
-    expect(thread?.category).toBeNull();
+    expect(thread?.categories).toEqual([]);
     expect(thread?.draft).toBeNull();
   });
 

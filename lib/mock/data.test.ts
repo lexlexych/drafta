@@ -63,10 +63,6 @@ describe("mock data referential integrity", () => {
         expect(identityIds.has(message.contact_identity_id ?? "")).toBe(true);
       }
 
-      if (message.category_id !== null) {
-        expect(categoryIds.has(message.category_id)).toBe(true);
-      }
-
       if (message.parent_message_id !== null) {
         expect(messageIds.has(message.parent_message_id)).toBe(true);
       }
@@ -96,14 +92,12 @@ describe("mock data referential integrity", () => {
     });
   });
 
-  it("keeps exactly one default category, last by priority", () => {
-    const defaults = data.categories.filter((category) => category.is_default);
-    const maxPriority = Math.max(
-      ...data.categories.map((category) => category.priority),
-    );
-
-    expect(defaults).toHaveLength(1);
-    expect(defaults[0]?.priority).toBe(maxPriority);
+  it("points every conversation category at a knowledge base category", () => {
+    data.conversations.forEach((conversation) => {
+      conversation.matched_kb_file_ids.forEach((id) => {
+        expect(categoryIds.has(id)).toBe(true);
+      });
+    });
   });
 });
 
@@ -130,10 +124,19 @@ describe("mock selectors", () => {
       expect(item.channel.id).toBe(channelId);
     });
 
-    const spam = data.categories.find((category) => category.no_draft);
-    const spamFiltered = getConversationList("dm", { categoryId: spam?.id });
+    // Категория, которую не назвал ни один черновик, не даёт ни одной беседы.
+    const unused = data.categories.find(
+      (category) =>
+        !data.conversations.some((conversation) =>
+          conversation.matched_kb_file_ids.includes(category.id),
+        ),
+    );
+    const unusedFiltered = getConversationList("dm", {
+      categoryId: unused?.id,
+    });
 
-    expect(spamFiltered.items).toHaveLength(0);
+    expect(unused).toBeDefined();
+    expect(unusedFiltered.items).toHaveLength(0);
   });
 
   it("builds a dm thread with draft and debounce note", () => {
@@ -145,14 +148,12 @@ describe("mock selectors", () => {
     expect(thread?.replyWindowLabel).toContain("Окно ответа");
   });
 
-  it("builds a post thread with target and spam marks", () => {
+  it("builds a post thread with the draft target marked", () => {
     const post = getPostThread("cnv_post_sea_ig");
     const target = post?.comments.find((comment) => comment.isDraftTarget);
-    const spam = post?.comments.find((comment) => comment.noDraftNote);
     const ours = post?.comments.find((comment) => comment.isOurs);
 
     expect(target?.authorHandle).toBe("@dashkov.art");
-    expect(spam?.authorName).toBe("best_promo_24");
     expect(ours?.isReply).toBe(true);
     expect(post?.draft?.referenceText).toContain("@dashkov.art");
   });

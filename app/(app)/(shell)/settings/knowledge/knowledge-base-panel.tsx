@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useMemo, useState, type ChangeEvent, type FormEvent } from "react";
+import { useMemo, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -9,10 +9,7 @@ import {
   getKnowledgeBaseUsage,
   KNOWLEDGE_BASE_TOKEN_BUDGET,
 } from "@/lib/ai/knowledge-base";
-import {
-  MAX_KNOWLEDGE_FILE_BYTES,
-  validateMarkdownFile,
-} from "@/lib/knowledge-base/files";
+import { validateCategory } from "@/lib/knowledge-base/files";
 
 import uiStyles from "../../_components/ui.module.css";
 import styles from "../settings.module.css";
@@ -64,10 +61,9 @@ export function KnowledgeBasePanel({
   files: KnowledgeFileListItem[];
 }) {
   const router = useRouter();
-  const uploadInputId = useId();
   const [editor, setEditor] = useState<EditorState | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [isPending, startTransition] = useActivityTransition("Сохраняем базу знаний…");
+  const [isPending, startTransition] = useActivityTransition("Сохраняем категорию…");
   const usage = useMemo(() => getKnowledgeBaseUsage(files), [files]);
   const progress = Math.min(
     100,
@@ -80,37 +76,9 @@ export function KnowledgeBasePanel({
     router.refresh();
   }
 
-  function openFile(file: KnowledgeFileListItem) {
+  function openCategory(file: KnowledgeFileListItem) {
     setError(null);
     setEditor({ id: file.id, name: file.name, content: file.content });
-  }
-
-  async function handleUpload(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.currentTarget.files?.[0];
-    event.currentTarget.value = "";
-
-    if (!file) {
-      return;
-    }
-    if (file.size > MAX_KNOWLEDGE_FILE_BYTES) {
-      setError("Файл слишком большой. Максимальный размер — 512 КБ.");
-      return;
-    }
-
-    try {
-      const content = await file.text();
-      const validation = validateMarkdownFile(file.name, content);
-
-      if (!validation.ok) {
-        setError(validation.error);
-        return;
-      }
-
-      setError(null);
-      setEditor({ id: null, name: validation.name, content: validation.content });
-    } catch {
-      setError("Не удалось прочитать файл.");
-    }
   }
 
   function handleSave(event: FormEvent<HTMLFormElement>) {
@@ -120,7 +88,7 @@ export function KnowledgeBasePanel({
       return;
     }
 
-    const validation = validateMarkdownFile(editor.name, editor.content);
+    const validation = validateCategory(editor.name, editor.content);
 
     if (!validation.ok) {
       setError(validation.error);
@@ -169,7 +137,11 @@ export function KnowledgeBasePanel({
     if (!editor?.id) {
       return;
     }
-    if (!window.confirm(`Удалить «${editor.name}»? Это действие нельзя отменить.`)) {
+    if (
+      !window.confirm(
+        `Удалить категорию «${editor.name}»? Это действие нельзя отменить.`,
+      )
+    ) {
       return;
     }
 
@@ -196,8 +168,11 @@ export function KnowledgeBasePanel({
       <div className={`${uiStyles.card} ${styles.knowledgeCard}`}>
         {files.length === 0 ? (
           <div className={styles.knowledgeEmpty}>
-            <b>База знаний пока пуста</b>
-            <span>Создайте файл в браузере или загрузите готовый Markdown.</span>
+            <b>Категорий пока нет</b>
+            <span>
+              Создайте первую: название темы и текст, из которого AI будет брать
+              факты для ответов.
+            </span>
           </div>
         ) : (
           files.map((file) => (
@@ -209,7 +184,7 @@ export function KnowledgeBasePanel({
               <button
                 type="button"
                 className={styles.knowledgeName}
-                onClick={() => openFile(file)}
+                onClick={() => openCategory(file)}
                 disabled={isPending}
               >
                 {file.name}
@@ -222,7 +197,7 @@ export function KnowledgeBasePanel({
                 className={uiStyles.switch}
                 role="switch"
                 aria-checked={file.is_enabled}
-                aria-label={`${file.is_enabled ? "Деактивировать" : "Активировать"} ${file.name}`}
+                aria-label={`${file.is_enabled ? "Деактивировать" : "Активировать"} категорию ${file.name}`}
                 onClick={() => handleToggle(file)}
                 disabled={isPending}
               />
@@ -236,7 +211,7 @@ export function KnowledgeBasePanel({
               Бюджет токенов: {formatTokens(usage.enabledTokenCount)} /{" "}
               {formatTokens(usage.tokenBudget)}
             </span>
-            <span>{usage.enabledFileCount} активных файлов</span>
+            <span>{usage.enabledFileCount} активных категорий</span>
           </div>
           <div
             className={styles.knowledgeBudgetBar}
@@ -249,8 +224,9 @@ export function KnowledgeBasePanel({
           </div>
           {usage.exceedsBudget ? (
             <p className={styles.knowledgeWarning} role="alert">
-              Бюджет превышен. В AI-промпт попадут только первые целые файлы,
-              которые помещаются в {formatTokens(KNOWLEDGE_BASE_TOKEN_BUDGET)} токенов.
+              Бюджет превышен. В AI-промпт попадут только первые целые
+              категории, которые помещаются в{" "}
+              {formatTokens(KNOWLEDGE_BASE_TOKEN_BUDGET)} токенов.
             </p>
           ) : null}
         </div>
@@ -265,21 +241,8 @@ export function KnowledgeBasePanel({
             setEditor({ id: null, name: "", content: "" });
           }}
         >
-          + Новый файл
+          + Новая категория
         </button>
-        <label
-          className={`${uiStyles.button} ${uiStyles.buttonSecondary}`}
-          htmlFor={uploadInputId}
-        >
-          Загрузить .md
-        </label>
-        <input
-          id={uploadInputId}
-          className={styles.visuallyHidden}
-          type="file"
-          accept=".md,text/markdown,text/plain"
-          onChange={handleUpload}
-        />
       </div>
 
       {editor ? (
@@ -303,9 +266,12 @@ export function KnowledgeBasePanel({
               <div className={styles.editorHeader}>
                 <div>
                   <h2 id="knowledge-editor-title">
-                    {editor.id ? "Редактирование файла" : "Новый файл"}
+                    {editor.id ? "Редактирование категории" : "Новая категория"}
                   </h2>
-                  <p>Markdown сохраняется прямо в базе данных workspace.</p>
+                  <p>
+                    Название — это и есть категория, которую AI назовёт в ответе.
+                    Текст ниже он использует как источник фактов по ней.
+                  </p>
                 </div>
                 <button
                   type="button"
@@ -322,7 +288,7 @@ export function KnowledgeBasePanel({
               </div>
 
               <label className={styles.editorNameField}>
-                Имя файла
+                Категория
                 <input
                   type="text"
                   value={editor.name}
@@ -331,7 +297,7 @@ export function KnowledgeBasePanel({
                       state ? { ...state, name: event.target.value } : state,
                     )
                   }
-                  placeholder="например, 01-описание.md"
+                  placeholder="например, Прайс и доставка"
                   maxLength={120}
                   autoFocus
                 />
@@ -341,14 +307,14 @@ export function KnowledgeBasePanel({
                 <div className={styles.editorColumn}>
                   <span className={styles.editorColumnTitle}>Редактор</span>
                   <textarea
-                    aria-label="Содержимое Markdown"
+                    aria-label="Описание категории"
                     value={editor.content}
                     onChange={(event) =>
                       setEditor((state) =>
                         state ? { ...state, content: event.target.value } : state,
                       )
                     }
-                    placeholder="# Заголовок\n\nДобавьте информацию, которую AI должен учитывать в ответах."
+                    placeholder="# Заголовок\n\nОпишите, что относится к этой категории, и добавьте факты, на которые AI будет опираться."
                     spellCheck
                   />
                 </div>

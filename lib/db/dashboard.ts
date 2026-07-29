@@ -2,13 +2,14 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import { categoryBadges, listCategories } from "@/lib/db/categories";
+import { categoryBadges, listKnowledgeFiles } from "@/lib/db/knowledge-base";
 
 /**
  * Dashboard metrics (`/dashboard`).
  *
  * Everything is answered by a single `get_dashboard_metrics` RPC: the category
- * breakdown is a `group by`, the median reply time needs a window function, and
+ * breakdown is a `group by` over the categories drafts were grounded in, the
+ * median reply time needs a window function, and
  * PostgREST's row cap would silently under-count a JS-side rollup. Names and
  * colours for the chart are *not* part of that payload — they come from the
  * category list, so a bar matches its inbox chip exactly.
@@ -103,9 +104,7 @@ type DashboardMetricsPayload = {
   median_reply_seconds: number | null;
   categories: { category_id: string | null; total: number }[];
   tokens: {
-    message_classification: TokenBucket;
     message_draft: TokenBucket;
-    comment_classification: TokenBucket;
     comment_draft: TokenBucket;
     total: TokenBucket;
   };
@@ -184,8 +183,9 @@ export function buildCategoryBars(
 
       return {
         id: row.category_id,
-        // A category deleted after the fact leaves its messages with a null
-        // `category_id`, so both cases land in the same bucket.
+        // A draft that named no category comes back with a null id, and so
+        // does one whose category was deleted afterwards: both are "no
+        // category" to the reader, so they share the bucket.
         name: badge?.name ?? UNCATEGORIZED_LABEL,
         colorVar: badge?.colorVar ?? UNCATEGORIZED_COLOR_VAR,
         total: row.total,
@@ -209,25 +209,13 @@ export function buildTokensView(
   tokens: DashboardMetricsPayload["tokens"],
   trackedSince: string | null,
 ): DashboardTokensView {
+  // Классификация была отдельным дешёвым вызовом и отдельной строкой расхода.
+  // Теперь категории приходят тем же ответом, что и черновик, поэтому строк две.
+  // Исторические токены классификации остаются в «Всего».
   const rows = [
-    tokenRow("message-classification", "Классификация сообщений", tokens.message_classification),
     tokenRow("message-draft", "Черновики сообщений", tokens.message_draft),
     tokenRow("comment-draft", "Черновики комментариев", tokens.comment_draft),
   ];
-
-  // Comments are never classified today, so this row would be a permanent zero.
-  // It appears only if the pipeline ever starts producing it.
-  if (tokens.comment_classification.total > 0) {
-    rows.splice(
-      2,
-      0,
-      tokenRow(
-        "comment-classification",
-        "Классификация комментариев",
-        tokens.comment_classification,
-      ),
-    );
-  }
 
   return {
     rows,
@@ -277,7 +265,7 @@ export async function getDashboardMetrics(
       period_start: from.toISOString(),
       period_end: to.toISOString(),
     }),
-    listCategories(supabase, workspaceId),
+    listKnowledgeFiles(supabase, workspaceId),
   ]);
 
   if (metricsResult.error) {

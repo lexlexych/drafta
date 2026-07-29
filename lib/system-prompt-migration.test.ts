@@ -21,9 +21,7 @@ const migration = migrationSql("20260728100000_workspace_system_prompts.sql");
  * Шаблоны правятся новой миграцией, а не правкой уже применённой: та не
  * выполняется повторно, и дефолт колонки в базе остался бы старым.
  */
-const templates = migrationSql(
-  "20260728120000_default_prompt_language_and_channel.sql",
-);
+const templates = migrationSql("20260729110000_default_prompt_categories.sql");
 
 describe("workspace system prompts migration", () => {
   it("keeps the default templates byte-identical to lib/ai/default-prompts.ts", () => {
@@ -105,24 +103,19 @@ describe("workspace system prompts migration", () => {
     expect(migration).toContain("ai_settings_comment_system_prompt_length_check");
   });
 
-  it("seeds «Личное» before the default category and keeps the RPC service-role only", () => {
-    expect(migration).toContain("'Личное'");
-    // Дефолтная категория обязана остаться последней: инвариант
-    // categories_default_invariants сверяет её priority с максимальным.
-    expect(migration.indexOf("'Личное'")).toBeLessThan(
-      migration.indexOf("'По умолчанию'"),
-    );
-    expect(migration).toContain("create or replace function public.create_workspace(");
-    expect(migration).toContain("security definer");
-    expect(migration).toContain("set search_path = ''");
-    expect(migration).toContain(
-      "grant execute on function public.create_workspace(uuid, uuid, text, jsonb) to service_role",
-    );
+  it("explains the CATEGORIES contract and drops the category action from grounding", () => {
+    // Классификация больше не отдельный вызов: категории приходят первой
+    // строкой того же ответа (CATEGORIES_MARKER в lib/ai/prompt.ts). Шаблон
+    // редактируемый, поэтому контракт продублирован в неизменяемой секции 7,
+    // но объяснить его шаблон обязан.
+    expect(DEFAULT_SYSTEM_PROMPT).toContain("CATEGORIES:");
+    expect(DEFAULT_SYSTEM_PROMPT).not.toContain("действия присвоенной категории");
+    // У комментариев категорий нет — там тот же промпт, что и был.
+    expect(DEFAULT_COMMENT_SYSTEM_PROMPT).not.toContain("CATEGORIES:");
   });
 
   it("carries no backfill: the migration ships before the first workspace exists", () => {
     expect(migration).not.toContain("update public.ai_settings");
-    expect(migration).not.toContain("insert into public.categories (workspace_id)");
     expect(migration).not.toContain("from public.workspaces as workspace");
   });
 });

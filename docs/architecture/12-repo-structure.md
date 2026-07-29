@@ -34,7 +34,7 @@ app/
 │   ├── comments/                 # ящик «Комментарии»
 │   ├── contacts/
 │   ├── knowledge/                # база знаний (md-редактор)
-│   └── settings/                 # каналы, категории, AI, команда, уведомления, приватность
+│   └── settings/                 # каналы, AI, база знаний, команда, уведомления, приватность
 ├── api/
 │   ├── webhooks/[provider]/      # единый приёмник вебхуков
 │   └── inngest/                  # serve() всех функций
@@ -42,7 +42,7 @@ app/
 lib/
 ├── channels/                     # types, registry, zernio/, postmark/, meta/(будущее)
 ├── inngest/functions/            # generate-draft, send-message, send-push, push-digest, ...
-├── ai/                           # клиент LLM, сборка промпта, классификация категорий, masking.ts, бюджет KB
+├── ai/                           # клиент LLM, сборка промпта и разбор ответа, masking.ts, бюджет базы знаний
 └── db/                           # типизированные запросы; клиенты supabase (publishable/secret)
 supabase/migrations/              # вся схема и RLS — только миграциями
 CLAUDE.md                         # глоссарий §1.1 + правила §11
@@ -56,7 +56,7 @@ CLAUDE.md                         # глоссарий §1.1 + правила §
 | `app/api/webhooks/[provider]/` | [7.1. Входящее](07-data-flows.md#61-входящее-dm-или-комментарий) |
 | `lib/channels/` | [5. Слой абстракции каналов](05-channels.md) |
 | `lib/inngest/functions/` | [7.6. Список функций](07-data-flows.md#66-полный-список-inngest-функций) |
-| `lib/ai/` (включая `masking.ts` и классификацию) | [8. AI-подсистема](08-ai-subsystem.md) + [9. Категории](09-categories.md) |
+| `lib/ai/` (включая `masking.ts`) | [8. AI-подсистема](08-ai-subsystem.md) + [9. Категории и база знаний](09-categories.md) |
 | `supabase/migrations/` | [6. Модель данных](06-data-model.md) |
 | `CLAUDE.md` | [2. Глоссарий](02-glossary.md) + [14. Правила вайбкодинга](14-vibecoding-rules.md) |
 

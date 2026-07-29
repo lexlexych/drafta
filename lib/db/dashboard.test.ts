@@ -18,10 +18,6 @@ const BADGES = [
   { id: "cat_spam", name: "Спам", colorVar: "--cat-2" },
 ];
 
-function emptyBucket() {
-  return { prompt: 0, completion: 0, total: 0 };
-}
-
 describe("parseDashboardPeriod", () => {
   it("accepts the three supported windows", () => {
     expect(parseDashboardPeriod("day")).toBe("day");
@@ -148,42 +144,21 @@ describe("buildCategoryBars", () => {
 
 describe("buildTokensView", () => {
   const tokens = {
-    message_classification: { prompt: 500, completion: 10, total: 510 },
     message_draft: { prompt: 1200, completion: 300, total: 1500 },
-    comment_classification: emptyBucket(),
     comment_draft: { prompt: 800, completion: 200, total: 1000 },
+    // Больше суммы строк: классификация была отдельным вызовом, её
+    // исторические токены остаются в «Всего», но своей строки больше не имеют.
     total: { prompt: 2500, completion: 510, total: 3010 },
   };
 
-  it("splits the spend by operation and surface", () => {
+  it("splits the spend by surface, without a classification row", () => {
     const view = buildTokensView(tokens, "2026-07-01T00:00:00.000Z");
 
     expect(view.rows.map((row) => row.label)).toEqual([
-      "Классификация сообщений",
       "Черновики сообщений",
       "Черновики комментариев",
     ]);
     expect(view.total.total).toBe(3010);
-  });
-
-  it("hides the comment classification row while the pipeline never produces it", () => {
-    const view = buildTokensView(tokens, "2026-07-01T00:00:00.000Z");
-
-    expect(view.rows.some((row) => row.id === "comment-classification")).toBe(false);
-  });
-
-  it("shows the comment classification row once it carries a number", () => {
-    const view = buildTokensView(
-      { ...tokens, comment_classification: { prompt: 40, completion: 2, total: 42 } },
-      "2026-07-01T00:00:00.000Z",
-    );
-
-    expect(view.rows.map((row) => row.id)).toEqual([
-      "message-classification",
-      "message-draft",
-      "comment-classification",
-      "comment-draft",
-    ]);
   });
 
   it("separates 'nothing spent this period' from 'accounting never ran'", () => {
