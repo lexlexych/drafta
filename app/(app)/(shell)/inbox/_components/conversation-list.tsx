@@ -158,7 +158,9 @@ export function ConversationList({
               <span className={styles.listPreview}>{item.preview}</span>
               <span className={styles.listChips}>
                 <ChannelChip channel={item.channel} />
-                {item.category ? <CategoryChip category={item.category} /> : null}
+                {item.categories.map((category) => (
+                  <CategoryChip key={category.id} category={category} />
+                ))}
                 <span className={styles.listSpacer} />
                 {item.unreadCount > 0 ? (
                   <span className={`${uiStyles.unread} ${uiStyles.num}`}>

@@ -75,9 +75,7 @@ function dashboardMetricsPayload() {
       { category_id: null, total: 48 },
     ],
     tokens: {
-      message_classification: { prompt: 500, completion: 10, total: 510 },
       message_draft: { prompt: 1200, completion: 300, total: 1500 },
-      comment_classification: { prompt: 0, completion: 0, total: 0 },
       comment_draft: { prompt: 800, completion: 200, total: 1000 },
       total: { prompt: 2500, completion: 510, total: 3010 },
     },
@@ -125,48 +123,11 @@ vi.mock("@/lib/db/channel-connections", () => ({
   listChannelConnections: async () => INBOX_CHANNELS,
 }));
 
-const CATEGORIES = [
+const KNOWLEDGE_FILES = [
   {
     id: "cat_spam",
     workspace_id: "wsp_tonwerk",
-    name: "Спам",
-    description: "Реклама и массовые рассылки.",
-    draft_instruction: null,
-    channel_connection_ids: [],
-    skip_draft: true,
-    priority: 0,
-    is_default: false,
-    created_at: "2026-07-21T10:00:00.000Z",
-    updated_at: "2026-07-21T10:00:00.000Z",
-  },
-  {
-    id: "cat_default",
-    workspace_id: "wsp_tonwerk",
-    name: "По умолчанию",
-    description: "Всё остальное.",
-    draft_instruction: null,
-    channel_connection_ids: [],
-    skip_draft: false,
-    priority: 1,
-    is_default: true,
-    created_at: "2026-07-21T10:00:00.000Z",
-    updated_at: "2026-07-21T10:00:00.000Z",
-  },
-];
-
-// `categoryBadges` is pure (a palette lookup by list position), so the real one
-// is reused rather than stubbed — the chips and the dashboard chart must agree
-// on colours, and a fake here would hide a mismatch.
-vi.mock("@/lib/db/categories", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/lib/db/categories")>()),
-  listCategories: async () => CATEGORIES,
-}));
-
-const KNOWLEDGE_FILES = [
-  {
-    id: "kbf_price",
-    workspace_id: "wsp_tonwerk",
-    name: "02-прайс.md",
+    name: "Прайс",
     content: "# Прайс\n\nЧашка — 24 €.",
     sort_order: 1,
     is_enabled: true,
@@ -175,7 +136,11 @@ const KNOWLEDGE_FILES = [
   },
 ];
 
-vi.mock("@/lib/db/knowledge-base", () => ({
+// `categoryBadges` is pure (a palette lookup by list position), so the real one
+// is reused rather than stubbed — the chips and the dashboard chart must agree
+// on colours, and a fake here would hide a mismatch.
+vi.mock("@/lib/db/knowledge-base", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/db/knowledge-base")>()),
   listKnowledgeFiles: async () => KNOWLEDGE_FILES,
 }));
 
@@ -202,7 +167,7 @@ const INBOX_LIST_ITEMS = [
     time: "12:41",
     unreadCount: 3,
     channel: { id: "chc_instagram_shop", name: "Instagram Магазин", platform: "instagram" },
-    category: null,
+    categories: [],
     avatar: { initials: "AW", hue: 120 },
   },
   {
@@ -213,7 +178,7 @@ const INBOX_LIST_ITEMS = [
     time: "11:52",
     unreadCount: 1,
     channel: { id: "chc_instagram_shop", name: "Instagram Магазин", platform: "instagram" },
-    category: null,
+    categories: [],
     avatar: { initials: "МЛ", hue: 60 },
   },
   {
@@ -224,7 +189,7 @@ const INBOX_LIST_ITEMS = [
     time: "11:05",
     unreadCount: 1,
     channel: { id: "chc_facebook_page", name: "Facebook Страница", platform: "facebook" },
-    category: null,
+    categories: [],
     avatar: { initials: "AW", hue: 120 },
   },
 ];
@@ -235,7 +200,7 @@ const INBOX_THREAD_MAXIM = {
   title: "Максим Литвинов",
   avatar: { initials: "МЛ", hue: 60 },
   channel: { id: "chc_instagram_shop", name: "Instagram Магазин", platform: "instagram" },
-  category: null,
+  categories: [],
   replyWindowLabel: "Окно ответа: 20 ч",
   messages: [
     {
@@ -609,12 +574,12 @@ describe("dashboard page", () => {
     expect(screen.getByText("Медиана времени ответа")).toBeDefined();
 
     expect(screen.getByText("Сообщения по категориям")).toBeDefined();
-    expect(screen.getByText("Спам")).toBeDefined();
-    // Unclassified messages are charted too, under their own label.
+    expect(screen.getByText("Прайс")).toBeDefined();
+    // Черновики без категорий тоже на графике, под своей подписью.
     expect(screen.getByText("Без категории")).toBeDefined();
 
     expect(screen.getByText("Расход токенов")).toBeDefined();
-    expect(screen.getByText("Классификация сообщений")).toBeDefined();
+    expect(screen.getByText("Черновики сообщений")).toBeDefined();
     expect(screen.getByText("Черновики комментариев")).toBeDefined();
   });
 
@@ -639,7 +604,7 @@ describe("dashboard page", () => {
     render(await DashboardPage({ searchParams: searchParams() }));
 
     expect(screen.getByText(/Учёт расхода токенов только что включён/)).toBeDefined();
-    expect(screen.queryByText("Классификация сообщений")).toBeNull();
+    expect(screen.queryByText("Черновики сообщений")).toBeNull();
   });
 });
 
@@ -796,14 +761,20 @@ describe("settings page", () => {
     ).toBeNull();
   });
 
-  it("renders the categories section with the locked default", async () => {
+  it("no longer offers a separate categories section", async () => {
+    // Категории переехали в «Базу знаний»: отдельного раздела настроек нет, и
+    // неизвестная секция откатывается на «Каналы».
+    expect(
+      SETTINGS_SECTIONS.some(
+        (section) => (section.id as string) === "categories",
+      ),
+    ).toBe(false);
+
     render(
       await SettingsPage({ searchParams: searchParams({ section: "categories" }) }),
     );
 
-    expect(screen.getByText("По умолчанию")).toBeDefined();
-    expect(screen.getByText("без черновиков")).toBeDefined();
-    expect(screen.getByText("системная")).toBeDefined();
+    expect(screen.queryByText("Правила классификации входящих")).toBeNull();
   });
 
   it("renders the ai section with switches", async () => {
@@ -827,8 +798,12 @@ describe("settings page", () => {
     expect(
       SETTINGS_SECTIONS.some((section) => section.title === "База знаний"),
     ).toBe(true);
-    expect(screen.getByRole("button", { name: "02-прайс.md" })).toBeDefined();
-    expect(screen.getByRole("button", { name: "+ Новый файл" })).toBeDefined();
+    expect(screen.getByRole("button", { name: "Прайс" })).toBeDefined();
+    expect(
+      screen.getByRole("button", { name: "+ Новая категория" }),
+    ).toBeDefined();
+    // Загрузка .md убрана: категория редактируется прямо в интерфейсе.
+    expect(screen.queryByText("Загрузить .md")).toBeNull();
     expect(screen.getByText(/Бюджет токенов/)).toBeDefined();
   });
 });

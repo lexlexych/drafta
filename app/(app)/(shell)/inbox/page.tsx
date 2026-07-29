@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-import { listCategories, categoryBadges } from "@/lib/db/categories";
+import { categoryBadges, listKnowledgeFiles } from "@/lib/db/knowledge-base";
 import {
   CONVERSATION_PAGE_SIZE,
   getChannelFiltersView,
@@ -51,7 +51,7 @@ export default async function InboxPage({
   const channels = await listChannelConnections(supabase, workspace.id);
   const hasChannels = channels.length > 0;
 
-  const categories = await listCategories(supabase, workspace.id);
+  const categories = await listKnowledgeFiles(supabase, workspace.id);
 
   // Первая страница без фильтра: дальше список дозагружает себя сам через
   // `loadConversationsAction` (см. `_components/conversation-list.tsx`).

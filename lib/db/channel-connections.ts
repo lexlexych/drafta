@@ -302,10 +302,7 @@ export async function setChannelConnectionStatus(
  * (`on delete cascade` on the `(workspace_id, channel_connection_id)` FKs),
  * and their messages/comments/drafts cascade in turn — the channel's
  * correspondence disappears from drafta while staying untouched on the
- * platform itself. References from `categories.channel_connection_ids` (an
- * array, not an FK) are stripped by the
- * `channel_connections_strip_from_categories` trigger
- * (supabase/migrations/20260727110000_…).
+ * platform itself.
  *
  * Deleting is not the same as disconnecting: «Отключить» only flips `status`
  * and keeps the history (see `setChannelConnectionStatus`).

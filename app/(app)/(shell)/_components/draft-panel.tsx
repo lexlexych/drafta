@@ -323,6 +323,7 @@ function GeneratingBody() {
   );
 }
 
+/** Категории, в которых модель нашла факты для этого черновика. */
 function KnowledgeBaseFiles({ fileNames }: { fileNames: string[] }) {
   if (fileNames.length === 0) {
     return null;
@@ -330,7 +331,7 @@ function KnowledgeBaseFiles({ fileNames }: { fileNames: string[] }) {
 
   return (
     <div className={styles.kb}>
-      База знаний:
+      Категории:
       {fileNames.map((fileName) => (
         <span key={fileName} className={styles.kbFile}>
           {fileName}

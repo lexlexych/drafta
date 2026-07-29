@@ -17,14 +17,14 @@ type DraftRow = {
   status: string;
   text: string;
   model: string | null;
-  kb_file_ids: string[] | null;
+  matched_kb_file_ids: string[] | null;
   manual_review_reason: string | null;
   created_at: string;
   updated_at: string;
 };
 
 const DRAFT_COLUMNS =
-  "id, workspace_id, conversation_id, status, text, model, kb_file_ids, manual_review_reason, created_at, updated_at";
+  "id, workspace_id, conversation_id, status, text, model, matched_kb_file_ids, manual_review_reason, created_at, updated_at";
 
 type KbFileRow = { id: string; name: string };
 
@@ -44,7 +44,9 @@ async function mapDraftRow(
     throw new Error(`Cannot map inactive draft status: ${row.status}`);
   }
 
-  const kbFileIds = row.kb_file_ids ?? [];
+  // Панель показывает не всё, что ушло в промпт, а категории, в которых
+  // модель нашла ответ, — это и есть «источник» черновика для оператора.
+  const kbFileIds = row.matched_kb_file_ids ?? [];
   let kbFileNames: string[] = [];
 
   if (kbFileIds.length > 0) {

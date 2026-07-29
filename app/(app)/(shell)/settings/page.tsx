@@ -8,7 +8,6 @@ import {
 } from "@/lib/mock";
 import { getAiModelOptions, type AiModelOption } from "@/lib/ai/config";
 import { listChannelConnections } from "@/lib/db/channel-connections";
-import { listCategories, type CategoryRow } from "@/lib/db/categories";
 import {
   getWorkspaceAiSettings,
   type AiSettingsRow,
@@ -39,7 +38,6 @@ import {
   PlugIcon,
   ShieldIcon,
   SparkIcon,
-  TagIcon,
   TeamIcon,
 } from "../_components/icons";
 import { QUERY_KEYS, buildHref, firstParam } from "../_components/navigation";
@@ -57,11 +55,6 @@ import {
   KnowledgeBasePanel,
   type KnowledgeFileListItem,
 } from "./knowledge/knowledge-base-panel";
-import {
-  CategoriesPanel,
-  type CategoryChannelOption,
-  type CategoryKnowledgeFileOption,
-} from "./categories/categories-panel";
 import { AiSettingsForm } from "./ai/ai-settings-form";
 import { AppInstallPanel } from "./app/app-install-panel";
 import { NotificationsForm } from "./notifications/notifications-form";
@@ -74,7 +67,6 @@ const PATHNAME = "/settings";
 /** Свой значок у каждого раздела — строки списка различимы с одного взгляда. */
 const SECTION_ICONS: Record<SettingsSectionId, typeof PlugIcon> = {
   channels: PlugIcon,
-  categories: TagIcon,
   ai: SparkIcon,
   knowledge: BookIcon,
   team: TeamIcon,
@@ -156,47 +148,6 @@ async function loadKnowledgeSectionData(): Promise<KnowledgeFileListItem[]> {
       updated_at: row.updated_at,
     }),
   );
-}
-
-async function loadCategoriesSectionData(): Promise<CategoriesSectionData> {
-  const user = await getAuthenticatedUser();
-  const empty: CategoriesSectionData = {
-    categories: [],
-    channels: [],
-    knowledgeFiles: [],
-  };
-
-  if (!user) {
-    return empty;
-  }
-
-  const workspace = await getCurrentWorkspace(user.id);
-
-  if (!workspace) {
-    return empty;
-  }
-
-  const supabase = await createServerSupabaseClient();
-  // Категория выбирает файлы базы знаний, поэтому секции нужен их список —
-  // включая выключенные: выбрать можно любой.
-  const [categories, channelRows, knowledgeRows] = await Promise.all([
-    listCategories(supabase, workspace.id),
-    listChannelConnections(supabase, workspace.id),
-    listKnowledgeFiles(supabase, workspace.id),
-  ]);
-
-  return {
-    categories,
-    channels: channelRows.map((channel) => ({
-      id: channel.id,
-      name: channel.name,
-    })),
-    knowledgeFiles: knowledgeRows.map((file: KnowledgeFileRow) => ({
-      id: file.id,
-      name: file.name,
-      isEnabled: file.is_enabled,
-    })),
-  };
 }
 
 async function loadNotificationsSectionData(): Promise<NotificationSettingsView | null> {
@@ -303,8 +254,6 @@ export default async function SettingsPage({
     sectionId === "channels" ? await loadChannelsSectionData() : null;
   const knowledgeFiles =
     sectionId === "knowledge" ? await loadKnowledgeSectionData() : null;
-  const categoriesData =
-    sectionId === "categories" ? await loadCategoriesSectionData() : null;
   const aiData = sectionId === "ai" ? await loadAiSectionData() : null;
   const notificationsData =
     sectionId === "notifications" ? await loadNotificationsSectionData() : null;
@@ -361,7 +310,6 @@ export default async function SettingsPage({
               accountData={accountData}
               aiData={aiData}
               notificationsData={notificationsData}
-              categoriesData={categoriesData}
               channels={channels}
               connectResult={connectResult}
               knowledgeFiles={knowledgeFiles}
@@ -378,7 +326,6 @@ function SectionDetail({
   accountData,
   aiData,
   notificationsData,
-  categoriesData,
   channels,
   connectResult,
   knowledgeFiles,
@@ -387,7 +334,6 @@ function SectionDetail({
   accountData: AccountSectionData | null;
   aiData: AiSectionData | null;
   notificationsData: NotificationSettingsView | null;
-  categoriesData: CategoriesSectionData | null;
   channels: ChannelConnectionListItem[] | null;
   connectResult: ChannelConnectResult | null;
   knowledgeFiles: KnowledgeFileListItem[] | null;
@@ -397,16 +343,16 @@ function SectionDetail({
       return (
         <ChannelsSection channels={channels ?? []} connectResult={connectResult} />
       );
-    case "categories":
-      return <CategoriesSection data={categoriesData} />;
     case "ai":
       return <AiSection data={aiData} />;
     case "knowledge":
       return (
         <>
           <p className={setStyles.description}>
-            Активные файлы добавляются в системный промпт в указанном порядке.
-            При превышении бюджета токенов часть файлов не попадёт в контекст.
+            Каждая категория — это тема, по которой AI отвечает: название плюс
+            текст, откуда берутся факты. Активные категории добавляются в
+            системный промпт в указанном порядке; при превышении бюджета токенов
+            часть из них не попадёт в контекст.
           </p>
           <KnowledgeBasePanel files={knowledgeFiles ?? []} />
         </>
@@ -454,34 +400,6 @@ function ChannelsSection({
         списках, тредах и меню — переименовать его можно в любой момент.
       </p>
       <ChannelsPanel channels={channels} connectResult={connectResult} />
-    </>
-  );
-}
-
-type CategoriesSectionData = {
-  categories: CategoryRow[];
-  channels: CategoryChannelOption[];
-  knowledgeFiles: CategoryKnowledgeFileOption[];
-};
-
-function CategoriesSection({ data }: { data: CategoriesSectionData | null }) {
-  return (
-    <>
-      <p className={setStyles.description}>
-        Проверка идёт сверху вниз, первая подходящая категория побеждает.
-        «По умолчанию» всегда последняя и не удаляется.
-      </p>
-      <CategoriesPanel
-        key={(data?.categories ?? [])
-          .map(
-            (category) =>
-              `${category.id}:${category.priority}:${category.updated_at}`,
-          )
-          .join("|")}
-        categories={data?.categories ?? []}
-        channels={data?.channels ?? []}
-        knowledgeFiles={data?.knowledgeFiles ?? []}
-      />
     </>
   );
 }

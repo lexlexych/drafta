@@ -33,7 +33,7 @@ vi.mock("next/navigation", () => ({
 const files: KnowledgeFileListItem[] = [
   {
     id: "kbf_price",
-    name: "02-прайс.md",
+    name: "Прайс",
     content: "# Прайс\n\nЧашка — **24 €**.",
     sort_order: 1,
     is_enabled: true,
@@ -41,7 +41,7 @@ const files: KnowledgeFileListItem[] = [
   },
   {
     id: "kbf_hidden",
-    name: "03-архив.md",
+    name: "Архив",
     content: "Архив",
     sort_order: 2,
     is_enabled: false,
@@ -62,31 +62,31 @@ afterEach(() => {
 });
 
 describe("KnowledgeBasePanel", () => {
-  it("renders files, activation switches and the token budget", () => {
+  it("renders categories, activation switches and the token budget", () => {
     render(<KnowledgeBasePanel files={files} />);
 
-    expect(screen.getByRole("button", { name: "02-прайс.md" })).toBeDefined();
+    expect(screen.getByRole("button", { name: "Прайс" })).toBeDefined();
     expect(
       screen
-        .getByRole("switch", { name: "Деактивировать 02-прайс.md" })
+        .getByRole("switch", { name: "Деактивировать категорию Прайс" })
         .getAttribute("aria-checked"),
     ).toBe("true");
     expect(
       screen
-        .getByRole("switch", { name: "Активировать 03-архив.md" })
+        .getByRole("switch", { name: "Активировать категорию Архив" })
         .getAttribute("aria-checked"),
     ).toBe("false");
-    expect(screen.getByText(/1 активных файлов/)).toBeDefined();
+    expect(screen.getByText(/1 активных категорий/)).toBeDefined();
   });
 
   it("edits Markdown with a rendered preview", async () => {
     render(<KnowledgeBasePanel files={files} />);
 
-    fireEvent.click(screen.getByRole("button", { name: "02-прайс.md" }));
-    expect(screen.getByRole("heading", { name: "Редактирование файла" })).toBeDefined();
+    fireEvent.click(screen.getByRole("button", { name: "Прайс" }));
+    expect(screen.getByRole("heading", { name: "Редактирование категории" })).toBeDefined();
     expect(screen.getByRole("heading", { name: "Прайс" })).toBeDefined();
 
-    fireEvent.change(screen.getByLabelText("Содержимое Markdown"), {
+    fireEvent.change(screen.getByLabelText("Описание категории"), {
       target: { value: "# Новый прайс\n\nВаза — 42 €." },
     });
     fireEvent.click(screen.getByRole("button", { name: "Сохранить" }));
@@ -94,44 +94,41 @@ describe("KnowledgeBasePanel", () => {
     await waitFor(() =>
       expect(updateKnowledgeFileAction).toHaveBeenCalledWith({
         id: "kbf_price",
-        name: "02-прайс.md",
+        name: "Прайс",
         content: "# Новый прайс\n\nВаза — 42 €.",
       }),
     );
     await waitFor(() => expect(refresh).toHaveBeenCalled());
   });
 
-  it("loads an uploaded .md file into the editor and creates it", async () => {
+  it("creates a category straight from the editor, with no file upload", async () => {
     render(<KnowledgeBasePanel files={files} />);
 
-    const upload = new File(["# FAQ\n\nОтвет"], "04-FAQ.md", {
-      type: "text/markdown",
-    });
-    Object.defineProperty(upload, "text", {
-      value: async () => "# FAQ\n\nОтвет",
-    });
+    expect(screen.queryByText("Загрузить .md")).toBeNull();
 
-    fireEvent.change(screen.getByLabelText("Загрузить .md"), {
-      target: { files: [upload] },
+    fireEvent.click(screen.getByRole("button", { name: "+ Новая категория" }));
+    fireEvent.change(screen.getByLabelText("Категория"), {
+      target: { value: "Доставка" },
     });
-
-    expect(await screen.findByDisplayValue("04-FAQ.md")).toBeDefined();
+    fireEvent.change(screen.getByLabelText("Описание категории"), {
+      target: { value: "# Доставка\n\nПо городу — 350 ₽." },
+    });
     fireEvent.click(screen.getByRole("button", { name: "Сохранить" }));
 
     await waitFor(() =>
       expect(createKnowledgeFileAction).toHaveBeenCalledWith({
-        name: "04-FAQ.md",
-        content: "# FAQ\n\nОтвет",
+        name: "Доставка",
+        content: "# Доставка\n\nПо городу — 350 ₽.",
       }),
     );
   });
 
-  it("toggles and deletes a file through server actions", async () => {
+  it("toggles and deletes a category through server actions", async () => {
     const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
     render(<KnowledgeBasePanel files={files} />);
 
     fireEvent.click(
-      screen.getByRole("switch", { name: "Деактивировать 02-прайс.md" }),
+      screen.getByRole("switch", { name: "Деактивировать категорию Прайс" }),
     );
     await waitFor(() =>
       expect(setKnowledgeFileEnabledAction).toHaveBeenCalledWith({
@@ -140,7 +137,7 @@ describe("KnowledgeBasePanel", () => {
       }),
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "02-прайс.md" }));
+    fireEvent.click(screen.getByRole("button", { name: "Прайс" }));
     fireEvent.click(screen.getByRole("button", { name: "Удалить" }));
     await waitFor(() =>
       expect(deleteKnowledgeFileAction).toHaveBeenCalledWith({ id: "kbf_price" }),

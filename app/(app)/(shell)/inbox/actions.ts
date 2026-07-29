@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 
-import { listCategories } from "@/lib/db/categories";
+import { listKnowledgeFiles } from "@/lib/db/knowledge-base";
 import {
   CONVERSATION_PAGE_SIZE,
   getConversationListView,
@@ -119,7 +119,7 @@ export async function loadConversationsAction(input: {
   try {
     const [channels, categories] = await Promise.all([
       listChannelConnections(supabase, workspace.id),
-      listCategories(supabase, workspace.id),
+      listKnowledgeFiles(supabase, workspace.id),
     ]);
     const page = await getConversationListView(
       supabase,

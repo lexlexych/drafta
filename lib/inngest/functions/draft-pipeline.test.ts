@@ -2,19 +2,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
 
-const {
-  runDraftPipeline,
-  selectApplicableCategories,
-  selectBatchMessages,
-  selectCategoryForBatch,
-} = await import("./draft-pipeline");
-import type { CategoryRow } from "@/lib/db/categories";
+const { runDraftPipeline, resolveMatchedCategoryIds, selectBatchMessages } =
+  await import("./draft-pipeline");
 import type {
   DraftPipelineDependencies,
   DraftPipelineSteps,
   LoadedDraftContext,
   PipelineMessage,
-  SelectedPipelineCategory,
 } from "./draft-pipeline";
 
 class TestSteps implements DraftPipelineSteps {
@@ -47,41 +41,21 @@ function message(
   id: string,
   direction: "incoming" | "outgoing",
   text: string,
-  categoryId: string | null = null,
 ): PipelineMessage {
   return {
     id,
     direction,
     text,
-    categoryId,
     createdAt: `2026-07-22T10:00:0${id.at(-1) ?? "0"}.000Z`,
   };
 }
-
-const pricingCategory: SelectedPipelineCategory = {
-  id: "category-1",
-  name: "Pricing",
-  description: "Questions about price",
-  draftInstruction: "Mention the current price.",
-  skipDraft: false,
-  kbFileIds: null,
-};
-
-const defaultCategory: SelectedPipelineCategory = {
-  id: "category-default",
-  name: "По умолчанию",
-  description: "Всё, что не подошло под правила выше.",
-  draftInstruction: null,
-  skipDraft: false,
-  kbFileIds: null,
-};
 
 function context(
   overrides: Partial<LoadedDraftContext> = {},
 ): LoadedDraftContext {
   const messages = [
     message("m0", "outgoing", "How can we help?"),
-    message("m1", "incoming", "Please call +49 151 23456789", "category-1"),
+    message("m1", "incoming", "Please call +49 151 23456789"),
   ];
 
   return {
@@ -107,22 +81,19 @@ function context(
     knowledgeFiles: [
       {
         id: "kb-1",
-        name: "01-price.md",
+        name: "Прайс",
         content: "Hotline: +49 151 23456789. Product Alpha costs 10 EUR.",
         sort_order: 0,
         is_enabled: true,
       },
       {
         id: "kb-2",
-        name: "02-disabled.md",
+        name: "Внутреннее",
         content: "Internal notes.",
         sort_order: 1,
         is_enabled: false,
       },
     ],
-    applicableCategories: [pricingCategory, defaultCategory],
-    defaultCategory,
-    assignedCategory: pricingCategory,
     ...overrides,
   };
 }
@@ -138,11 +109,11 @@ function dependencies(
     isLatestIncoming: vi.fn().mockResolvedValue(true),
     clearDebounceDeadline: vi.fn().mockResolvedValue(undefined),
     loadContext: vi.fn().mockResolvedValue(context()),
-    classifyCategory: vi.fn().mockResolvedValue(1),
-    persistCategory: vi.fn().mockResolvedValue(undefined),
     createGeneratingDraft: vi.fn().mockResolvedValue("draft-1"),
     resolveModel: vi.fn((requestedModel: string) => requestedModel),
-    generate: vi.fn().mockResolvedValue("We will call {{PHONE_1}}."),
+    generate: vi
+      .fn()
+      .mockResolvedValue("CATEGORIES: Прайс\n\nWe will call {{PHONE_1}}."),
     finalizeDraft: vi.fn().mockResolvedValue(undefined),
     cleanupGeneratingDrafts: vi.fn().mockResolvedValue(undefined),
     notifyPushReady: vi.fn().mockResolvedValue(undefined),
@@ -155,7 +126,7 @@ describe("draft pipeline", () => {
     vi.clearAllMocks();
   });
 
-  it("runs masked KB/category/context through lib/ai and restores the completion", async () => {
+  it("runs the masked KB and context through lib/ai and restores the completion", async () => {
     const steps = new TestSteps();
     let llmPrompt = "";
     const createGeneratingDraft = vi.fn().mockImplementation(({ context }) => {
@@ -164,7 +135,7 @@ describe("draft pipeline", () => {
     });
     const generate = vi.fn().mockImplementation((prompt) => {
       llmPrompt = JSON.stringify(prompt);
-      return "We will call {{PHONE_1}}.";
+      return "CATEGORIES: Прайс\n\nWe will call {{PHONE_1}}.";
     });
     const finalizeDraft = vi.fn().mockResolvedValue(undefined);
     const notifyPushReady = vi.fn().mockResolvedValue(undefined);
@@ -200,8 +171,6 @@ describe("draft pipeline", () => {
       "clear-debounce-deadline",
       "last-event-check",
       "load-context",
-      "classify",
-      "persist-category",
       "stop-check",
       "mask",
       "create-generating",
@@ -220,7 +189,7 @@ describe("draft pipeline", () => {
     expect(llmPrompt).not.toContain("+49 151 23456789");
     expect(llmPrompt).toContain("{{PHONE_1}}");
     expect(llmPrompt).toContain("Product Alpha costs 10 EUR");
-    expect(llmPrompt).toContain("Mention the current price");
+    // Категория названа моделью и развёрнута в id базы знаний.
     expect(finalizeDraft).toHaveBeenCalledWith({
       workspaceId: "workspace-1",
       draftId: "draft-1",
@@ -228,6 +197,7 @@ describe("draft pipeline", () => {
       model: "mistral-large-latest",
       supersedeEdited: false,
       manualReviewReason: null,
+      matchedKbFileIds: ["kb-1"],
     });
   });
 
@@ -321,55 +291,10 @@ describe("draft pipeline", () => {
     expect(steps.runs).not.toContain("mask");
   });
 
-  it("respects the category skip_draft flag but keeps the classification", async () => {
-    const createGeneratingDraft = vi.fn();
-    const persistCategory = vi.fn().mockResolvedValue(undefined);
-    const steps = new TestSteps();
-    const result = await runDraftPipeline(
-      {
-        workspaceId: "workspace-1",
-        conversationId: "conversation-1",
-        messageId: "m1",
-        regenerate: false,
-      },
-      steps,
-      dependencies({
-        loadContext: vi.fn().mockResolvedValue(
-          context({
-            applicableCategories: [
-              { ...pricingCategory, skipDraft: true },
-              defaultCategory,
-            ],
-          }),
-        ),
-        persistCategory,
-        createGeneratingDraft,
-      }),
-    );
-
-    expect(result).toEqual({
-      status: "skipped",
-      reason: "category-skips-draft",
-    });
-    expect(createGeneratingDraft).not.toHaveBeenCalled();
-    // Классификация выполняется всегда (docs/architecture/09-categories.md).
-    expect(steps.runs.indexOf("persist-category")).toBeLessThan(
-      steps.runs.indexOf("stop-check"),
-    );
-    expect(persistCategory).toHaveBeenCalledWith({
-      workspaceId: "workspace-1",
-      conversationId: "conversation-1",
-      messageIds: ["m1"],
-      categoryId: "category-1",
-    });
-  });
-
   it("regenerates immediately even with auto-generation disabled and supersedes edited", async () => {
     const steps = new TestSteps();
     const loadDebounceContext = vi.fn();
     const isLatestIncoming = vi.fn();
-    const classifyCategory = vi.fn();
-    const persistCategory = vi.fn();
     const finalizeDraft = vi.fn().mockResolvedValue(undefined);
 
     const result = await runDraftPipeline(
@@ -382,8 +307,6 @@ describe("draft pipeline", () => {
       dependencies({
         loadDebounceContext,
         isLatestIncoming,
-        classifyCategory,
-        persistCategory,
         loadContext: vi.fn().mockResolvedValue(
           context({
             aiSettings: {
@@ -400,9 +323,6 @@ describe("draft pipeline", () => {
     expect(loadDebounceContext).not.toHaveBeenCalled();
     expect(isLatestIncoming).not.toHaveBeenCalled();
     expect(steps.waits).toEqual([]);
-    // Нового входящего нет — переклассифицировать нечего.
-    expect(classifyCategory).not.toHaveBeenCalled();
-    expect(persistCategory).not.toHaveBeenCalled();
     expect(finalizeDraft).toHaveBeenCalledWith(
       expect.objectContaining({ supersedeEdited: true }),
     );
@@ -499,122 +419,6 @@ describe("debounce window", () => {
   });
 });
 
-describe("category classification", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
-  it("does not call the LLM when the default category is the only candidate", async () => {
-    const classifyCategory = vi.fn();
-    const persistCategory = vi.fn().mockResolvedValue(undefined);
-
-    await runDraftPipeline(
-      {
-        workspaceId: "workspace-1",
-        conversationId: "conversation-1",
-        messageId: "m1",
-        regenerate: false,
-      },
-      new TestSteps(),
-      dependencies({
-        loadContext: vi
-          .fn()
-          .mockResolvedValue(
-            context({ applicableCategories: [defaultCategory] }),
-          ),
-        classifyCategory,
-        persistCategory,
-      }),
-    );
-
-    expect(classifyCategory).not.toHaveBeenCalled();
-    expect(persistCategory).toHaveBeenCalledWith(
-      expect.objectContaining({ categoryId: "category-default" }),
-    );
-  });
-
-  it("calls the LLM once per batch and stores the choice on every message", async () => {
-    const classifyCategory = vi.fn().mockResolvedValue(1);
-    const persistCategory = vi.fn().mockResolvedValue(undefined);
-    const messages = [
-      message("m0", "outgoing", "How can we help?"),
-      message("m1", "incoming", "How much is Alpha?"),
-      message("m2", "incoming", "And when does it ship?"),
-    ];
-
-    await runDraftPipeline(
-      {
-        workspaceId: "workspace-1",
-        conversationId: "conversation-1",
-        messageId: "m2",
-        regenerate: false,
-      },
-      new TestSteps(),
-      dependencies({
-        loadContext: vi.fn().mockResolvedValue(
-          context({
-            messages,
-            batchMessages: [messages[1]!, messages[2]!],
-            assignedCategory: null,
-          }),
-        ),
-        classifyCategory,
-        persistCategory,
-      }),
-    );
-
-    expect(classifyCategory).toHaveBeenCalledTimes(1);
-    expect(classifyCategory.mock.calls[0]![0]!.maskedMessages).toHaveLength(2);
-    expect(persistCategory).toHaveBeenCalledWith(
-      expect.objectContaining({
-        messageIds: ["m1", "m2"],
-        categoryId: "category-1",
-      }),
-    );
-  });
-
-  it("falls back to the default category on an unusable answer", async () => {
-    const persistCategory = vi.fn().mockResolvedValue(undefined);
-
-    await runDraftPipeline(
-      {
-        workspaceId: "workspace-1",
-        conversationId: "conversation-1",
-        messageId: "m1",
-        regenerate: false,
-      },
-      new TestSteps(),
-      dependencies({
-        classifyCategory: vi.fn().mockResolvedValue(null),
-        persistCategory,
-      }),
-    );
-
-    expect(persistCategory).toHaveBeenCalledWith(
-      expect.objectContaining({ categoryId: "category-default" }),
-    );
-  });
-
-  it("passes masked category rules to the classifier, never raw identifiers", async () => {
-    const classifyCategory = vi.fn().mockResolvedValue(1);
-
-    await runDraftPipeline(
-      {
-        workspaceId: "workspace-1",
-        conversationId: "conversation-1",
-        messageId: "m1",
-        regenerate: false,
-      },
-      new TestSteps(),
-      dependencies({ classifyCategory }),
-    );
-
-    const payload = JSON.stringify(classifyCategory.mock.calls[0]![0]);
-    expect(payload).not.toContain("+49 151 23456789");
-    expect(payload).toContain("{{PHONE_1}}");
-  });
-});
-
 describe("grounding refusal", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -635,7 +439,7 @@ describe("grounding refusal", () => {
         generate: vi
           .fn()
           .mockResolvedValue(
-            "NEEDS_MANUAL_REVIEW: В базе знаний нет срока доставки.",
+            "CATEGORIES:\n\nNEEDS_MANUAL_REVIEW: В базе знаний нет срока доставки.",
           ),
         finalizeDraft,
       }),
@@ -645,6 +449,7 @@ describe("grounding refusal", () => {
       expect.objectContaining({
         text: "",
         manualReviewReason: "В базе знаний нет срока доставки.",
+        matchedKbFileIds: [],
       }),
     );
   });
@@ -666,85 +471,42 @@ describe("selectBatchMessages", () => {
   });
 });
 
-const categoryRow = (
-  overrides: Partial<CategoryRow> & Pick<CategoryRow, "id">,
-): CategoryRow => ({
-  workspace_id: "workspace-1",
-  name: overrides.id,
-  description: `${overrides.id} rule`,
-  draft_instruction: null,
-  channel_connection_ids: [],
-  skip_draft: false,
-  kb_file_ids: null,
-  priority: 0,
-  is_default: false,
-  created_at: "2026-07-22T00:00:00.000Z",
-  updated_at: "2026-07-22T00:00:00.000Z",
-  ...overrides,
-});
-
-describe("selectApplicableCategories", () => {
-  const categories: CategoryRow[] = [
-    categoryRow({ id: "other-channel", priority: 0, channel_connection_ids: ["ch-2"] }),
-    categoryRow({ id: "this-channel", priority: 1, channel_connection_ids: ["ch-1"] }),
-    categoryRow({ id: "all-channels", priority: 2 }),
-    categoryRow({ id: "default", priority: 3, is_default: true }),
+describe("resolveMatchedCategoryIds", () => {
+  const files = [
+    {
+      id: "kb-1",
+      name: "Прайс",
+      content: "",
+      sort_order: 0,
+      is_enabled: true,
+    },
+    {
+      id: "kb-2",
+      name: "Возврат",
+      content: "",
+      sort_order: 1,
+      is_enabled: false,
+    },
   ];
 
-  it("keeps channel-applicable categories in priority order with the default last", () => {
-    expect(
-      selectApplicableCategories(categories, "ch-1").map(({ id }) => id),
-    ).toEqual(["this-channel", "all-channels", "default"]);
+  it("matches names case- and space-insensitively, including a disabled category", () => {
+    // Категорию могли выключить уже после генерации — ответ от этого не
+    // перестаёт быть осмысленным.
+    expect(resolveMatchedCategoryIds(files, [" прайс ", "ВОЗВРАТ"])).toEqual([
+      "kb-1",
+      "kb-2",
+    ]);
   });
 
-  it("always keeps the default even when it would sort earlier", () => {
-    const defaultFirst = [
-      categoryRow({ id: "default", priority: 0, is_default: true }),
-      categoryRow({ id: "rule", priority: 1 }),
-    ];
-
-    expect(
-      selectApplicableCategories(defaultFirst, "ch-1").map(({ id }) => id),
-    ).toEqual(["rule", "default"]);
-  });
-});
-
-describe("selectCategoryForBatch", () => {
-  const categories: CategoryRow[] = [
-    categoryRow({ id: "assigned", draft_instruction: "Use assigned action" }),
-    categoryRow({ id: "default", priority: 1, is_default: true }),
-  ];
-
-  it("uses an already assigned category on the triggering incoming message", () => {
-    expect(
-      selectCategoryForBatch(
-        categories,
-        [
-          message("m1", "incoming", "one", null),
-          message("m2", "incoming", "two", "assigned"),
-        ],
-        "m2",
-      )?.id,
-    ).toBe("assigned");
+  it("drops an invented name instead of failing a finished draft", () => {
+    expect(resolveMatchedCategoryIds(files, ["Прайс", "Выдуманная"])).toEqual([
+      "kb-1",
+    ]);
   });
 
-  it("returns null when the batch carries no category yet", () => {
-    expect(
-      selectCategoryForBatch(
-        categories,
-        [message("m1", "incoming", "one", null)],
-        "m1",
-      ),
-    ).toBeNull();
-  });
-
-  it("fails loudly when the assigned category vanished from the workspace", () => {
-    expect(() =>
-      selectCategoryForBatch(
-        categories.filter((category) => category.id !== "assigned"),
-        [message("m1", "incoming", "one", "assigned")],
-        "m1",
-      ),
-    ).toThrow("assigned message category is unavailable");
+  it("collapses duplicates", () => {
+    expect(resolveMatchedCategoryIds(files, ["Прайс", "Прайс"])).toEqual([
+      "kb-1",
+    ]);
   });
 });

@@ -30,8 +30,6 @@ export type ConversationKind = "dm" | "comments";
 
 export type ConversationStatus = "open" | "snoozed" | "closed";
 
-export type CategoryInboxKind = "dm" | "comments" | "both";
-
 export type MessageDirection = "in" | "out";
 
 export type MessageDeliveryStatus = "received" | "sent" | "delivered" | "read";
@@ -92,21 +90,18 @@ export type ChannelConnection = {
   };
 };
 
-/** `categories` — правило классификации входящих. */
+/**
+ * `kb_files` — категория базы знаний: название плюс markdown, который её
+ * описывает и одновременно является знанием по ней. Все активные уходят в
+ * системный промпт (docs/architecture/09-categories.md).
+ */
 export type Category = {
   id: string;
   workspace_id: string;
   name: string;
-  /** Описание-правила, по которым LLM классифицирует входящие. */
-  description: string;
-  /** Дополнительное действие — текст-инструкция для черновика. */
-  extra_action: string | null;
-  /** Затрагиваемые каналы; пустой список = все каналы workspace. */
-  channel_connection_ids: string[];
-  inbox_kind: CategoryInboxKind;
-  no_draft: boolean;
-  priority: number;
-  is_default: boolean;
+  content: string;
+  sort_order: number;
+  is_enabled: boolean;
 };
 
 /** `contacts` — человек, намеренно отделён от канальной личности. */
@@ -154,7 +149,8 @@ export type Conversation = {
   status: ConversationStatus;
   last_incoming_at: string;
   unread_count: number;
-  category_id: string | null;
+  /** Категории последнего черновика; перезаписываются целиком при каждом. */
+  matched_kb_file_ids: string[];
   post: PostMetadata | null;
 };
 
@@ -175,7 +171,6 @@ export type Message = {
   contact_identity_id: string | null;
   /** Для комментариев — ответ на другой комментарий. */
   parent_message_id: string | null;
-  category_id: string | null;
   delivery_status: MessageDeliveryStatus;
   attachments: MessageAttachment[];
   created_at: string;

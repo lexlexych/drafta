@@ -85,7 +85,8 @@ export type ConversationListItemView = {
   time: string;
   unreadCount: number;
   channel: ChannelBadgeView;
-  category: CategoryBadgeView | null;
+  /** Категории последнего черновика беседы; пусто, пока черновика не было. */
+  categories: CategoryBadgeView[];
   avatar: AvatarView | null;
 };
 
@@ -120,7 +121,7 @@ export type ThreadView = {
   title: string;
   avatar: AvatarView;
   channel: ChannelBadgeView;
-  category: CategoryBadgeView | null;
+  categories: CategoryBadgeView[];
   replyWindowLabel: string | null;
   messages: ThreadMessageView[];
   debounceNote: string | null;
@@ -134,12 +135,9 @@ export type CommentView = {
   avatar: AvatarView | null;
   text: string;
   time: string;
-  category: CategoryBadgeView | null;
   isOurs: boolean;
   isReply: boolean;
   isDraftTarget: boolean;
-  isMuted: boolean;
-  noDraftNote: boolean;
 };
 
 export type PostThreadView = {
@@ -190,7 +188,7 @@ export type DashboardFeedItemView = {
   avatar: AvatarView;
   text: string;
   channel: ChannelBadgeView;
-  category: CategoryBadgeView | null;
+  categories: CategoryBadgeView[];
   time: string;
 };
 
@@ -204,7 +202,6 @@ export type DashboardView = {
 
 export type SettingsSectionId =
   | "channels"
-  | "categories"
   | "ai"
   | "knowledge"
   | "team"
@@ -232,16 +229,6 @@ export type SettingsChannelRowView = {
   statusLine: string;
 };
 
-export type SettingsCategoryRowView = {
-  id: string;
-  name: string;
-  colorVar: string;
-  priorityLabel: string;
-  scopeLabel: string;
-  extraLabels: string[];
-  isDefault: boolean;
-};
-
 export type SettingsTeamRowView = {
   id: string;
   name: string;
@@ -262,12 +249,6 @@ const PLATFORM_LABELS: Record<Platform, string> = {
   facebook: "Facebook",
 };
 
-const CATEGORY_INBOX_KIND_LABELS = {
-  dm: "сообщения",
-  comments: "комментарии",
-  both: "оба",
-} as const;
-
 const DELIVERY_LABELS = {
   read: "Прочитано",
   delivered: "Доставлено",
@@ -276,11 +257,10 @@ const DELIVERY_LABELS = {
 } as const;
 
 /**
- * Палитра точек категорий. Цвет — свойство интерфейса, а не таблицы
- * `categories`, поэтому назначается по позиции в списке приоритетов.
+ * Палитра точек категорий. Цвет — свойство интерфейса, а не таблицы `kb_files`,
+ * поэтому назначается по позиции категории в списке базы знаний.
  */
 const CATEGORY_COLOR_VARS = ["--cat-1", "--cat-2", "--cat-3", "--cat-4", "--cat-5"];
-const DEFAULT_CATEGORY_COLOR_VAR = "--cat-default";
 
 export function platformLabel(platform: Platform): string {
   return PLATFORM_LABELS[platform];
@@ -335,18 +315,20 @@ function channelBadge(channel: ChannelConnection): ChannelBadgeView {
 }
 
 function categoryBadge(category: Category): CategoryBadgeView {
-  const colorVar = category.is_default
-    ? DEFAULT_CATEGORY_COLOR_VAR
-    : (CATEGORY_COLOR_VARS[data.categories.indexOf(category)] ??
-      DEFAULT_CATEGORY_COLOR_VAR);
+  const index = data.categories.indexOf(category);
 
-  return { id: category.id, name: category.name, colorVar };
+  return {
+    id: category.id,
+    name: category.name,
+    colorVar: CATEGORY_COLOR_VARS[index % CATEGORY_COLOR_VARS.length]!,
+  };
 }
 
-function categoryBadgeById(id: string | null): CategoryBadgeView | null {
-  const category = byId(data.categories, id);
-
-  return category ? categoryBadge(category) : null;
+function categoryBadges(ids: readonly string[]): CategoryBadgeView[] {
+  return ids
+    .map((id) => byId(data.categories, id))
+    .filter((category): category is Category => category !== null)
+    .map(categoryBadge);
 }
 
 function requireChannel(id: string): ChannelConnection {
@@ -410,7 +392,9 @@ export function getChannelConnections(): ChannelConnection[] {
 }
 
 export function getCategories(): Category[] {
-  return [...data.categories].sort((left, right) => left.priority - right.priority);
+  return [...data.categories].sort(
+    (left, right) => left.sort_order - right.sort_order,
+  );
 }
 
 export function getCategoryFilterOptions(): CategoryBadgeView[] {
@@ -514,7 +498,7 @@ function dmListItem(conversation: Conversation): ConversationListItemView {
     time: formatListTime(conversation.last_incoming_at, now),
     unreadCount: conversation.unread_count,
     channel: channelBadge(requireChannel(conversation.channel_connection_id)),
-    category: categoryBadgeById(conversation.category_id),
+    categories: categoryBadges(conversation.matched_kb_file_ids),
     avatar: avatarFor(contact?.id ?? conversation.id, name),
   };
 }
@@ -533,7 +517,7 @@ function postListItem(conversation: Conversation): ConversationListItemView {
     time: formatListTime(conversation.last_incoming_at, now),
     unreadCount: conversation.unread_count,
     channel: channelBadge(requireChannel(conversation.channel_connection_id)),
-    category: null,
+    categories: [],
     avatar: null,
   };
 }
@@ -542,16 +526,8 @@ function conversationMatchesCategory(
   conversation: Conversation,
   categoryId: string | null,
 ): boolean {
-  if (!categoryId) {
-    return true;
-  }
-
-  if (conversation.kind === "dm") {
-    return conversation.category_id === categoryId;
-  }
-
-  return messagesOf(conversation.id).some(
-    (message) => message.direction === "in" && message.category_id === categoryId,
+  return (
+    !categoryId || conversation.matched_kb_file_ids.includes(categoryId)
   );
 }
 
@@ -648,7 +624,7 @@ export function getThread(conversationId: string): ThreadView | null {
     title: name,
     avatar: avatarFor(contact?.id ?? conversation.id, name),
     channel: channelBadge(channel),
-    category: categoryBadgeById(conversation.category_id),
+    categories: categoryBadges(conversation.matched_kb_file_ids),
     replyWindowLabel:
       hoursLeft !== null && hoursLeft > 0
         ? `Окно ответа: ${Math.round(hoursLeft)} ч`
@@ -691,7 +667,6 @@ export function getPostThread(conversationId: string): PostThreadView | null {
 
   const comments: CommentView[] = messagesOf(conversation.id).map((message) => {
     const identity = byId(data.contactIdentities, message.contact_identity_id);
-    const category = byId(data.categories, message.category_id);
     const isOurs = message.direction === "out";
     const authorName = identity?.display_name ?? getWorkspace().name;
 
@@ -706,12 +681,9 @@ export function getPostThread(conversationId: string): PostThreadView | null {
       avatar: isOurs ? null : avatarFor(identity?.id ?? message.id, authorName),
       text: message.text,
       time: formatMessageTime(message.created_at, now),
-      category: isOurs || !category ? null : categoryBadge(category),
       isOurs,
       isReply: message.parent_message_id !== null,
       isDraftTarget: draftIsLive && draft?.last_message_id === message.id,
-      isMuted: category?.no_draft === true,
-      noDraftNote: category?.no_draft === true,
     };
   });
 
@@ -888,7 +860,7 @@ export function getDashboard(): DashboardView {
             ? `Комментарий: «${truncate(message.text, 34)}»`
             : truncate(message.text, 44),
           channel: channelBadge(requireChannel(conversation.channel_connection_id)),
-          category: categoryBadgeById(message.category_id),
+          categories: categoryBadges(conversation.matched_kb_file_ids),
           time: formatMessageTime(message.created_at, now),
         },
       ];
@@ -938,11 +910,6 @@ export function getDashboard(): DashboardView {
 export const SETTINGS_SECTIONS: SettingsSectionView[] = [
   { id: "channels", title: "Каналы", description: "Подключения и их имена" },
   {
-    id: "categories",
-    title: "Категории",
-    description: "Правила классификации входящих",
-  },
-  {
     id: "ai",
     title: "AI",
     description: "Системные промпты, модель, дебаунс",
@@ -950,7 +917,7 @@ export const SETTINGS_SECTIONS: SettingsSectionView[] = [
   {
     id: "knowledge",
     title: "База знаний",
-    description: "Markdown-файлы для AI-ответов",
+    description: "Категории, из которых AI берёт факты",
   },
   { id: "team", title: "Команда", description: "Участники и приглашения" },
   { id: "notifications", title: "Уведомления", description: "Частота push" },
@@ -985,42 +952,6 @@ export function getSettingsChannels(): SettingsChannelRowView[] {
       channel.status === "connected" ? "подключён" : "отключён"
     } · через ${channel.provider === "zernio" ? "Zernio" : channel.provider}`,
   }));
-}
-
-export function getSettingsCategories(): SettingsCategoryRowView[] {
-  return getCategories().map((category) => {
-    const scopeChannels = category.channel_connection_ids.length
-      ? category.channel_connection_ids
-          .map((id) => requireChannel(id).name)
-          .join(", ")
-      : "все";
-
-    const extraLabels: string[] = [];
-
-    if (category.extra_action) {
-      extraLabels.push(`действие: ${category.extra_action}`);
-    }
-
-    if (category.no_draft) {
-      extraLabels.push("без черновиков");
-    }
-
-    if (category.is_default) {
-      extraLabels.push("системная");
-    }
-
-    return {
-      id: category.id,
-      name: category.name,
-      colorVar: categoryBadge(category).colorVar,
-      priorityLabel: String(category.priority),
-      scopeLabel: `каналы: ${scopeChannels} · тип: ${
-        CATEGORY_INBOX_KIND_LABELS[category.inbox_kind]
-      }`,
-      extraLabels,
-      isDefault: category.is_default,
-    };
-  });
 }
 
 export function getNotificationSettings(): NotificationSettings {

@@ -37,7 +37,6 @@ export const publicClientTables = [
   "workspace_members",
   "invitations",
   "channel_connections",
-  "categories",
   "contacts",
   "contact_identities",
   "conversations",
