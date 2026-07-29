@@ -31,7 +31,11 @@ describe("parseZernioWebhook", () => {
         externalId: "tg_msg_55210",
         text: "Здравствуйте! Подскажите, пожалуйста, режим работы сегодня?",
         attachments: [],
-        sender: { externalId: "tg_user_44310", displayName: "Anna Keller" },
+        sender: {
+          externalId: "tg_user_44310",
+          displayName: "Anna Keller",
+          avatarUrl: "https://cdn.zernio.com/avatars/tg_user_44310.jpg",
+        },
       },
       rawMetadata: JSON.parse(rawBody),
     };
@@ -70,6 +74,51 @@ describe("parseZernioWebhook", () => {
     };
 
     expect(events[0]).toEqual(expected);
+  });
+
+  it("maps a comment author's picture to avatarUrl, and omits it when blank", () => {
+    const envelope = (picture: unknown) =>
+      JSON.stringify({
+        id: "wh_evt_picture",
+        event: "comment.received",
+        comment: {
+          id: "ig_comment_picture",
+          postId: null,
+          platformPostId: "ig_post_88401",
+          platform: "instagram",
+          text: "Есть в наличии?",
+          author: { id: "ig_user_77", username: "kundin", picture },
+          isReply: false,
+          parentCommentId: null,
+        },
+        post: { id: null, platformPostId: "ig_post_88401" },
+        account: { id: "acct_ig_55014", platform: "instagram", username: "shop" },
+      });
+
+    const [withPicture] = parseZernioWebhook({
+      rawBody: envelope("https://scontent.cdninstagram.com/v/ig_user_77.jpg"),
+      headers: {},
+    });
+    const [blankPicture] = parseZernioWebhook({
+      rawBody: envelope("   "),
+      headers: {},
+    });
+
+    expect(withPicture).toMatchObject({
+      comment: {
+        author: {
+          externalId: "ig_user_77",
+          avatarUrl: "https://scontent.cdninstagram.com/v/ig_user_77.jpg",
+        },
+      },
+    });
+    // Not `avatarUrl: undefined` — the key is absent, so nothing downstream
+    // mistakes "provider reported nothing" for "provider reported an empty URL".
+    expect(
+      blankPicture &&
+        "comment" in blankPicture &&
+        "avatarUrl" in blankPicture.comment.author,
+    ).toBe(false);
   });
 
   it("maps a comment reply (parentCommentId) to parentExternalId", () => {

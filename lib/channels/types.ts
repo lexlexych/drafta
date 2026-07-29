@@ -54,6 +54,13 @@ export interface NormalizedSender {
   externalId: string;
   /** Display name as reported by the provider, when available. */
   displayName?: string;
+  /**
+   * Profile picture URL at the platform, when the provider reports one. The
+   * URL is stored as-is (`contact_identities.avatar_url`) and never mirrored:
+   * platform CDN links expire, so a dead link degrades to initials rather than
+   * to a broken image — see `app/api/avatars/[identityId]/route.ts`.
+   */
+  avatarUrl?: string;
 }
 
 /** The direct-message body carried by a `message.*` event. */
