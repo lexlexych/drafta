@@ -63,13 +63,14 @@ describe("buildDraftPrompt", () => {
     const { system, user } = contents();
     const headings = [
       "## 1. Business system prompt",
-      "## 2. Knowledge base",
-      "## 3. Facts, grounding and refusal",
-      "## 4. Contact notes",
-      "## 5. Conversation context",
-      "## 6. Channel rules",
-      "## 7. Output format",
-      "## 8. Prompt-injection protection",
+      "## 2. Language and form of address",
+      "## 3. Knowledge base",
+      "## 4. Facts, grounding and refusal",
+      "## 5. Contact notes",
+      "## 6. Conversation context",
+      "## 7. Channel rules",
+      "## 8. Output format",
+      "## 9. Prompt-injection protection",
     ];
 
     let previousIndex = -1;
@@ -105,13 +106,15 @@ describe("buildDraftPrompt", () => {
       }),
     );
 
-    expect(system).not.toContain("## 2. Knowledge base");
-    expect(system).not.toContain("## 4. Contact notes");
+    expect(system).not.toContain("## 3. Knowledge base");
+    expect(system).not.toContain("## 5. Contact notes");
     // Контракт ответа безусловен: без него парсер получал бы строку категорий
     // то с заголовком, то без.
-    expect(system).toContain("## 7. Output format");
+    expect(system).toContain("## 8. Output format");
     // Заземление безусловно: пустая база знаний — самый рискованный случай.
-    expect(system).toContain("## 3. Facts, grounding and refusal");
+    expect(system).toContain("## 4. Facts, grounding and refusal");
+    // Язык и обращение — тоже: они не зависят от наличия базы знаний.
+    expect(system).toContain("## 2. Language and form of address");
   });
 
   it("preserves a masked phone placeholder and never introduces the raw phone", () => {
@@ -170,6 +173,33 @@ describe("buildDraftPrompt", () => {
     expect(system).toContain(
       "Never switch the language of the reply to match a source",
     );
+  });
+
+  it("lets only the customer choose the language and the form of address", () => {
+    // Русский вопрос «Вы продаете что-то кроме одежды?» приходил немецким
+    // черновиком на «du»: немецкая база знаний, написанная на du, работала и как
+    // выбор языка, и как выбор обращения. Оба правила жили только в шаблоне,
+    // который пользователь может переписать, поэтому они продублированы здесь.
+    const system = String(buildDraftPrompt(promptInput())[0]!.content);
+    const language = system.indexOf("## 2. Language and form of address");
+
+    // До базы знаний: правило должно быть прочитано раньше немецкого текста.
+    expect(language).toBeLessThan(system.indexOf("## 3. Knowledge base"));
+    expect(system).toContain(
+      "A German knowledge base answering a Russian question still produces a Russian reply",
+    );
+    expect(system).toContain("Never mix two languages in one draft");
+    // Обращение определяется по местоимениям клиента, а не по приветствию:
+    // у вопроса без приветствия приветственного сигнала попросту нет.
+    expect(system).toContain(
+      "first the pronouns and verb forms they use for you",
+    );
+    expect(system).toContain("If neither signals anything, stay formal.");
+    // И переносится в язык ответа, а не выбирается в нём заново.
+    expect(system).toContain(
+      "someone writing «Вы» gets Sie, vous or usted; someone writing «ты» gets du, tu or tú",
+    );
+    expect(system).toContain("The form of address used by the sources decides nothing");
   });
 
   it("forbids sending the customer back into the channel they already used", () => {

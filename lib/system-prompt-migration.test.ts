@@ -21,7 +21,7 @@ const migration = migrationSql("20260728100000_workspace_system_prompts.sql");
  * Шаблоны правятся новой миграцией, а не правкой уже применённой: та не
  * выполняется повторно, и дефолт колонки в базе остался бы старым.
  */
-const templates = migrationSql("20260729110000_default_prompt_categories.sql");
+const templates = migrationSql("20260729120000_default_prompt_address_form.sql");
 
 describe("workspace system prompts migration", () => {
   it("keeps the default templates byte-identical to lib/ai/default-prompts.ts", () => {
@@ -85,6 +85,30 @@ describe("workspace system prompts migration", () => {
       expect(language).toBeLessThan(template.indexOf("## Тон и приветствие"));
       expect(template).toContain("не смешивай языки в одном");
     }
+  });
+
+  it("gives the form of address its own block in both templates", () => {
+    // Обращение было одной строкой внутри блока про тон и держалось на
+    // приветствии: у вопроса «Вы продаете что-то кроме одежды?» приветствия нет,
+    // и немецкая база знаний на du перетягивала черновик на «ты».
+    for (const template of [
+      DEFAULT_SYSTEM_PROMPT,
+      DEFAULT_COMMENT_SYSTEM_PROMPT,
+    ]) {
+      const address = template.indexOf("## Обращение: на «вы» или на «ты»");
+      expect(address).toBeGreaterThan(-1);
+      expect(address).toBeGreaterThan(template.indexOf("## Язык ответа"));
+      expect(address).toBeLessThan(template.indexOf("## Тон и приветствие"));
+      // Форма выбирается по местоимениям клиента и переносится в язык ответа.
+      expect(template).toContain("сначала");
+      expect(template).toContain("написавшему «Вы» отвечай Sie");
+      // Источники — не сигнал: ни для языка, ни для обращения.
+      expect(template).toContain("а не разрешение обращаться");
+    }
+    // Правило приветствия осталось, но обращение больше на нём не висит.
+    expect(DEFAULT_SYSTEM_PROMPT).not.toContain(
+      "Неформальное приветствие клиента — обращайся на «ты»",
+    );
   });
 
   it("keeps the template from redirecting a customer into the channel they used", () => {
