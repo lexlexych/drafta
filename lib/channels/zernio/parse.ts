@@ -129,8 +129,6 @@ interface ZernioRawAttachment {
 interface ZernioRawSender {
   id: string;
   name?: string | null;
-  /** Profile picture at the platform — same field name as a comment author's. */
-  picture?: string | null;
 }
 
 interface ZernioRawMessage {
@@ -286,18 +284,6 @@ function mapAttachment(raw: ZernioRawAttachment): NormalizedAttachment {
   };
 }
 
-/**
- * Zernio reports a sender's profile picture as `picture` on both DM senders and
- * comment authors, and omits it (or sends `null`) when the platform gives none.
- * Returns a spreadable fragment so an absent picture leaves `avatarUrl` off the
- * normalized sender entirely instead of setting it to `undefined`.
- */
-function avatarOf(picture: string | null | undefined): { avatarUrl?: string } {
-  const url = picture?.trim();
-
-  return url ? { avatarUrl: url } : {};
-}
-
 function parseSingleEnvelope(raw: unknown): NormalizedEvent | null {
   if (!isZernioEnvelope(raw)) {
     console.warn(
@@ -371,7 +357,6 @@ function buildDmEvent(
       sender: {
         externalId: raw.message.sender.id,
         displayName: raw.message.sender.name ?? undefined,
-        ...avatarOf(raw.message.sender.picture),
       },
     },
     // Kept in full per docs/architecture/05-channels.md#нормализованное-событие.
@@ -441,7 +426,6 @@ function buildCommentEvent(
         externalId: comment.author.id,
         displayName:
           comment.author.name ?? comment.author.username ?? undefined,
-        ...avatarOf(comment.author.picture),
       },
       ...(comment.parentCommentId
         ? { parentExternalId: comment.parentCommentId }

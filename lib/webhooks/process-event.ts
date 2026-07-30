@@ -351,35 +351,6 @@ async function processPublishedPost(params: {
   }
 }
 
-/**
- * Keeps a known identity's avatar current. Platform picture URLs rotate (Meta
- * signs them, and people change their photo), so every inbound event is also a
- * chance to refresh one — the only field an already-known identity updates.
- *
- * Deliberately best-effort: an avatar is decoration, never a reason to fail a
- * webhook that carries a real message (docs/architecture/14-vibecoding-rules.md#7).
- * An absent picture leaves the stored one alone rather than clearing it: a
- * provider that stops reporting `picture` shouldn't wipe a working avatar.
- */
-async function refreshAvatar(
-  supabase: SupabaseClient,
-  identity: { id: string; avatar_url: string | null },
-  avatarUrl: string | undefined,
-): Promise<void> {
-  if (!avatarUrl || avatarUrl === identity.avatar_url) {
-    return;
-  }
-
-  const { error } = await supabase
-    .from("contact_identities")
-    .update({ avatar_url: avatarUrl })
-    .eq("id", identity.id);
-
-  if (error) {
-    console.error("[webhooks] failed to refresh contact avatar", error);
-  }
-}
-
 async function upsertContactIdentity(
   supabase: SupabaseClient,
   workspaceId: string,
@@ -390,15 +361,13 @@ async function upsertContactIdentity(
 
   const { data: existing, error: selectError } = await supabase
     .from("contact_identities")
-    .select("id, contact_id, avatar_url")
+    .select("id, contact_id")
     .eq("workspace_id", workspaceId)
     .eq("platform", platform)
     .eq("external_id", externalId)
     .maybeSingle();
   if (selectError) throw selectError;
   if (existing) {
-    await refreshAvatar(supabase, existing, sender.avatarUrl);
-
     return { contactIdentityId: existing.id, contactId: existing.contact_id };
   }
 
@@ -421,7 +390,6 @@ async function upsertContactIdentity(
       platform,
       external_id: externalId,
       display_name: sender.displayName ?? null,
-      avatar_url: sender.avatarUrl ?? null,
     })
     .select("id")
     .single();

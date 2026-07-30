@@ -78,7 +78,6 @@ function buildEnvelope(overrides: {
   messageId: string;
   senderId: string;
   senderName?: string;
-  senderPicture?: string;
   text?: string;
 }): string {
   return JSON.stringify({
@@ -98,11 +97,7 @@ function buildEnvelope(overrides: {
       direction: "incoming",
       text: overrides.text ?? "Test message",
       attachments: [],
-      sender: {
-        id: overrides.senderId,
-        name: overrides.senderName,
-        picture: overrides.senderPicture,
-      },
+      sender: { id: overrides.senderId, name: overrides.senderName },
       sentAt: new Date().toISOString(),
       isRead: false,
     },
@@ -323,49 +318,6 @@ describe.skipIf(!hasLocalSupabaseConfig)("POST /api/webhooks/[provider] (zernio)
     expect(withAttachment?.attachments).toEqual([
       { type: "image", url: "https://media.zernio.com/wa/acct_wa_31207/img_5f3c1a.jpg" },
     ]);
-  });
-
-  it("stores the sender's avatar, refreshes it when it changes, and keeps it when a later message reports none", async () => {
-    const workspaceId = await createTestWorkspace();
-    await createTestChannelConnection(workspaceId, {
-      platform: "telegram",
-      externalId: "acct_tg_avatar",
-    });
-
-    const envelope = (seq: number, senderPicture?: string) =>
-      buildEnvelope({
-        id: `wh_evt_avatar_000${seq}`,
-        accountId: "acct_tg_avatar",
-        conversationId: "conv_avatar",
-        messageId: `msg_avatar_${seq}`,
-        senderId: "tg_user_avatar",
-        senderName: "Avatar Sender",
-        senderPicture,
-      });
-
-    const readAvatar = async () => {
-      const { data } = await supabase
-        .from("contact_identities")
-        .select("avatar_url")
-        .eq("workspace_id", workspaceId)
-        .eq("platform", "telegram")
-        .eq("external_id", "tg_user_avatar")
-        .single();
-
-      return data!.avatar_url;
-    };
-
-    // Created with the picture the provider reported.
-    await postZernioWebhook(envelope(1, "https://cdn.zernio.com/a/first.jpg"));
-    expect(await readAvatar()).toBe("https://cdn.zernio.com/a/first.jpg");
-
-    // Contact changed their photo — the known identity picks up the new link.
-    await postZernioWebhook(envelope(2, "https://cdn.zernio.com/a/second.jpg"));
-    expect(await readAvatar()).toBe("https://cdn.zernio.com/a/second.jpg");
-
-    // A platform that reports no picture must not wipe a working avatar.
-    await postZernioWebhook(envelope(3));
-    expect(await readAvatar()).toBe("https://cdn.zernio.com/a/second.jpg");
   });
 
   it("invalid signature: 401 and nothing written to the database", async () => {

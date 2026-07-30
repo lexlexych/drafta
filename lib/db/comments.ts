@@ -14,7 +14,6 @@ import {
   listChannelConnections,
   type ChannelConnectionRow,
 } from "@/lib/db/channel-connections";
-import { avatarProxyUrl } from "@/lib/avatars";
 import { avatarFor, countWithNoun, type ChannelBadgeView } from "@/lib/mock";
 import { formatListTime, formatMessageTime } from "@/lib/mock/time";
 
@@ -139,7 +138,6 @@ type ContactIdentityRow = {
   display_name: string | null;
   platform: string;
   external_id: string;
-  avatar_url: string | null;
 };
 
 function channelBadge(channel: ChannelConnectionRow): ChannelBadgeView {
@@ -246,7 +244,7 @@ async function loadIdentitiesById(
 
   const { data, error } = await supabase
     .from("contact_identities")
-    .select("id, display_name, platform, external_id, avatar_url")
+    .select("id, display_name, platform, external_id")
     .eq("workspace_id", workspaceId)
     .in("id", identityIds);
 
@@ -543,13 +541,7 @@ export async function getPostThreadView(
           : isOurs
             ? channel.name
             : null,
-      avatar: isOurs
-        ? null
-        : avatarFor(
-            identity?.id ?? comment.id,
-            authorName,
-            identity ? avatarProxyUrl(identity.id, identity.avatar_url) : null,
-          ),
+      avatar: isOurs ? null : avatarFor(identity?.id ?? comment.id, authorName),
       text: comment.text,
       time: formatMessageTime(comment.created_at, nowIso),
       isOurs,
