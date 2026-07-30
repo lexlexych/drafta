@@ -254,6 +254,151 @@ export async function sendZernioCommentReply(
 }
 
 /**
+ * One page of "people, with their profile picture" — the only thing the avatar
+ * lookup needs out of two differently shaped Zernio listings, so both
+ * `listZernio*` functions below normalize into this and the adapter walks pages
+ * without caring which endpoint produced them.
+ */
+export interface ZernioParticipantPage {
+  participants: Array<{ externalId: string; avatarUrl: string | null }>;
+  /** `null` on the last page. */
+  nextCursor: string | null;
+}
+
+function participantEntry(
+  externalId: unknown,
+  picture: unknown,
+): { externalId: string; avatarUrl: string | null } | null {
+  if (typeof externalId !== "string" || externalId.length === 0) {
+    return null;
+  }
+
+  const url = typeof picture === "string" ? picture.trim() : "";
+
+  return { externalId, avatarUrl: url.length > 0 ? url : null };
+}
+
+function asCursor(value: unknown): string | null {
+  return typeof value === "string" && value.length > 0 ? value : null;
+}
+
+/**
+ * Lists the account's DM conversations (`GET /v1/inbox/conversations`), reduced
+ * to each thread's participant and their photo (`participantPicture`).
+ *
+ * This is the only documented source of a DM participant's picture: the
+ * single-conversation route has no such field, and the inbound `message.received`
+ * webhook doesn't carry one at all on Meta platforms.
+ */
+export async function listZernioConversations(
+  config: ZernioApiConfig,
+  input: { accountId: string; cursor?: string; limit?: number },
+): Promise<ZernioParticipantPage> {
+  const url = new URL(joinUrl(config.apiBaseUrl, "inbox/conversations"));
+  url.searchParams.set("accountId", input.accountId);
+  if (input.limit) {
+    url.searchParams.set("limit", String(input.limit));
+  }
+  if (input.cursor) {
+    url.searchParams.set("cursor", input.cursor);
+  }
+
+  const response = await fetch(url, { method: "GET", headers: authHeaders(config) });
+
+  if (!response.ok) {
+    throw await zernioHttpError(response, "Zernio conversations listing failed");
+  }
+
+  const body = (await readJson(response)) as
+    | {
+        data?: Array<{ participantId?: unknown; participantPicture?: unknown }>;
+        pagination?: { nextCursor?: unknown };
+      }
+    | null;
+
+  const participants = (body?.data ?? [])
+    .map((row) => participantEntry(row?.participantId, row?.participantPicture))
+    .filter((entry): entry is { externalId: string; avatarUrl: string | null } =>
+      Boolean(entry),
+    );
+
+  return { participants, nextCursor: asCursor(body?.pagination?.nextCursor) };
+}
+
+/** A comment as returned by the listing — `replies` repeats the same shape. */
+type ZernioListedComment = {
+  from?: { id?: unknown; picture?: unknown };
+  replies?: ZernioListedComment[];
+};
+
+function collectCommentAuthors(
+  comments: ZernioListedComment[] | undefined,
+  into: Array<{ externalId: string; avatarUrl: string | null }>,
+): void {
+  for (const comment of comments ?? []) {
+    const entry = participantEntry(comment?.from?.id, comment?.from?.picture);
+    if (entry) {
+      into.push(entry);
+    }
+
+    // Replies carry their own authors, and a `comment.received` webhook fires
+    // for them too (`isReply`), so a nested author must be findable here.
+    collectCommentAuthors(comment?.replies, into);
+  }
+}
+
+/**
+ * Lists a post's comments (`GET /v1/inbox/comments/{postId}`), reduced to their
+ * authors and photos (`from.picture`) — the comment-side counterpart of
+ * `listZernioConversations`. `postExternalId` is the post's `platformPostId`,
+ * which is what `posts.external_id` stores.
+ *
+ * Note the pagination field differs from the conversations listing: this
+ * endpoint reports `pagination.cursor`, and only while `hasMore` is true.
+ */
+export async function listZernioPostComments(
+  config: ZernioApiConfig,
+  input: {
+    accountId: string;
+    postExternalId: string;
+    cursor?: string;
+    limit?: number;
+  },
+): Promise<ZernioParticipantPage> {
+  const url = new URL(
+    joinUrl(
+      config.apiBaseUrl,
+      `inbox/comments/${encodeURIComponent(input.postExternalId)}`,
+    ),
+  );
+  url.searchParams.set("accountId", input.accountId);
+  if (input.limit) {
+    url.searchParams.set("limit", String(input.limit));
+  }
+  if (input.cursor) {
+    url.searchParams.set("cursor", input.cursor);
+  }
+
+  const response = await fetch(url, { method: "GET", headers: authHeaders(config) });
+
+  if (!response.ok) {
+    throw await zernioHttpError(response, "Zernio comments listing failed");
+  }
+
+  const body = (await readJson(response)) as
+    | {
+        comments?: ZernioListedComment[];
+        pagination?: { cursor?: unknown };
+      }
+    | null;
+
+  const participants: Array<{ externalId: string; avatarUrl: string | null }> = [];
+  collectCommentAuthors(body?.comments, participants);
+
+  return { participants, nextCursor: asCursor(body?.pagination?.cursor) };
+}
+
+/**
  * Asks Zernio for the hosted authorization URL for `platform` under
  * `profileId`, redirecting back to `redirectUrl` when done. Returns the
  * `authUrl` the browser must be sent to.

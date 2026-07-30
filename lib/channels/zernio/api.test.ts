@@ -5,6 +5,8 @@ import {
   deleteZernioAccount,
   deleteZernioProfile,
   getZernioConnectAuthUrl,
+  listZernioConversations,
+  listZernioPostComments,
   sendZernioInboxMessage,
   ZernioApiError,
 } from "./api";
@@ -207,6 +209,128 @@ describe("getZernioConnectAuthUrl", () => {
         platform: "telegram",
         profileId: "prof_1",
         redirectUrl: "https://app.example/cb",
+      }),
+    ).rejects.toThrow(ZernioApiError);
+  });
+});
+
+describe("listZernioConversations", () => {
+  it("GETs /inbox/conversations with Bearer auth and reduces rows to participants", async () => {
+    const fetchMock = mockFetch({
+      ok: true,
+      json: {
+        data: [
+          {
+            participantId: "ig_user_1",
+            participantName: "Alexey",
+            participantPicture: "https://scontent.example/a.jpg",
+          },
+          { participantId: "ig_user_2", participantPicture: null },
+        ],
+        pagination: { hasMore: true, nextCursor: "cur_2" },
+      },
+    });
+
+    const page = await listZernioConversations(config, {
+      accountId: "acct_ig_1",
+      limit: 100,
+    });
+
+    expect(page).toEqual({
+      participants: [
+        { externalId: "ig_user_1", avatarUrl: "https://scontent.example/a.jpg" },
+        { externalId: "ig_user_2", avatarUrl: null },
+      ],
+      nextCursor: "cur_2",
+    });
+
+    const [url, init] = fetchMock.mock.calls[0];
+    const parsed = new URL(url as string);
+    expect(parsed.origin + parsed.pathname).toBe(
+      "https://zernio.com/api/v1/inbox/conversations",
+    );
+    expect(parsed.searchParams.get("accountId")).toBe("acct_ig_1");
+    expect(parsed.searchParams.get("limit")).toBe("100");
+    expect(init.headers.Authorization).toBe("Bearer zk_test_123");
+  });
+
+  it("passes the cursor through and reports the last page as nextCursor null", async () => {
+    const fetchMock = mockFetch({
+      ok: true,
+      json: { data: [], pagination: { hasMore: false } },
+    });
+
+    const page = await listZernioConversations(config, {
+      accountId: "acct_ig_1",
+      cursor: "cur_2",
+    });
+
+    expect(page.nextCursor).toBeNull();
+    const parsed = new URL(fetchMock.mock.calls[0][0] as string);
+    expect(parsed.searchParams.get("cursor")).toBe("cur_2");
+  });
+
+  it("throws ZernioApiError with the provider's body on a non-2xx", async () => {
+    mockFetch({ ok: false, status: 403, text: "Inbox addon required" });
+
+    await expect(
+      listZernioConversations(config, { accountId: "acct_ig_1" }),
+    ).rejects.toThrow(/Inbox addon required/);
+  });
+});
+
+describe("listZernioPostComments", () => {
+  it("GETs /inbox/comments/{postId} and collects authors, replies included", async () => {
+    const fetchMock = mockFetch({
+      ok: true,
+      json: {
+        comments: [
+          {
+            id: "c1",
+            from: { id: "ig_user_1", picture: "https://scontent.example/1.jpg" },
+            replies: [
+              {
+                id: "c1r1",
+                from: { id: "ig_user_9", picture: "https://scontent.example/9.jpg" },
+              },
+            ],
+          },
+          { id: "c2", from: { id: "ig_user_2", picture: "   " } },
+        ],
+        // This endpoint reports `cursor`, not `nextCursor`.
+        pagination: { hasMore: true, cursor: "cur_c2" },
+      },
+    });
+
+    const page = await listZernioPostComments(config, {
+      accountId: "acct_ig_1",
+      postExternalId: "ig_post_88401",
+    });
+
+    expect(page).toEqual({
+      participants: [
+        { externalId: "ig_user_1", avatarUrl: "https://scontent.example/1.jpg" },
+        { externalId: "ig_user_9", avatarUrl: "https://scontent.example/9.jpg" },
+        // Blank picture is "no photo", not an empty URL to render.
+        { externalId: "ig_user_2", avatarUrl: null },
+      ],
+      nextCursor: "cur_c2",
+    });
+
+    const parsed = new URL(fetchMock.mock.calls[0][0] as string);
+    expect(parsed.origin + parsed.pathname).toBe(
+      "https://zernio.com/api/v1/inbox/comments/ig_post_88401",
+    );
+    expect(parsed.searchParams.get("accountId")).toBe("acct_ig_1");
+  });
+
+  it("throws ZernioApiError on a non-2xx", async () => {
+    mockFetch({ ok: false, status: 404, text: "Not found" });
+
+    await expect(
+      listZernioPostComments(config, {
+        accountId: "acct_ig_1",
+        postExternalId: "missing",
       }),
     ).rejects.toThrow(ZernioApiError);
   });
