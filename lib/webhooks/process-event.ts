@@ -8,11 +8,7 @@ import type {
   NormalizedPostRef,
   NormalizedSender,
 } from "@/lib/channels/types";
-import {
-  emitContactAvatarSyncRequested,
-  emitInteractionReceived,
-} from "@/lib/inngest/events";
-import { isAvatarStale } from "@/lib/avatars";
+import { emitInteractionReceived } from "@/lib/inngest/events";
 
 /**
  * One normalized event → the DB side of §6.1's pipeline
@@ -239,13 +235,12 @@ async function processIncomingDirectMessage(params: {
   } = params;
 
   try {
-    const { contactIdentityId, contactId, avatarFetchedAt } =
-      await upsertContactIdentity(
-        supabase,
-        workspaceId,
-        event.platform,
-        event.message.sender,
-      );
+    const { contactIdentityId, contactId } = await upsertContactIdentity(
+      supabase,
+      workspaceId,
+      event.platform,
+      event.message.sender,
+    );
 
     const conversationId = await upsertConversation(
       supabase,
@@ -269,12 +264,6 @@ async function processIncomingDirectMessage(params: {
     // never allowed to turn a persisted message into a failed webhook. The
     // event payload is IDs-only.
     await emitInteractionReceived({ messageId, conversationId, workspaceId });
-    await requestAvatarSync({
-      workspaceId,
-      contactIdentityId,
-      channelConnectionId,
-      avatarFetchedAt,
-    });
   } catch (error) {
     console.error("[webhooks] failed to process incoming direct message", error);
     await markUnprocessedWithError(describeError(error));
@@ -306,7 +295,7 @@ async function processIncomingComment(params: {
   try {
     // A post's comments have many different authors — each new one becomes its
     // own identity/contact, the same way a DM's single author does.
-    const { contactIdentityId, avatarFetchedAt } = await upsertContactIdentity(
+    const { contactIdentityId } = await upsertContactIdentity(
       supabase,
       workspaceId,
       event.platform,
@@ -329,17 +318,6 @@ async function processIncomingComment(params: {
     );
 
     await markProcessed(null);
-
-    // The only Inngest event a comment emits — a comment draft is still never
-    // generated on arrival. `postId` routes the lookup to this post's
-    // commenters instead of the account's DM threads.
-    await requestAvatarSync({
-      workspaceId,
-      contactIdentityId,
-      channelConnectionId,
-      avatarFetchedAt,
-      postId,
-    });
   } catch (error) {
     console.error("[webhooks] failed to process incoming comment", error);
     await markUnprocessedWithError(describeError(error));
@@ -374,66 +352,54 @@ async function processPublishedPost(params: {
 }
 
 /**
- * Asks for a contact's avatar — but only when it's worth an API call.
+ * Keeps a known identity's avatar current. Platform picture URLs rotate (Meta
+ * signs them, and people change their photo), so every inbound event is also a
+ * chance to refresh one — the only field an already-known identity updates.
  *
- * Profile pictures don't arrive with the webhook (Meta omits them from inbound
- * DMs), so they're fetched from the provider. That call is the expensive part,
- * so it happens at most once a month per identity, and only right after that
- * contact wrote — which is what makes a cron unnecessary: a contact nobody
- * hears from never costs a request.
+ * Deliberately best-effort: an avatar is decoration, never a reason to fail a
+ * webhook that carries a real message (docs/architecture/14-vibecoding-rules.md#7).
+ * An absent picture leaves the stored one alone rather than clearing it: a
+ * provider that stops reporting `picture` shouldn't wipe a working avatar.
  */
-async function requestAvatarSync(params: {
-  workspaceId: string;
-  contactIdentityId: string;
-  channelConnectionId: string;
-  avatarFetchedAt: string | null;
-  postId?: string;
-}): Promise<void> {
-  if (!isAvatarStale(params.avatarFetchedAt, new Date().toISOString())) {
+async function refreshAvatar(
+  supabase: SupabaseClient,
+  identity: { id: string; avatar_url: string | null },
+  avatarUrl: string | undefined,
+): Promise<void> {
+  if (!avatarUrl || avatarUrl === identity.avatar_url) {
     return;
   }
 
-  await emitContactAvatarSyncRequested({
-    workspaceId: params.workspaceId,
-    contactIdentityId: params.contactIdentityId,
-    channelConnectionId: params.channelConnectionId,
-    ...(params.postId ? { postId: params.postId } : {}),
-  });
-}
+  const { error } = await supabase
+    .from("contact_identities")
+    .update({ avatar_url: avatarUrl })
+    .eq("id", identity.id);
 
-/**
- * Identity of a message's/comment's author, plus when its avatar was last
- * looked up — `null` for an identity created right now, which is exactly the
- * "stale" case that triggers the first lookup.
- */
-type UpsertedIdentity = {
-  contactIdentityId: string;
-  contactId: string;
-  avatarFetchedAt: string | null;
-};
+  if (error) {
+    console.error("[webhooks] failed to refresh contact avatar", error);
+  }
+}
 
 async function upsertContactIdentity(
   supabase: SupabaseClient,
   workspaceId: string,
   platform: string,
   sender: NormalizedSender,
-): Promise<UpsertedIdentity> {
+): Promise<{ contactIdentityId: string; contactId: string }> {
   const externalId = sender.externalId;
 
   const { data: existing, error: selectError } = await supabase
     .from("contact_identities")
-    .select("id, contact_id, avatar_fetched_at")
+    .select("id, contact_id, avatar_url")
     .eq("workspace_id", workspaceId)
     .eq("platform", platform)
     .eq("external_id", externalId)
     .maybeSingle();
   if (selectError) throw selectError;
   if (existing) {
-    return {
-      contactIdentityId: existing.id,
-      contactId: existing.contact_id,
-      avatarFetchedAt: existing.avatar_fetched_at,
-    };
+    await refreshAvatar(supabase, existing, sender.avatarUrl);
+
+    return { contactIdentityId: existing.id, contactId: existing.contact_id };
   }
 
   // New identity → new contact (docs/architecture/06-data-model.md#contact_identities:
@@ -455,6 +421,7 @@ async function upsertContactIdentity(
       platform,
       external_id: externalId,
       display_name: sender.displayName ?? null,
+      avatar_url: sender.avatarUrl ?? null,
     })
     .select("id")
     .single();
@@ -468,26 +435,18 @@ async function upsertContactIdentity(
       // transaction for at this scope.
       const { data: winner, error: winnerError } = await supabase
         .from("contact_identities")
-        .select("id, contact_id, avatar_fetched_at")
+        .select("id, contact_id")
         .eq("workspace_id", workspaceId)
         .eq("platform", platform)
         .eq("external_id", externalId)
         .single();
       if (winnerError || !winner) throw winnerError ?? identityError;
-      return {
-        contactIdentityId: winner.id,
-        contactId: winner.contact_id,
-        avatarFetchedAt: winner.avatar_fetched_at,
-      };
+      return { contactIdentityId: winner.id, contactId: winner.contact_id };
     }
     throw identityError;
   }
 
-  return {
-    contactIdentityId: newIdentity.id,
-    contactId: newContact.id,
-    avatarFetchedAt: null,
-  };
+  return { contactIdentityId: newIdentity.id, contactId: newContact.id };
 }
 
 async function upsertConversation(
