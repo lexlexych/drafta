@@ -92,6 +92,22 @@ export type PushNotifyRequestedEvent = {
 };
 
 /**
+ * Payload for `contact/avatar.sync-requested` — a contact just wrote, and their
+ * profile picture is stale enough to be worth an API call. IDs only (rule 7):
+ * the pipeline reloads the identity and the channel itself.
+ *
+ * `postId` is present when the trigger was a comment: a comment author's photo
+ * is looked up among that post's commenters, while a DM participant's is looked
+ * up among the account's conversations.
+ */
+export type ContactAvatarSyncRequestedEvent = {
+  workspaceId: string;
+  contactIdentityId: string;
+  channelConnectionId: string;
+  postId?: string;
+};
+
+/**
  * Inngest SDK v4 event definitions. `staticSchema` provides compile-time
  * validation without adding a runtime validation dependency; payload fields
  * remain an explicit allow-list of pseudonymous IDs (vibecoding rule 7).
@@ -130,6 +146,13 @@ export const commentSendRequestedEvent = eventType("comment/send", {
   schema: staticSchema<CommentSendRequestedEvent>(),
 });
 
+export const contactAvatarSyncRequestedEvent = eventType(
+  "contact/avatar.sync-requested",
+  {
+    schema: staticSchema<ContactAvatarSyncRequestedEvent>(),
+  },
+);
+
 /**
  * Emits `interaction/received`, fail-safe — see
  * docs/epics/epic_02/T-03-webhook-inbound.md (open question #2 of the epic,
@@ -153,6 +176,26 @@ export async function emitInteractionReceived(
   } catch (error) {
     console.error(
       '[inngest] failed to emit "interaction/received" (webhook already persisted; not retried from here)',
+      error,
+    );
+  }
+}
+
+/**
+ * Emits `contact/avatar.sync-requested`, fail-safe for the same reason as
+ * `emitInteractionReceived`: it is called from the webhook pipeline after the
+ * message or comment is already committed. An avatar is decoration — losing the
+ * emit must never cost us a persisted interaction, and the next message from
+ * that contact re-triggers the lookup anyway.
+ */
+export async function emitContactAvatarSyncRequested(
+  payload: ContactAvatarSyncRequestedEvent,
+): Promise<void> {
+  try {
+    await inngest.send(contactAvatarSyncRequestedEvent.create(payload));
+  } catch (error) {
+    console.error(
+      '[inngest] failed to emit "contact/avatar.sync-requested" (webhook already persisted; not retried from here)',
       error,
     );
   }

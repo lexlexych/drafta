@@ -2,6 +2,8 @@ import type {
   ChannelAdapter,
   ConnectCallbackResult,
   DisconnectAccountInput,
+  FetchParticipantAvatarInput,
+  FetchParticipantAvatarResult,
   GetConnectUrlInput,
   GetConnectUrlResult,
   NormalizedEvent,
@@ -15,6 +17,8 @@ import { ChannelOperationNotImplementedError } from "../types";
 import {
   deleteZernioAccount,
   getZernioConnectAuthUrl,
+  listZernioConversations,
+  listZernioPostComments,
   sendZernioCommentReply,
   sendZernioInboxMessage,
   ZernioApiError,
@@ -25,6 +29,10 @@ import { parseZernioWebhook } from "./parse";
 import { verifyZernioSignature } from "./verify";
 
 const PROVIDER = "zernio" as const;
+
+/** Page size and page budget for the avatar lookup's walk through a listing. */
+const AVATAR_PAGE_LIMIT = 100;
+const AVATAR_MAX_PAGES = 5;
 
 /**
  * Builds the Zernio `ChannelAdapter` (docs/architecture/05-channels.md —
@@ -140,6 +148,49 @@ export function createZernioAdapter(
       input: DisconnectAccountInput,
     ): Promise<void> => {
       await deleteZernioAccount(getApiConfig(), input.externalAccountId);
+    };
+
+    /**
+     * Neither listing can be queried for one person, so the page walk is the
+     * lookup: pull pages until the participant turns up. `AVATAR_PAGE_LIMIT`
+     * bounds the call — a contact past that many pages simply keeps their
+     * initials, which is far better than an unbounded crawl inside a function
+     * that runs on every first message of the month.
+     */
+    adapter.fetchParticipantAvatar = async (
+      input: FetchParticipantAvatarInput,
+    ): Promise<FetchParticipantAvatarResult> => {
+      const config = getApiConfig();
+      let cursor: string | undefined;
+
+      for (let page = 0; page < AVATAR_MAX_PAGES; page += 1) {
+        const { participants, nextCursor } = input.postExternalId
+          ? await listZernioPostComments(config, {
+              accountId: input.externalAccountId,
+              postExternalId: input.postExternalId,
+              cursor,
+              limit: AVATAR_PAGE_LIMIT,
+            })
+          : await listZernioConversations(config, {
+              accountId: input.externalAccountId,
+              cursor,
+              limit: AVATAR_PAGE_LIMIT,
+            });
+
+        const found = participants.find(
+          (participant) => participant.externalId === input.participantExternalId,
+        );
+        if (found) {
+          return { avatarUrl: found.avatarUrl };
+        }
+
+        if (!nextCursor) {
+          break;
+        }
+        cursor = nextCursor;
+      }
+
+      return { avatarUrl: null };
     };
   }
 

@@ -11,6 +11,7 @@ const {
   sendComment,
   sendPush,
   pushDigest,
+  contactAvatar,
   inngestFunctions,
 } = await import("@/lib/inngest/functions");
 const { DRAFT_PIPELINE_CONCURRENCY } = await import(
@@ -36,6 +37,7 @@ describe("Inngest serve route", () => {
       sendComment,
       sendPush,
       pushDigest,
+      contactAvatar,
     ]);
     expect(generateDraft.opts.concurrency).toEqual([
       ...DRAFT_PIPELINE_CONCURRENCY,
@@ -64,6 +66,19 @@ describe("Inngest serve route", () => {
     expect(sendMessage.opts.retries).toBe(4);
     expect(sendMessage.opts.concurrency).toEqual([...SEND_PIPELINE_CONCURRENCY]);
     expect(sendMessage.opts.onFailure).toBeTypeOf("function");
+  });
+
+  it("serves the avatar lookup with retries and one run per contact identity", () => {
+    expect(contactAvatar.opts.retries).toBe(2);
+    // Two messages from the same person can't both call the provider; the
+    // pipeline's TTL re-check then no-ops the second run.
+    expect(contactAvatar.opts.concurrency).toEqual([
+      {
+        scope: "env",
+        key: '"contact-identity:" + event.data.contactIdentityId',
+        limit: 1,
+      },
+    ]);
   });
 
   it("exports all App Router handlers", () => {

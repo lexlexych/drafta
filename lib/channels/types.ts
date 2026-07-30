@@ -48,19 +48,19 @@ export interface NormalizedAttachment {
   mimeType?: string;
 }
 
-/** Sender of a message/comment, identified by the provider's own ID. */
+/**
+ * Sender of a message/comment, identified by the provider's own ID.
+ *
+ * Deliberately carries no profile picture: Meta doesn't put one in an inbound
+ * DM webhook, so a sender's photo is fetched from the provider's API instead
+ * (`ChannelAdapter.fetchParticipantAvatar`) rather than being read from a field
+ * that is populated for some platforms and empty for others.
+ */
 export interface NormalizedSender {
   /** External ID of the sender at the provider (user, page, or account ID). */
   externalId: string;
   /** Display name as reported by the provider, when available. */
   displayName?: string;
-  /**
-   * Profile picture URL at the platform, when the provider reports one. The
-   * URL is stored as-is (`contact_identities.avatar_url`) and never mirrored:
-   * platform CDN links expire, so a dead link degrades to initials rather than
-   * to a broken image — see `app/api/avatars/[identityId]/route.ts`.
-   */
-  avatarUrl?: string;
 }
 
 /** The direct-message body carried by a `message.*` event. */
@@ -262,6 +262,28 @@ export interface DisconnectAccountInput {
   externalAccountId: string;
 }
 
+/** Input to the optional `fetchParticipantAvatar` — whose photo to look up, and where. */
+export interface FetchParticipantAvatarInput {
+  /** External ID of the connected social account — `channel_connections.external_id`. */
+  externalAccountId: string;
+  /**
+   * External ID of the person whose photo we want — `contact_identities.external_id`,
+   * the same value the inbound event reported as the sender's/author's ID.
+   */
+  participantExternalId: string;
+  /**
+   * External ID of the post the person commented under (`posts.external_id`).
+   * Present for comment authors, absent for DM participants — that is what
+   * picks the provider-side source, so one operation covers both.
+   */
+  postExternalId?: string;
+}
+
+/** Result of `fetchParticipantAvatar` — `null` when the platform reports no photo for this person. */
+export interface FetchParticipantAvatarResult {
+  avatarUrl: string | null;
+}
+
 /** Input to the optional `parseConnectCallback` — the query parameters the provider appended to the redirect. */
 export interface ParseConnectCallbackInput {
   /** Query-string parameters of the provider's redirect back to us (keys as-is). */
@@ -343,6 +365,19 @@ export interface ChannelAdapter {
    * Idempotent: an account the provider no longer knows is a success.
    */
   disconnectAccount?(input: DisconnectAccountInput): Promise<void>;
+
+  /**
+   * Optional: look up a contact's profile picture at the provider.
+   *
+   * Inbound webhooks are not a usable source for this — Meta omits the photo
+   * from an incoming DM entirely — so the picture is pulled from the provider's
+   * API instead, and only when it's worth a call: at most monthly, and only
+   * after that contact writes (`lib/inngest/functions/contact-avatar.ts`).
+   * Returns the provider's URL as-is; nothing is mirrored.
+   */
+  fetchParticipantAvatar?(
+    input: FetchParticipantAvatarInput,
+  ): Promise<FetchParticipantAvatarResult>;
 }
 
 /**

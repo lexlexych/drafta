@@ -6,6 +6,35 @@
  */
 
 /**
+ * How long a fetched avatar is considered current.
+ *
+ * A contact's photo changes rarely, so the provider is asked at most once a
+ * month — and only when that contact writes, never on a schedule. Shared by the
+ * webhook pipeline (decides whether the lookup is worth an Inngest event) and
+ * the lookup itself (re-checks, because events can be redelivered).
+ */
+export const AVATAR_TTL_DAYS = 30;
+
+/** True when the last lookup is older than the TTL, or never happened. */
+export function isAvatarStale(
+  fetchedAt: string | null | undefined,
+  nowIso: string,
+): boolean {
+  if (!fetchedAt) {
+    return true;
+  }
+
+  const ageMs = Date.parse(nowIso) - Date.parse(fetchedAt);
+  if (Number.isNaN(ageMs)) {
+    // Unparseable timestamp — treat as never fetched rather than as fresh
+    // forever, so a bad value self-heals on the contact's next message.
+    return true;
+  }
+
+  return ageMs >= AVATAR_TTL_DAYS * 24 * 60 * 60 * 1000;
+}
+
+/**
  * Fingerprint of the stored link, appended as `?v=`. Contacts change their
  * photo, and the URL Zernio reports changes with it, but the proxy URL is keyed
  * by identity id alone — without this the browser would keep serving the

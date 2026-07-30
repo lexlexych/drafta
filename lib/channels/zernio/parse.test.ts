@@ -31,11 +31,7 @@ describe("parseZernioWebhook", () => {
         externalId: "tg_msg_55210",
         text: "Здравствуйте! Подскажите, пожалуйста, режим работы сегодня?",
         attachments: [],
-        sender: {
-          externalId: "tg_user_44310",
-          displayName: "Anna Keller",
-          avatarUrl: "https://cdn.zernio.com/avatars/tg_user_44310.jpg",
-        },
+        sender: { externalId: "tg_user_44310", displayName: "Anna Keller" },
       },
       rawMetadata: JSON.parse(rawBody),
     };
@@ -76,48 +72,38 @@ describe("parseZernioWebhook", () => {
     expect(events[0]).toEqual(expected);
   });
 
-  it("maps a comment author's picture to avatarUrl, and omits it when blank", () => {
-    const envelope = (picture: unknown) =>
-      JSON.stringify({
-        id: "wh_evt_picture",
-        event: "comment.received",
-        comment: {
-          id: "ig_comment_picture",
-          postId: null,
-          platformPostId: "ig_post_88401",
-          platform: "instagram",
-          text: "Есть в наличии?",
-          author: { id: "ig_user_77", username: "kundin", picture },
-          isReply: false,
-          parentCommentId: null,
-        },
-        post: { id: null, platformPostId: "ig_post_88401" },
-        account: { id: "acct_ig_55014", platform: "instagram", username: "shop" },
-      });
-
-    const [withPicture] = parseZernioWebhook({
-      rawBody: envelope("https://scontent.cdninstagram.com/v/ig_user_77.jpg"),
-      headers: {},
-    });
-    const [blankPicture] = parseZernioWebhook({
-      rawBody: envelope("   "),
-      headers: {},
-    });
-
-    expect(withPicture).toMatchObject({
+  it("does not map a comment author's picture — avatars come from the API, not from webhooks", () => {
+    const rawBody = JSON.stringify({
+      id: "wh_evt_picture",
+      event: "comment.received",
       comment: {
+        id: "ig_comment_picture",
+        postId: null,
+        platformPostId: "ig_post_88401",
+        platform: "instagram",
+        text: "Есть в наличии?",
         author: {
-          externalId: "ig_user_77",
-          avatarUrl: "https://scontent.cdninstagram.com/v/ig_user_77.jpg",
+          id: "ig_user_77",
+          username: "kundin",
+          picture: "https://scontent.cdninstagram.com/v/ig_user_77.jpg",
         },
+        isReply: false,
+        parentCommentId: null,
       },
+      post: { id: null, platformPostId: "ig_post_88401" },
+      account: { id: "acct_ig_55014", platform: "instagram", username: "shop" },
     });
-    // Not `avatarUrl: undefined` — the key is absent, so nothing downstream
-    // mistakes "provider reported nothing" for "provider reported an empty URL".
+
+    const [event] = parseZernioWebhook({ rawBody, headers: {} });
+
+    // Meta omits the photo from an inbound DM, so reading `picture` here would
+    // give comment authors avatars and DM senders none. One source instead:
+    // `fetchParticipantAvatar`. The raw value still survives in `rawMetadata`.
+    expect(event).toMatchObject({
+      comment: { author: { externalId: "ig_user_77", displayName: "kundin" } },
+    });
     expect(
-      blankPicture &&
-        "comment" in blankPicture &&
-        "avatarUrl" in blankPicture.comment.author,
+      event && "comment" in event && "avatarUrl" in event.comment.author,
     ).toBe(false);
   });
 
