@@ -2,7 +2,6 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import { avatarProxyUrl } from "@/lib/avatars";
 import type { ChannelPlatform } from "@/lib/channels/types";
 import {
   listChannelConnections,
@@ -113,13 +112,6 @@ type ConversationRow = {
 type ContactRow = {
   id: string;
   display_name: string;
-};
-
-type ContactIdentityAvatarRow = {
-  id: string;
-  contact_id: string;
-  platform: string;
-  avatar_url: string;
 };
 
 type MessageRow = {
@@ -244,54 +236,6 @@ async function loadContactById(
   }
 
   return (data as ContactRow | null) ?? null;
-}
-
-/**
- * Фото контактов для аватаров, ключ — «контакт + платформа».
- *
- * Аватар хранится на канальной личности, а не на контакте: у одного человека в
- * Telegram и в Instagram фото разные, и в диалоге надо показать то, что
- * относится к каналу этого диалога. Платформа диалога известна из его канала
- * (`channelById`), так что здесь достаточно поднять личности его контакта.
- *
- * Пустая карта — нормальный результат: платформа могла не прислать фото, и
- * тогда всё остаётся как было, на инициалах.
- */
-async function loadIdentityAvatars(
-  supabase: SupabaseClient,
-  workspaceId: string,
-  contactIds: string[],
-): Promise<Map<string, string | null>> {
-  const map = new Map<string, string | null>();
-
-  if (contactIds.length === 0) {
-    return map;
-  }
-
-  const { data, error } = await supabase
-    .from("contact_identities")
-    .select("id, contact_id, platform, avatar_url")
-    .eq("workspace_id", workspaceId)
-    .in("contact_id", contactIds)
-    .not("avatar_url", "is", null);
-
-  if (error) {
-    console.error("[inbox] failed to load contact avatars", error);
-    throw new Error("Unable to load contact avatars.");
-  }
-
-  for (const row of (data ?? []) as ContactIdentityAvatarRow[]) {
-    map.set(
-      identityAvatarKey(row.contact_id, row.platform),
-      avatarProxyUrl(row.id, row.avatar_url),
-    );
-  }
-
-  return map;
-}
-
-function identityAvatarKey(contactId: string, platform: string): string {
-  return `${contactId}:${platform}`;
 }
 
 /**
@@ -500,12 +444,10 @@ export async function getConversationListView(
     ),
   ];
 
-  const [contactsById, lastMessageByConversation, avatarByContactPlatform] =
-    await Promise.all([
-      loadContactsById(supabase, workspaceId, contactIds),
-      loadLastMessageByConversation(supabase, workspaceId, conversationIds),
-      loadIdentityAvatars(supabase, workspaceId, contactIds),
-    ]);
+  const [contactsById, lastMessageByConversation] = await Promise.all([
+    loadContactsById(supabase, workspaceId, contactIds),
+    loadLastMessageByConversation(supabase, workspaceId, conversationIds),
+  ]);
 
   const nowIso = new Date().toISOString();
 
@@ -540,15 +482,7 @@ export async function getConversationListView(
       categories: (conversation.matched_kb_file_ids ?? [])
         .map((id) => badgeById.get(id))
         .filter((badge): badge is CategoryBadgeView => Boolean(badge)),
-      avatar: avatarFor(
-        contact?.id ?? conversation.id,
-        name,
-        contact && channel
-          ? (avatarByContactPlatform.get(
-              identityAvatarKey(contact.id, channel.platform),
-            ) ?? null)
-          : null,
-      ),
+      avatar: avatarFor(contact?.id ?? conversation.id, name),
     };
   });
 
@@ -612,17 +546,12 @@ export async function getThreadView(
     return null;
   }
 
-  const [contact, messages, draft, avatarByContactPlatform] = await Promise.all([
+  const [contact, messages, draft] = await Promise.all([
     conversation.contact_id
       ? loadContactById(supabase, workspaceId, conversation.contact_id)
       : Promise.resolve(null),
     listMessagesForConversation(supabase, workspaceId, conversation.id),
     getActiveConversationDraft(supabase, workspaceId, conversation.id),
-    loadIdentityAvatars(
-      supabase,
-      workspaceId,
-      conversation.contact_id ? [conversation.contact_id] : [],
-    ),
   ]);
 
   const name = contact?.display_name ?? "Без контакта";
@@ -645,15 +574,7 @@ export async function getThreadView(
     conversationId: conversation.id,
     contactId: contact?.id ?? null,
     title: name,
-    avatar: avatarFor(
-      contact?.id ?? conversation.id,
-      name,
-      contact
-        ? (avatarByContactPlatform.get(
-            identityAvatarKey(contact.id, channel.platform),
-          ) ?? null)
-        : null,
-    ),
+    avatar: avatarFor(contact?.id ?? conversation.id, name),
     channel: channelBadge(channel),
     categories: threadCategoryBadges,
     replyWindowLabel:

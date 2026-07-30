@@ -1,4 +1,3 @@
-import { contactAvatar } from "./contact-avatar";
 import { generateCommentDrafts } from "./generate-comment-drafts";
 import { generateDraft, regenerateDraft } from "./generate-draft";
 import { pushDigest } from "./push-digest";
@@ -6,7 +5,6 @@ import { sendComment } from "./send-comment";
 import { sendMessage } from "./send-message";
 import { sendPush } from "./send-push";
 
-export { contactAvatar } from "./contact-avatar";
 export { generateCommentDrafts } from "./generate-comment-drafts";
 export { generateDraft, regenerateDraft } from "./generate-draft";
 export { pushDigest } from "./push-digest";
@@ -23,5 +21,4 @@ export const inngestFunctions = [
   sendComment,
   sendPush,
   pushDigest,
-  contactAvatar,
 ];

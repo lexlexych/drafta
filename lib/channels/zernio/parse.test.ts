@@ -72,41 +72,6 @@ describe("parseZernioWebhook", () => {
     expect(events[0]).toEqual(expected);
   });
 
-  it("does not map a comment author's picture — avatars come from the API, not from webhooks", () => {
-    const rawBody = JSON.stringify({
-      id: "wh_evt_picture",
-      event: "comment.received",
-      comment: {
-        id: "ig_comment_picture",
-        postId: null,
-        platformPostId: "ig_post_88401",
-        platform: "instagram",
-        text: "Есть в наличии?",
-        author: {
-          id: "ig_user_77",
-          username: "kundin",
-          picture: "https://scontent.cdninstagram.com/v/ig_user_77.jpg",
-        },
-        isReply: false,
-        parentCommentId: null,
-      },
-      post: { id: null, platformPostId: "ig_post_88401" },
-      account: { id: "acct_ig_55014", platform: "instagram", username: "shop" },
-    });
-
-    const [event] = parseZernioWebhook({ rawBody, headers: {} });
-
-    // Meta omits the photo from an inbound DM, so reading `picture` here would
-    // give comment authors avatars and DM senders none. One source instead:
-    // `fetchParticipantAvatar`. The raw value still survives in `rawMetadata`.
-    expect(event).toMatchObject({
-      comment: { author: { externalId: "ig_user_77", displayName: "kundin" } },
-    });
-    expect(
-      event && "comment" in event && "avatarUrl" in event.comment.author,
-    ).toBe(false);
-  });
-
   it("maps a comment reply (parentCommentId) to parentExternalId", () => {
     const rawBody = JSON.stringify({
       id: "wh_evt_reply",

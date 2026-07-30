@@ -23,11 +23,8 @@ vi.mock("server-only", () => ({}));
 // rejected emission still lets the webhook answer 200 with the message
 // already persisted — see the "Inngest emission failure" test below.
 const emitInteractionReceivedMock = vi.fn().mockResolvedValue(undefined);
-const emitContactAvatarSyncRequestedMock = vi.fn().mockResolvedValue(undefined);
 vi.mock("@/lib/inngest/events", () => ({
   emitInteractionReceived: (...args: unknown[]) => emitInteractionReceivedMock(...args),
-  emitContactAvatarSyncRequested: (...args: unknown[]) =>
-    emitContactAvatarSyncRequestedMock(...args),
 }));
 
 const ZERNIO_WEBHOOK_SECRET = "test-zernio-webhook-secret";
@@ -120,7 +117,6 @@ describe.skipIf(!hasLocalSupabaseConfig)("POST /api/webhooks/[provider] (zernio)
 
   afterEach(async () => {
     emitInteractionReceivedMock.mockClear();
-    emitContactAvatarSyncRequestedMock.mockClear();
 
     // workspaces cascade-delete channel_connections/contacts/contact_identities/
     // conversations/messages/posts/comments/webhook_events (docs/architecture/06-data-model.md
@@ -322,54 +318,6 @@ describe.skipIf(!hasLocalSupabaseConfig)("POST /api/webhooks/[provider] (zernio)
     expect(withAttachment?.attachments).toEqual([
       { type: "image", url: "https://media.zernio.com/wa/acct_wa_31207/img_5f3c1a.jpg" },
     ]);
-  });
-
-  it("asks for an avatar on a contact's first message, and not again while it is fresh", async () => {
-    const workspaceId = await createTestWorkspace();
-    const channelConnectionId = await createTestChannelConnection(workspaceId, {
-      platform: "telegram",
-      externalId: "acct_tg_avatar",
-    });
-
-    const envelope = (seq: number) =>
-      buildEnvelope({
-        id: `wh_evt_avatar_000${seq}`,
-        accountId: "acct_tg_avatar",
-        conversationId: "conv_avatar",
-        messageId: `msg_avatar_${seq}`,
-        senderId: "tg_user_avatar",
-        senderName: "Avatar Sender",
-      });
-
-    await postZernioWebhook(envelope(1));
-
-    const { data: identity } = await supabase
-      .from("contact_identities")
-      .select("id, avatar_url, avatar_fetched_at")
-      .eq("workspace_id", workspaceId)
-      .eq("platform", "telegram")
-      .eq("external_id", "tg_user_avatar")
-      .single();
-
-    // Never fetched → the webhook asks the Inngest function to go get it. The
-    // webhook itself writes no avatar: it makes no outbound calls (rule 8).
-    expect(identity!.avatar_url).toBeNull();
-    expect(identity!.avatar_fetched_at).toBeNull();
-    expect(emitContactAvatarSyncRequestedMock).toHaveBeenCalledTimes(1);
-    expect(emitContactAvatarSyncRequestedMock).toHaveBeenCalledWith({
-      workspaceId,
-      contactIdentityId: identity!.id,
-      channelConnectionId,
-    });
-
-    // A lookup that just happened makes the next message cost nothing.
-    await supabase
-      .from("contact_identities")
-      .update({ avatar_fetched_at: new Date().toISOString() })
-      .eq("id", identity!.id);
-
-    await postZernioWebhook(envelope(2));
-    expect(emitContactAvatarSyncRequestedMock).toHaveBeenCalledTimes(1);
   });
 
   it("invalid signature: 401 and nothing written to the database", async () => {

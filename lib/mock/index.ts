@@ -59,12 +59,6 @@ export type CategoryBadgeView = {
 export type AvatarView = {
   initials: string;
   hue: number;
-  /**
-   * Ссылка на прокси-роут с фото из соцсети (`lib/avatars.ts`) — или `null`,
-   * когда платформа фото не прислала. Инициалы заполняются всегда: они лежат
-   * под картинкой и остаются видны, если та не загрузилась.
-   */
-  imageUrl?: string | null;
 };
 
 export type ChannelFilterView = ChannelBadgeView & {
@@ -300,12 +294,8 @@ function initials(name: string): string {
  * (hash of an id → hue), so a contact's avatar color doesn't change when a
  * conversation's data source moves from mock to `lib/db`.
  */
-export function avatarFor(
-  id: string,
-  name: string,
-  imageUrl: string | null = null,
-): AvatarView {
-  return { initials: initials(name), hue: avatarHue(id), imageUrl };
+export function avatarFor(id: string, name: string): AvatarView {
+  return { initials: initials(name), hue: avatarHue(id) };
 }
 
 function truncate(text: string, limit: number): string {
