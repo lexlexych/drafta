@@ -54,6 +54,9 @@ describe("generateCompletion", () => {
       baseURL: MISTRAL_BASE_URL,
       maxRetries: 0,
       timeout: AI_REQUEST_TIMEOUT_MS,
+      // The exchange recorder from ./exchange.ts, which logs the bodies that
+      // cross the wire.
+      fetch: expect.any(Function),
     });
   });
 
@@ -141,6 +144,9 @@ describe("generateCompletionWithUsage", () => {
       provider: "mistral",
       model: DEFAULT_MISTRAL_MODEL,
       usage: { promptTokens: 120, completionTokens: 30, totalTokens: 150 },
+      // Null here only because the mocked SDK never calls the recorder's fetch;
+      // the recorder itself is covered by ./exchange.test.ts.
+      exchange: null,
     });
   });
 
@@ -199,5 +205,38 @@ describe("generateCompletionWithUsage", () => {
     await expect(
       generateCompletionWithUsage(messages).then((result) => result.usage),
     ).resolves.toBeNull();
+  });
+
+  it("carries the model on a failure so the call can still be logged", async () => {
+    // `lib/db/ai-request-log.ts` records failed calls too, and the resolved
+    // model is not recoverable from the caller's options under OpenRouter.
+    vi.stubEnv("MISTRAL_API_KEY", "");
+    vi.stubEnv("OPENROUTER_API_KEY", "openrouter-secret");
+    vi.stubEnv("OPENROUTER_MODEL", "vendor/pinned-model");
+    openAiMock.create.mockRejectedValue({ status: 401, code: "invalid_key" });
+
+    const error = await generateCompletionWithUsage(messages, {
+      model: "mistral-large-latest",
+    }).catch((caught: unknown) => caught);
+
+    expect(error).toBeInstanceOf(AiProviderError);
+    expect(error).toMatchObject({
+      provider: "openrouter",
+      model: "vendor/pinned-model",
+      code: "invalid_key",
+    });
+  });
+
+  it("carries the model on an empty completion", async () => {
+    openAiMock.create.mockResolvedValue({ choices: [{ message: {} }] });
+
+    const error = await generateCompletionWithUsage(messages).catch(
+      (caught: unknown) => caught,
+    );
+
+    expect(error).toMatchObject({
+      code: "empty_response",
+      model: DEFAULT_MISTRAL_MODEL,
+    });
   });
 });

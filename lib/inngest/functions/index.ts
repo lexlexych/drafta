@@ -1,3 +1,4 @@
+import { cleanupAiRequestLog } from "./cleanup-ai-request-log";
 import { generateCommentDrafts } from "./generate-comment-drafts";
 import { generateDraft, regenerateDraft } from "./generate-draft";
 import { pushDigest } from "./push-digest";
@@ -5,6 +6,7 @@ import { sendComment } from "./send-comment";
 import { sendMessage } from "./send-message";
 import { sendPush } from "./send-push";
 
+export { cleanupAiRequestLog } from "./cleanup-ai-request-log";
 export { generateCommentDrafts } from "./generate-comment-drafts";
 export { generateDraft, regenerateDraft } from "./generate-draft";
 export { pushDigest } from "./push-digest";
@@ -21,4 +23,5 @@ export const inngestFunctions = [
   sendComment,
   sendPush,
   pushDigest,
+  cleanupAiRequestLog,
 ];

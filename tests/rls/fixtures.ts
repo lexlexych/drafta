@@ -51,4 +51,5 @@ export const publicClientTables = [
   "notification_settings",
   "ai_settings",
   "ai_usage",
+  "ai_request_log",
 ] as const;

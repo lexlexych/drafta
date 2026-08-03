@@ -343,6 +343,18 @@ describe("workspace RLS isolation", () => {
     expectDenied(deleted, "ai_usage must not be deletable from a session");
   });
 
+  it("denies ai_request_log even to a member of its own workspace", async () => {
+    // Narrower than ai_usage above: these rows hold the prompts and answers
+    // verbatim, and nothing in the product reads them. Only the pipelines
+    // write, and only an operator reads — through SQL, not the Data API.
+    const result = await ownerAClient
+      .from("ai_request_log")
+      .select("id")
+      .eq("workspace_id", rlsSeedFixtures.ownerA.workspaceId);
+
+    expectDenied(result, "ai_request_log must remain server-only");
+  });
+
   it.each(publicClientTables)("denies anonymous access to %s", async (table) => {
     const selectedColumn = table === "workspace_members" ? "workspace_id" : "id";
     const result = await anonymousClient.from(table).select(selectedColumn).limit(1);

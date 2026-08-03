@@ -10,6 +10,7 @@ export type {
   GenerateCompletionOptions,
   GenerateCompletionResult,
 } from "./client";
+export type { AiExchange } from "./exchange";
 export {
   AiConfigurationError,
   resolveGenerationModel,

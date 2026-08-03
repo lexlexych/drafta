@@ -30,5 +30,8 @@ describe("RLS seed fixture contract", () => {
     }
 
     expect(seed).toContain("insert into public.webhook_events");
+    // Server-only like webhook_events, so it is seeded but never listed among
+    // the workspace-scoped tables a member is expected to read.
+    expect(seed).toContain("insert into public.ai_request_log");
   });
 });

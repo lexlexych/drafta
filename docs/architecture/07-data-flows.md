@@ -226,6 +226,7 @@ SPF/DKIM/DMARC к этому моменту уже настроены (они н
 | `push-digest` | cron: сводки для пользователей в режиме «дайджест» — счётчики и список новых входящих с прошлой сводки, по интервалу из [`notification_settings`](06-data-model.md#notification_settings) |
 | `reconcile-webhooks` | cron: переобработать зависшие `webhook_events` — страховка |
 | `cleanup` | cron: старые `webhook_events` по политике ретенции, мёртвые push-подписки |
+| `cleanup-ai-request-log` | cron (ночью): удаляет записи [`ai_request_log`](06-data-model.md#ai_request_log) старше 30 дней — ретенция журнала промптов и ответов |
 | `notify-existing-user` *(позже)* | письмо-приглашение уже зарегистрированному пользователю через Postmark API — см. [4. Мультитенантность](04-multitenancy.md#краевой-случай-приглашённый-уже-зарегистрирован) |
 
 > [!note] Заметьте

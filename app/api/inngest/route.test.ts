@@ -11,6 +11,7 @@ const {
   sendComment,
   sendPush,
   pushDigest,
+  cleanupAiRequestLog,
   inngestFunctions,
 } = await import("@/lib/inngest/functions");
 const { DRAFT_PIPELINE_CONCURRENCY } = await import(
@@ -36,6 +37,7 @@ describe("Inngest serve route", () => {
       sendComment,
       sendPush,
       pushDigest,
+      cleanupAiRequestLog,
     ]);
     expect(generateDraft.opts.concurrency).toEqual([
       ...DRAFT_PIPELINE_CONCURRENCY,
@@ -64,6 +66,13 @@ describe("Inngest serve route", () => {
     expect(sendMessage.opts.retries).toBe(4);
     expect(sendMessage.opts.concurrency).toEqual([...SEND_PIPELINE_CONCURRENCY]);
     expect(sendMessage.opts.onFailure).toBeTypeOf("function");
+  });
+
+  it("serves the ai_request_log retention cron", () => {
+    // Retention is the only thing keeping a log of prompts and answers
+    // defensible (docs/architecture/15-compliance-gdpr.md), so an unregistered
+    // or unscheduled cleanup is a compliance bug, not a missing nicety.
+    expect(cleanupAiRequestLog.opts.triggers).toEqual([{ cron: "0 3 * * *" }]);
   });
 
   it("exports all App Router handlers", () => {

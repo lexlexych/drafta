@@ -1,6 +1,7 @@
 import "server-only";
 
 import {
+  AiProviderError,
   buildDraftPrompt,
   generateCompletionWithUsage,
   logPromptIfEnabled,
@@ -22,6 +23,7 @@ import {
 } from "@/lib/channels/capabilities";
 import type { ChannelPlatform } from "@/lib/channels/types";
 import { createAdminSupabaseClient } from "@/lib/db/admin";
+import { recordAiRequest } from "@/lib/db/ai-request-log";
 import { recordAiUsage } from "@/lib/db/ai-usage";
 import {
   listKnowledgeFiles,
@@ -142,7 +144,13 @@ export type DraftPipelineDependencies = {
   resolveModel(requestedModel: string): string;
   generate(
     prompt: readonly AiMessage[],
-    options: { model: string; maxTokens: number; workspaceId: string },
+    options: {
+      model: string;
+      maxTokens: number;
+      workspaceId: string;
+      /** Ties the logged exchange to the draft it produced (`ai_request_log`). */
+      draftId: string;
+    },
   ): Promise<string>;
   finalizeDraft(input: {
     workspaceId: string;
@@ -656,25 +664,56 @@ export const draftPipelineDependencies: DraftPipelineDependencies = {
   createGeneratingDraft,
   resolveModel: resolveGenerationModel,
   generate: async (prompt, options) => {
-    const completion = await generateCompletionWithUsage(prompt, {
-      model: options.model,
-      maxTokens: options.maxTokens,
-      temperature: 0.3,
-    });
+    try {
+      const completion = await generateCompletionWithUsage(prompt, {
+        model: options.model,
+        maxTokens: options.maxTokens,
+        temperature: 0.3,
+      });
 
-    // Recorded inside the same Inngest step as the call itself: if the step is
-    // retried the provider really was asked twice, so a second row is the
-    // truthful accounting, not a duplicate.
-    await recordAiUsage({
-      workspaceId: options.workspaceId,
-      operation: "draft",
-      surface: "message",
-      provider: completion.provider,
-      model: completion.model,
-      usage: completion.usage,
-    });
+      // Recorded inside the same Inngest step as the call itself: if the step is
+      // retried the provider really was asked twice, so a second row is the
+      // truthful accounting, not a duplicate.
+      await recordAiUsage({
+        workspaceId: options.workspaceId,
+        operation: "draft",
+        surface: "message",
+        provider: completion.provider,
+        model: completion.model,
+        usage: completion.usage,
+      });
+      await recordAiRequest({
+        workspaceId: options.workspaceId,
+        operation: "draft",
+        surface: "message",
+        provider: completion.provider,
+        model: completion.model,
+        draftId: options.draftId,
+        exchange: completion.exchange,
+        usage: completion.usage,
+      });
 
-    return completion.text;
+      return completion.text;
+    } catch (error) {
+      // A failed call is the one most worth reading back: the provider's error
+      // body lives only in the exchange, since AiProviderError deliberately
+      // drops the upstream message.
+      if (error instanceof AiProviderError) {
+        await recordAiRequest({
+          workspaceId: options.workspaceId,
+          operation: "draft",
+          surface: "message",
+          provider: error.provider,
+          model: error.model ?? options.model,
+          draftId: options.draftId,
+          exchange: error.exchange ?? null,
+          usage: null,
+          errorCode: error.code,
+        });
+      }
+
+      throw error;
+    }
   },
   finalizeDraft,
   cleanupGeneratingDrafts,
@@ -781,6 +820,7 @@ export async function runDraftPipeline(
       model: generationModel,
       maxTokens: DEFAULT_DRAFT_MAX_TOKENS,
       workspaceId: input.workspaceId,
+      draftId,
     });
   });
   // Unmask first, then parse: a refusal reason may itself mention a masked

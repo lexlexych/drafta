@@ -1,6 +1,7 @@
 import "server-only";
 
 import {
+  AiProviderError,
   buildCommentDraftPrompt,
   generateCompletionWithUsage,
   logPromptIfEnabled,
@@ -19,6 +20,7 @@ import {
 } from "@/lib/channels/capabilities";
 import type { ChannelPlatform } from "@/lib/channels/types";
 import { createAdminSupabaseClient } from "@/lib/db/admin";
+import { recordAiRequest } from "@/lib/db/ai-request-log";
 import { recordAiUsage } from "@/lib/db/ai-usage";
 import {
   listKnowledgeFiles,
@@ -103,7 +105,13 @@ export type CommentDraftsDependencies = {
   resolveModel(requestedModel: string): string;
   generate(
     prompt: readonly AiMessage[],
-    options: { model: string; maxTokens: number; workspaceId: string },
+    options: {
+      model: string;
+      maxTokens: number;
+      workspaceId: string;
+      /** Ties the logged exchange to the draft it produced (`ai_request_log`). */
+      draftId: string;
+    },
   ): Promise<string>;
   finalizeDraft(input: {
     workspaceId: string;
@@ -465,24 +473,53 @@ export const commentDraftsDependencies: CommentDraftsDependencies = {
   startDraft,
   resolveModel: resolveGenerationModel,
   generate: async (prompt, options) => {
-    const completion = await generateCompletionWithUsage(prompt, {
-      model: options.model,
-      maxTokens: options.maxTokens,
-      // Slightly warmer than the DM pipeline's 0.3: several replies under one
-      // post must not read as variations of the same sentence.
-      temperature: 0.7,
-    });
+    try {
+      const completion = await generateCompletionWithUsage(prompt, {
+        model: options.model,
+        maxTokens: options.maxTokens,
+        // Slightly warmer than the DM pipeline's 0.3: several replies under one
+        // post must not read as variations of the same sentence.
+        temperature: 0.7,
+      });
 
-    await recordAiUsage({
-      workspaceId: options.workspaceId,
-      operation: "draft",
-      surface: "comment",
-      provider: completion.provider,
-      model: completion.model,
-      usage: completion.usage,
-    });
+      await recordAiUsage({
+        workspaceId: options.workspaceId,
+        operation: "draft",
+        surface: "comment",
+        provider: completion.provider,
+        model: completion.model,
+        usage: completion.usage,
+      });
+      await recordAiRequest({
+        workspaceId: options.workspaceId,
+        operation: "draft",
+        surface: "comment",
+        provider: completion.provider,
+        model: completion.model,
+        draftId: options.draftId,
+        exchange: completion.exchange,
+        usage: completion.usage,
+      });
 
-    return completion.text;
+      return completion.text;
+    } catch (error) {
+      // See the DM pipeline: the provider's error body survives only here.
+      if (error instanceof AiProviderError) {
+        await recordAiRequest({
+          workspaceId: options.workspaceId,
+          operation: "draft",
+          surface: "comment",
+          provider: error.provider,
+          model: error.model ?? options.model,
+          draftId: options.draftId,
+          exchange: error.exchange ?? null,
+          usage: null,
+          errorCode: error.code,
+        });
+      }
+
+      throw error;
+    }
   },
   finalizeDraft,
   cleanupGeneratingDrafts: cleanupGeneratingCommentDrafts,
@@ -592,6 +629,7 @@ export async function runCommentDraftsPipeline(
         model: generationModel,
         maxTokens: DEFAULT_COMMENT_DRAFT_MAX_TOKENS,
         workspaceId: input.workspaceId,
+        draftId,
       });
 
       return unmaskText(text, entities);

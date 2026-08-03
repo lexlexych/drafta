@@ -71,6 +71,8 @@ updated: 2026-07-20
 | Шифрование credentials каналов | [`channel_connections`](06-data-model.md#channel_connections) |
 | RLS-изоляция тенантов | [§4](04-multitenancy.md#изоляция-данных) |
 | Ретенция `webhook_events` через `cleanup` | [§7.6](07-data-flows.md#66-полный-список-inngest-функций) |
+| Ретенция `ai_request_log` — 30 дней, cron `cleanup-ai-request-log` | [`ai_request_log`](06-data-model.md#ai_request_log), [§7.6](07-data-flows.md#66-полный-список-inngest-функций) |
+| Журналы с контентом недоступны через Data API (`webhook_events`, `ai_request_log`) | [§6](06-data-model.md) |
 | Каскадное удаление workspace = право на удаление (Art. 17) | [§6](06-data-model.md) |
 | Экспорт данных workspace (Art. 15/20) | простой JSON-дамп по `workspace_id`, раздел «Приватность» в настройках — [§10](10-ui.md#разделы-настроек) |
 | HTTPS везде, санитизация HTML писем | [§7.4](07-data-flows.md#64-email-этап-после-mvp) |

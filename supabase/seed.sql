@@ -871,3 +871,45 @@ set
   prompt_tokens = excluded.prompt_tokens,
   completion_tokens = excluded.completion_tokens,
   total_tokens = excluded.total_tokens;
+
+-- Provider exchanges (public.ai_request_log). One row is enough: the RLS suite
+-- only has to prove that a logged-in member of the workspace still cannot read
+-- it, the way it does for webhook_events. The bodies here mimic a real call,
+-- placeholders included — masked text is exactly what the provider receives.
+insert into public.ai_request_log (
+  id,
+  workspace_id,
+  operation,
+  surface,
+  provider,
+  model,
+  request,
+  response,
+  status_code,
+  duration_ms,
+  prompt_tokens,
+  completion_tokens,
+  total_tokens
+)
+values
+  (
+    'a0000000-0000-4000-8000-000000000701',
+    'a0000000-0000-4000-8000-000000000001',
+    'draft',
+    'message',
+    'mistral',
+    'mistral-large-latest',
+    '{"model":"mistral-large-latest","messages":[{"role":"user","content":"Свяжитесь со мной: {{PHONE_1}}"}],"temperature":0.3,"max_tokens":800}'::jsonb,
+    '{"id":"cmpl-seed","choices":[{"message":{"role":"assistant","content":"Спасибо! Мы позвоним на {{PHONE_1}}."},"finish_reason":"stop"}],"usage":{"prompt_tokens":1320,"completion_tokens":280,"total_tokens":1600}}'::jsonb,
+    200,
+    1240,
+    1320,
+    280,
+    1600
+  )
+on conflict (id) do update
+set
+  request = excluded.request,
+  response = excluded.response,
+  status_code = excluded.status_code,
+  duration_ms = excluded.duration_ms;
