@@ -184,8 +184,42 @@ describe("createZernioAdapter", () => {
       }),
     ).resolves.toEqual({
       avatarUrl: "https://scontent.cdninstagram.com/avatar.jpg",
+      found: true,
     });
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("distinguishes a participant without a picture from a missing participant", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ data: { participantId: "ig_user_1" } }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          data: [
+            {
+              participantId: "ig_user_1",
+              participantPicture: null,
+            },
+          ],
+          pagination: {},
+        }),
+      });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const adapter = createZernioAdapter(() => "secret", () => apiConfig);
+    await expect(
+      adapter.fetchParticipantAvatar!({
+        externalAccountId: "acct_ig_1",
+        participantExternalId: "ig_user_1",
+        conversationExternalId: "conversation_1",
+      }),
+    ).resolves.toEqual({ avatarUrl: null, found: true });
   });
 
   it("finds a post thumbnail in the comments inbox", async () => {

@@ -21,12 +21,13 @@ export function isAvatarStale(
 export function avatarProxyUrl(
   contactIdentityId: string,
   avatarUrl: string | null | undefined,
+  version?: string | null,
 ): string | null {
   if (!avatarUrl) {
     return null;
   }
 
-  const fingerprint = simpleFingerprint(avatarUrl);
+  const fingerprint = simpleFingerprint(`${avatarUrl}:${version ?? ""}`);
   return `/api/avatars/${encodeURIComponent(contactIdentityId)}?v=${fingerprint}`;
 }
 

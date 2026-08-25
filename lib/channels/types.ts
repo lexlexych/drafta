@@ -267,23 +267,8 @@ export interface FetchParticipantAvatarInput {
 
 export interface FetchParticipantAvatarResult {
   avatarUrl: string | null;
-}
-
-/** One page of provider participants used by the periodic avatar backfill. */
-export interface ListParticipantAvatarsInput {
-  externalAccountId: string;
-  cursor?: string;
-  limit?: number;
-}
-
-export interface ParticipantAvatar {
-  participantExternalId: string;
-  avatarUrl: string | null;
-}
-
-export interface ListParticipantAvatarsResult {
-  participants: ParticipantAvatar[];
-  nextCursor: string | null;
+  /** The participant was found even when their account has no profile picture. */
+  found: boolean;
 }
 
 /** Input to the optional provider lookup for one post's preview image. */
@@ -383,11 +368,6 @@ export interface ChannelAdapter {
   fetchParticipantAvatar?(
     input: FetchParticipantAvatarInput,
   ): Promise<FetchParticipantAvatarResult>;
-
-  /** Optional paginated listing used by the scheduled avatar refresh. */
-  listParticipantAvatars?(
-    input: ListParticipantAvatarsInput,
-  ): Promise<ListParticipantAvatarsResult>;
 
   /** Optional provider lookup used after a post/comment webhook, never in it. */
   fetchPostThumbnail?(

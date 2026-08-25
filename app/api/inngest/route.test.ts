@@ -13,7 +13,6 @@ const {
   pushDigest,
   cleanupAiRequestLog,
   contactAvatar,
-  contactAvatarBackfill,
   postThumbnail,
   inngestFunctions,
 } = await import("@/lib/inngest/functions");
@@ -42,7 +41,6 @@ describe("Inngest serve route", () => {
       pushDigest,
       cleanupAiRequestLog,
       contactAvatar,
-      contactAvatarBackfill,
       postThumbnail,
     ]);
     expect(generateDraft.opts.concurrency).toEqual([
@@ -81,11 +79,8 @@ describe("Inngest serve route", () => {
     expect(cleanupAiRequestLog.opts.triggers).toEqual([{ cron: "0 3 * * *" }]);
   });
 
-  it("serves contact-avatar sync and the weekly backfill", () => {
+  it("serves on-demand contact-avatar sync", () => {
     expect(contactAvatar.opts.retries).toBe(2);
-    expect(contactAvatarBackfill.opts.triggers).toEqual([
-      { cron: "20 2 * * 0" },
-    ]);
   });
 
   it("serves post-thumbnail sync with bounded per-post concurrency", () => {

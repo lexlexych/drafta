@@ -13,7 +13,6 @@ import type { ChannelFilterView, ContactListItemView } from "@/lib/mock";
 import { countWithNoun } from "@/lib/mock/plural";
 
 import { LinkActivity } from "../../_components/activity";
-import { Avatar } from "../../_components/avatar";
 import { PlatformDot } from "../../_components/chips";
 import { ListFilters, scopeLabel } from "../../_components/list-filters";
 import { QUERY_KEYS, buildHref } from "../../_components/navigation";
@@ -21,6 +20,8 @@ import { usePagedList } from "../../_components/use-paged-list";
 import styles from "../../_components/panes.module.css";
 import uiStyles from "../../_components/ui.module.css";
 import { loadContactsAction } from "../actions";
+import contactStyles from "../contacts.module.css";
+import { RefreshableContactAvatar } from "../refreshable-contact-avatar";
 
 const PATHNAME = "/contacts";
 
@@ -95,31 +96,45 @@ export function ContactList({
           </div>
         ) : null}
 
-        {items.map((item) => (
-          <Link
-            key={item.id}
-            className={styles.listItem}
-            data-active={item.id === openedId}
-            href={buildHref(PATHNAME, { [QUERY_KEYS.contact]: item.id })}
-          >
-            <Avatar avatar={item.avatar} size="md" />
-            <span className={styles.listBody}>
-              <span className={styles.listTitleRow}>
-                <b>{item.name}</b>
-              </span>
-              <span className={styles.listPreview}>{item.handles}</span>
-              <span className={styles.listChips}>
-                {item.platforms.map((platform, index) => (
-                  <PlatformDot key={`${platform}-${index}`} platform={platform} />
-                ))}
-                {item.tag ? (
-                  <span className={uiStyles.chip}>{item.tag}</span>
-                ) : null}
-              </span>
-            </span>
-            <LinkActivity label="Открываем карточку…" />
-          </Link>
-        ))}
+        {items.map((item) => {
+          const href = buildHref(PATHNAME, { [QUERY_KEYS.contact]: item.id });
+
+          return (
+            <div
+              key={item.id}
+              className={styles.listItem}
+              data-active={item.id === openedId}
+            >
+              <RefreshableContactAvatar
+                contactId={item.id}
+                contactName={item.name}
+                avatar={item.avatar}
+                size="md"
+                href={href}
+              />
+              <Link className={contactStyles.listContactLink} href={href}>
+                <span className={styles.listBody}>
+                  <span className={styles.listTitleRow}>
+                    <b>{item.name}</b>
+                  </span>
+                  <span className={styles.listPreview}>{item.handles}</span>
+                  <span className={styles.listChips}>
+                    {item.platforms.map((platform, index) => (
+                      <PlatformDot
+                        key={`${platform}-${index}`}
+                        platform={platform}
+                      />
+                    ))}
+                    {item.tag ? (
+                      <span className={uiStyles.chip}>{item.tag}</span>
+                    ) : null}
+                  </span>
+                </span>
+                <LinkActivity label="Открываем карточку…" />
+              </Link>
+            </div>
+          );
+        })}
 
         <div aria-hidden="true" ref={sentinelRef} />
         {hasMore ? (

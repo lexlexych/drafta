@@ -141,6 +141,7 @@ type ContactIdentityRow = {
   platform: string;
   external_id: string;
   avatar_url: string | null;
+  avatar_fetched_at: string | null;
 };
 
 function channelBadge(channel: ChannelConnectionRow): ChannelBadgeView {
@@ -247,7 +248,9 @@ async function loadIdentitiesById(
 
   const { data, error } = await supabase
     .from("contact_identities")
-    .select("id, display_name, platform, external_id, avatar_url")
+    .select(
+      "id, display_name, platform, external_id, avatar_url, avatar_fetched_at",
+    )
     .eq("workspace_id", workspaceId)
     .in("id", identityIds);
 
@@ -550,7 +553,13 @@ export async function getPostThreadView(
         : avatarFor(
             identity?.id ?? comment.id,
             authorName,
-            identity ? avatarProxyUrl(identity.id, identity.avatar_url) : null,
+            identity
+              ? avatarProxyUrl(
+                  identity.id,
+                  identity.avatar_url,
+                  identity.avatar_fetched_at,
+                )
+              : null,
           ),
       text: comment.text,
       time: formatMessageTime(comment.created_at, nowIso),

@@ -7,6 +7,7 @@ import {
   getContactListView,
   listChannelConnections,
   mergeContacts,
+  refreshContactAvatar,
   updateContactNotes,
   type ContactResult,
 } from "@/lib/db/contacts";
@@ -103,6 +104,31 @@ export async function updateContactNotesAction(input: {
   }
 
   return result;
+}
+
+export async function refreshContactAvatarAction(
+  contactId: string,
+): Promise<ContactResult<{ imageUrl: string | null }>> {
+  const workspace = await requireCurrentWorkspaceId();
+  if (!workspace.ok) return workspace;
+
+  const supabase = await createServerSupabaseClient();
+  try {
+    const channels = await listChannelConnections(supabase, workspace.workspaceId);
+    const result = await refreshContactAvatar(
+      supabase,
+      workspace.workspaceId,
+      channels,
+      contactId,
+    );
+    if (result.ok) {
+      revalidatePath(CONTACTS_PATH);
+    }
+    return result;
+  } catch (error) {
+    console.error("[contacts] manual avatar refresh failed", error);
+    return { ok: false, error: "Не удалось получить аватар из канала." };
+  }
 }
 
 export async function mergeContactsAction(input: {

@@ -11,13 +11,13 @@ import {
 import { createServerSupabaseClient } from "@/lib/db/server";
 import { getAuthenticatedUser, getCurrentWorkspace } from "@/lib/db/workspace";
 
-import { Avatar } from "../_components/avatar";
 import { PlatformDot } from "../_components/chips";
 import { BackIcon } from "../_components/icons";
 import { QUERY_KEYS, buildHref, firstParam } from "../_components/navigation";
 import { ContactList } from "./_components/contact-list";
 import { ContactNotes } from "./contact-notes";
 import { MergeContact } from "./merge-contact";
+import { RefreshableContactAvatar } from "./refreshable-contact-avatar";
 import cardStyles from "./contacts.module.css";
 import styles from "../_components/panes.module.css";
 import uiStyles from "../_components/ui.module.css";
@@ -94,7 +94,12 @@ export default async function ContactsPage({
             <div className={cardStyles.card}>
               <div className={cardStyles.inner}>
                 <div className={cardStyles.head}>
-                  <Avatar avatar={card.avatar} size="lg" />
+                  <RefreshableContactAvatar
+                    contactId={card.id}
+                    contactName={card.name}
+                    avatar={card.avatar}
+                    size="lg"
+                  />
                   <div className={cardStyles.headName}>
                     <h2>{card.name}</h2>
                     <div className={cardStyles.tags}>

@@ -132,7 +132,7 @@ async function fetchAndSaveAvatar(input: {
         participantExternalId: input.context.participantExternalId,
         conversationExternalId: input.context.conversationExternalId,
       })
-    : { avatarUrl: null };
+    : { avatarUrl: null, found: false };
 
   const supabase = createAdminSupabaseClient();
   const { error } = await supabase

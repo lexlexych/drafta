@@ -120,6 +120,7 @@ type ContactIdentityAvatarRow = {
   contact_id: string;
   platform: string;
   avatar_url: string;
+  avatar_fetched_at: string | null;
 };
 
 type MessageRow = {
@@ -256,7 +257,7 @@ async function loadIdentityAvatars(
 
   const { data, error } = await supabase
     .from("contact_identities")
-    .select("id, contact_id, platform, avatar_url")
+    .select("id, contact_id, platform, avatar_url, avatar_fetched_at")
     .eq("workspace_id", workspaceId)
     .in("contact_id", contactIds)
     .not("avatar_url", "is", null);
@@ -268,7 +269,7 @@ async function loadIdentityAvatars(
   for (const row of (data ?? []) as ContactIdentityAvatarRow[]) {
     map.set(
       identityAvatarKey(row.contact_id, row.platform),
-      avatarProxyUrl(row.id, row.avatar_url),
+      avatarProxyUrl(row.id, row.avatar_url, row.avatar_fetched_at),
     );
   }
   return map;

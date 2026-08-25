@@ -8,8 +8,6 @@ import type {
   FetchPostThumbnailResult,
   GetConnectUrlInput,
   GetConnectUrlResult,
-  ListParticipantAvatarsInput,
-  ListParticipantAvatarsResult,
   NormalizedEvent,
   ParseConnectCallbackInput,
   ParseWebhookInput,
@@ -152,19 +150,11 @@ export function createZernioAdapter(
       await deleteZernioAccount(getApiConfig(), input.externalAccountId);
     };
 
-    adapter.listParticipantAvatars = async (
-      input: ListParticipantAvatarsInput,
-    ): Promise<ListParticipantAvatarsResult> => {
-      return listZernioConversationParticipants(getApiConfig(), {
-        accountId: input.externalAccountId,
-        cursor: input.cursor,
-        limit: input.limit,
-      });
-    };
-
     adapter.fetchParticipantAvatar = async (
       input: FetchParticipantAvatarInput,
     ): Promise<FetchParticipantAvatarResult> => {
+      let participantFoundDirectly = false;
+
       if (input.conversationExternalId) {
         const participant = await getZernioConversationParticipant(
           getApiConfig(),
@@ -174,8 +164,13 @@ export function createZernioAdapter(
             participantExternalId: input.participantExternalId,
           },
         );
-        if (participant?.avatarUrl) {
-          return { avatarUrl: participant.avatarUrl };
+        if (
+          participant?.participantExternalId === input.participantExternalId
+        ) {
+          participantFoundDirectly = true;
+          if (participant.avatarUrl) {
+            return { avatarUrl: participant.avatarUrl, found: true };
+          }
         }
       }
 
@@ -191,7 +186,7 @@ export function createZernioAdapter(
             candidate.participantExternalId === input.participantExternalId,
         );
         if (participant) {
-          return { avatarUrl: participant.avatarUrl };
+          return { avatarUrl: participant.avatarUrl, found: true };
         }
         if (!page.nextCursor) {
           break;
@@ -199,7 +194,7 @@ export function createZernioAdapter(
         cursor = page.nextCursor;
       }
 
-      return { avatarUrl: null };
+      return { avatarUrl: null, found: participantFoundDirectly };
     };
 
     adapter.fetchPostThumbnail = async (

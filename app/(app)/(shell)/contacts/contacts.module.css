@@ -21,6 +21,14 @@
   align-items: center;
 }
 
+.listContactLink {
+  color: inherit;
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  text-decoration: none;
+}
+
 .headName {
   flex: 1;
   min-width: 0;

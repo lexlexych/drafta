@@ -15,6 +15,13 @@ describe("contact avatars", () => {
     expect(first).toMatch(/^\/api\/avatars\/identity%201\?v=/);
     expect(second).not.toBe(first);
     expect(avatarProxyUrl("identity 1", null)).toBeNull();
+    expect(
+      avatarProxyUrl(
+        "identity 1",
+        "https://scontent.cdninstagram.com/a.jpg",
+        "2026-08-25T12:00:00Z",
+      ),
+    ).not.toBe(first);
   });
 
   it("refreshes signed provider URLs after the configured TTL", () => {

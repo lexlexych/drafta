@@ -2,6 +2,7 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { fetchChannelParticipantAvatar } from "@/lib/channels/participant-avatar";
 import {
   listChannelConnections,
   type ChannelConnectionRow,
@@ -79,21 +80,65 @@ type ContactIdentityRow = {
   external_id: string;
   display_name: string | null;
   avatar_url: string | null;
+  avatar_fetched_at: string | null;
 };
 
 const CONTACT_COLUMNS = "id, display_name, notes, tags";
 const IDENTITY_COLUMNS =
-  "id, contact_id, platform, external_id, display_name, avatar_url";
+  "id, contact_id, platform, external_id, display_name, avatar_url, avatar_fetched_at";
+
+const CONTACT_AVATAR_PLATFORM_PRIORITY = [
+  "instagram",
+  "facebook",
+  "telegram",
+  "whatsapp",
+] as const;
+
+export function contactAvatarPlatformRank(platform: string): number {
+  const rank = CONTACT_AVATAR_PLATFORM_PRIORITY.indexOf(
+    platform as (typeof CONTACT_AVATAR_PLATFORM_PRIORITY)[number],
+  );
+  return rank === -1 ? CONTACT_AVATAR_PLATFORM_PRIORITY.length : rank;
+}
+
+function sortContactIdentities(
+  identities: ContactIdentityRow[],
+): ContactIdentityRow[] {
+  return identities
+    .map((identity, index) => ({ identity, index }))
+    .sort(
+      (left, right) =>
+        contactAvatarPlatformRank(left.identity.platform) -
+          contactAvatarPlatformRank(right.identity.platform) ||
+        left.index - right.index,
+    )
+    .map(({ identity }) => identity);
+}
+
+function preferredAvatarIdentity(
+  identities: ContactIdentityRow[],
+): ContactIdentityRow | null {
+  return (
+    sortContactIdentities(identities).find((identity) => identity.avatar_url) ??
+    null
+  );
+}
 
 function contactAvatar(
   contact: ContactRow,
   identities: ContactIdentityRow[],
 ): AvatarView {
-  const withPicture = identities.find((identity) => identity.avatar_url);
+  const withPicture = preferredAvatarIdentity(identities);
   return avatarFor(
     contact.id,
     contact.display_name,
-    withPicture ? avatarProxyUrl(withPicture.id, withPicture.avatar_url) : null,
+    withPicture
+      ? avatarProxyUrl(
+          withPicture.id,
+          withPicture.avatar_url,
+          withPicture.avatar_fetched_at,
+        )
+      : null,
   );
 }
 
@@ -281,12 +326,16 @@ function contactListItem(
   contact: ContactRow,
   identities: ContactIdentityRow[],
 ): ContactListItemView {
+  const orderedIdentities = sortContactIdentities(identities);
+
   return {
     id: contact.id,
     name: contact.display_name,
-    avatar: contactAvatar(contact, identities),
-    handles: identities.map(identityHandle).join(" · "),
-    platforms: identities.map((identity) => identity.platform as Platform),
+    avatar: contactAvatar(contact, orderedIdentities),
+    handles: orderedIdentities.map(identityHandle).join(" · "),
+    platforms: orderedIdentities.map(
+      (identity) => identity.platform as Platform,
+    ),
     tag: contact.tags[0] ?? null,
   };
 }
@@ -388,7 +437,9 @@ export async function getContactCardView(
     return null;
   }
 
-  const identities = await loadIdentities(supabase, workspaceId, [contactId]);
+  const identities = sortContactIdentities(
+    await loadIdentities(supabase, workspaceId, [contactId]),
+  );
   const identityIds = identities.map((identity) => identity.id);
   const nowIso = new Date().toISOString();
 
@@ -495,6 +546,133 @@ export async function getContactCardView(
       channelName: channelNameForPlatform(channels, identity.platform),
     })),
     history,
+  };
+}
+
+export type RefreshedContactAvatar = {
+  imageUrl: string | null;
+};
+
+/**
+ * Explicit user-requested refresh. Identities are tried in product priority
+ * order: Instagram → Facebook → Telegram → WhatsApp → future platforms.
+ * A provider-confirmed missing picture clears that identity and falls through
+ * to the next channel; a participant the provider could not find is preserved.
+ */
+export async function refreshContactAvatar(
+  supabase: SupabaseClient,
+  workspaceId: string,
+  channels: ChannelConnectionRow[],
+  contactId: string,
+): Promise<ContactResult<RefreshedContactAvatar>> {
+  const contact = await loadContactById(supabase, workspaceId, contactId);
+  if (!contact) {
+    return { ok: false, error: "Контакт не найден." };
+  }
+
+  const identities = sortContactIdentities(
+    await loadIdentities(supabase, workspaceId, [contactId]),
+  );
+  let supportedChannelSeen = false;
+  let confirmedParticipantSeen = false;
+
+  for (const identity of identities) {
+    const channel = channels.find(
+      (candidate) =>
+        candidate.platform === identity.platform && candidate.status === "active",
+    );
+    if (!channel) continue;
+
+    const { data: conversation, error: conversationError } = await supabase
+      .from("conversations")
+      .select("external_id")
+      .eq("workspace_id", workspaceId)
+      .eq("contact_id", contactId)
+      .eq("channel_connection_id", channel.id)
+      .order("last_incoming_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (conversationError) {
+      console.error(
+        "[contacts] failed to resolve a conversation for avatar refresh",
+        conversationError,
+      );
+      return { ok: false, error: "Не удалось обновить аватар." };
+    }
+
+    const lookup = await fetchChannelParticipantAvatar({
+      provider: channel.provider,
+      externalAccountId: channel.external_id,
+      participantExternalId: identity.external_id,
+      conversationExternalId: conversation?.external_id,
+    });
+    if (!lookup.supported) continue;
+    supportedChannelSeen = true;
+
+    if (!lookup.found) {
+      // A stale higher-priority picture must not silently be replaced by a
+      // lower-priority channel merely because a bounded provider search did
+      // not find its participant.
+      if (identity.avatar_url) {
+        return {
+          ok: false,
+          error: `Не удалось найти контакт в канале ${channel.name}.`,
+        };
+      }
+      continue;
+    }
+
+    confirmedParticipantSeen = true;
+    const fetchedAt = new Date().toISOString();
+    const { data: updated, error: updateError } = await supabase
+      .from("contact_identities")
+      .update({
+        avatar_url: lookup.avatarUrl,
+        avatar_fetched_at: fetchedAt,
+        updated_at: fetchedAt,
+      })
+      .eq("workspace_id", workspaceId)
+      .eq("id", identity.id)
+      .select("id")
+      .maybeSingle();
+    if (updateError || !updated) {
+      console.error(
+        "[contacts] failed to save a manually refreshed avatar",
+        updateError,
+      );
+      return { ok: false, error: "Не удалось сохранить новый аватар." };
+    }
+
+    identity.avatar_url = lookup.avatarUrl;
+    identity.avatar_fetched_at = fetchedAt;
+    if (lookup.avatarUrl) break;
+  }
+
+  if (!supportedChannelSeen) {
+    return {
+      ok: false,
+      error: "У контакта нет активного канала с поддержкой аватаров.",
+    };
+  }
+  if (!confirmedParticipantSeen) {
+    return {
+      ok: false,
+      error: "Провайдер не нашёл этот контакт для обновления аватара.",
+    };
+  }
+
+  const preferred = preferredAvatarIdentity(identities);
+  return {
+    ok: true,
+    data: {
+      imageUrl: preferred
+        ? avatarProxyUrl(
+            preferred.id,
+            preferred.avatar_url,
+            preferred.avatar_fetched_at,
+          )
+        : null,
+    },
   };
 }
 

@@ -1,6 +1,5 @@
 import { cleanupAiRequestLog } from "./cleanup-ai-request-log";
 import { contactAvatar } from "./contact-avatar";
-import { contactAvatarBackfill } from "./contact-avatar-backfill";
 import { generateCommentDrafts } from "./generate-comment-drafts";
 import { generateDraft, regenerateDraft } from "./generate-draft";
 import { postThumbnail } from "./post-thumbnail";
@@ -11,7 +10,6 @@ import { sendPush } from "./send-push";
 
 export { cleanupAiRequestLog } from "./cleanup-ai-request-log";
 export { contactAvatar } from "./contact-avatar";
-export { contactAvatarBackfill } from "./contact-avatar-backfill";
 export { generateCommentDrafts } from "./generate-comment-drafts";
 export { generateDraft, regenerateDraft } from "./generate-draft";
 export { postThumbnail } from "./post-thumbnail";
@@ -31,6 +29,5 @@ export const inngestFunctions = [
   pushDigest,
   cleanupAiRequestLog,
   contactAvatar,
-  contactAvatarBackfill,
   postThumbnail,
 ];

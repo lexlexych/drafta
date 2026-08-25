@@ -218,6 +218,18 @@ export function MailIcon(props: IconProps) {
   );
 }
 
+/** Refresh: two circular arrows. */
+export function RefreshIcon(props: IconProps) {
+  return (
+    <Icon {...stroke} strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <path d="M20 7v5h-5" />
+      <path d="M4 17v-5h5" />
+      <path d="M6.1 8.1A7.5 7.5 0 0 1 18.6 6L20 7.4" />
+      <path d="M17.9 15.9A7.5 7.5 0 0 1 5.4 18L4 16.6" />
+    </Icon>
+  );
+}
+
 /** Удаление: корзина. */
 export function TrashIcon(props: IconProps) {
   return (
