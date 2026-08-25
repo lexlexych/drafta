@@ -24,6 +24,11 @@ export type ContactAvatarSyncRequestedEvent = {
   conversationId: string;
 };
 
+export type PostThumbnailSyncRequestedEvent = {
+  workspaceId: string;
+  postId: string;
+};
+
 export type DraftRegenerateRequestedEvent = {
   conversationId: string;
   workspaceId: string;
@@ -111,6 +116,11 @@ export const contactAvatarSyncRequestedEvent = eventType(
   { schema: staticSchema<ContactAvatarSyncRequestedEvent>() },
 );
 
+export const postThumbnailSyncRequestedEvent = eventType(
+  "post/thumbnail.sync-requested",
+  { schema: staticSchema<PostThumbnailSyncRequestedEvent>() },
+);
+
 export const draftRegenerateRequestedEvent = eventType(
   "draft/regenerate.requested",
   {
@@ -182,6 +192,24 @@ export async function emitContactAvatarSyncRequested(
   } catch (error) {
     console.error(
       '[inngest] failed to emit "contact/avatar.sync-requested"',
+      error,
+    );
+  }
+}
+
+/**
+ * Requests a one-post thumbnail lookup after the post/comment is persisted.
+ * The worker re-checks `posts.thumbnail_url` before calling the provider, so
+ * repeated comment events are cheap once the first lookup succeeds.
+ */
+export async function emitPostThumbnailSyncRequested(
+  payload: PostThumbnailSyncRequestedEvent,
+): Promise<void> {
+  try {
+    await inngest.send(postThumbnailSyncRequestedEvent.create(payload));
+  } catch (error) {
+    console.error(
+      '[inngest] failed to emit "post/thumbnail.sync-requested"',
       error,
     );
   }

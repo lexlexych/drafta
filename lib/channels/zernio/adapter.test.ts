@@ -188,6 +188,50 @@ describe("createZernioAdapter", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
+  it("finds a post thumbnail in the comments inbox", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        data: [
+          {
+            id: "ig_post_88401",
+            picture: "https://scontent.cdninstagram.com/post.jpg",
+          },
+        ],
+        pagination: {},
+      }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const adapter = createZernioAdapter(() => "secret", () => apiConfig);
+    await expect(
+      adapter.fetchPostThumbnail!({
+        externalAccountId: "acct_ig_1",
+        postExternalId: "ig_post_88401",
+      }),
+    ).resolves.toEqual({
+      thumbnailUrl: "https://scontent.cdninstagram.com/post.jpg",
+    });
+  });
+
+  it("returns no thumbnail when the post is not in the comments inbox", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({ data: [], pagination: {} }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const adapter = createZernioAdapter(() => "secret", () => apiConfig);
+    await expect(
+      adapter.fetchPostThumbnail!({
+        externalAccountId: "acct_ig_1",
+        postExternalId: "ig_post_missing",
+      }),
+    ).resolves.toEqual({ thumbnailUrl: null });
+  });
+
   it("disconnectAccount deletes the account at Zernio", async () => {
     const fetchMock = vi.fn().mockResolvedValueOnce({
       ok: true,

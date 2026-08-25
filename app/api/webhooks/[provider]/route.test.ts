@@ -24,10 +24,13 @@ vi.mock("server-only", () => ({}));
 // already persisted — see the "Inngest emission failure" test below.
 const emitInteractionReceivedMock = vi.fn().mockResolvedValue(undefined);
 const emitContactAvatarSyncRequestedMock = vi.fn().mockResolvedValue(undefined);
+const emitPostThumbnailSyncRequestedMock = vi.fn().mockResolvedValue(undefined);
 vi.mock("@/lib/inngest/events", () => ({
   emitInteractionReceived: (...args: unknown[]) => emitInteractionReceivedMock(...args),
   emitContactAvatarSyncRequested: (...args: unknown[]) =>
     emitContactAvatarSyncRequestedMock(...args),
+  emitPostThumbnailSyncRequested: (...args: unknown[]) =>
+    emitPostThumbnailSyncRequestedMock(...args),
 }));
 
 const ZERNIO_WEBHOOK_SECRET = "test-zernio-webhook-secret";

@@ -12,6 +12,7 @@ import { isAvatarStale } from "@/lib/avatars";
 import {
   emitContactAvatarSyncRequested,
   emitInteractionReceived,
+  emitPostThumbnailSyncRequested,
 } from "@/lib/inngest/events";
 
 /**
@@ -22,9 +23,9 @@ import {
  *
  *   * `message.received` → contact/contact_identity, conversation, message,
  *     `interaction/received` (the DM draft pipeline debounces and generates);
- *   * `comment.received` → contact/contact_identity, post, comment. **No
- *     Inngest event**: a comment draft is never generated on arrival, only when
- *     the user asks for it from the «Комментарии» screen;
+ *   * `comment.received` → contact/contact_identity, post, comment, then an
+ *     IDs-only thumbnail lookup (the worker is a no-op once one is stored).
+ *     A comment draft is never generated on arrival;
  *   * `post.published` → the post row alone, so a freshly published post is
  *     listed with zero comments.
  *
@@ -288,8 +289,8 @@ async function processIncomingDirectMessage(params: {
 
 /**
  * A comment arrival persists the post (if it isn't known yet), the author and
- * the comment — and stops there. Comment drafts are explicitly requested from
- * the «Комментарии» screen, so nothing is emitted to Inngest here.
+ * the comment. It then requests a cosmetic thumbnail lookup; comment drafts
+ * remain explicitly requested from the «Комментарии» screen.
  */
 async function processIncomingComment(params: {
   supabase: SupabaseClient;
@@ -334,6 +335,11 @@ async function processIncomingComment(params: {
     );
 
     await markProcessed(null);
+
+    // Fail-safe and IDs-only: the worker reloads the post and skips the Zernio
+    // call when `thumbnail_url` is already present. If the provider does not
+    // know the picture yet, the field stays null and a later comment retries.
+    await emitPostThumbnailSyncRequested({ workspaceId, postId });
   } catch (error) {
     console.error("[webhooks] failed to process incoming comment", error);
     await markUnprocessedWithError(describeError(error));
@@ -359,8 +365,14 @@ async function processPublishedPost(params: {
   } = params;
 
   try {
-    await upsertPost(supabase, workspaceId, channelConnectionId, event.post);
+    const postId = await upsertPost(
+      supabase,
+      workspaceId,
+      channelConnectionId,
+      event.post,
+    );
     await markProcessed(null);
+    await emitPostThumbnailSyncRequested({ workspaceId, postId });
   } catch (error) {
     console.error("[webhooks] failed to process published post", error);
     await markUnprocessedWithError(describeError(error));

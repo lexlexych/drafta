@@ -14,6 +14,7 @@ const {
   cleanupAiRequestLog,
   contactAvatar,
   contactAvatarBackfill,
+  postThumbnail,
   inngestFunctions,
 } = await import("@/lib/inngest/functions");
 const { DRAFT_PIPELINE_CONCURRENCY } = await import(
@@ -42,6 +43,7 @@ describe("Inngest serve route", () => {
       cleanupAiRequestLog,
       contactAvatar,
       contactAvatarBackfill,
+      postThumbnail,
     ]);
     expect(generateDraft.opts.concurrency).toEqual([
       ...DRAFT_PIPELINE_CONCURRENCY,
@@ -83,6 +85,17 @@ describe("Inngest serve route", () => {
     expect(contactAvatar.opts.retries).toBe(2);
     expect(contactAvatarBackfill.opts.triggers).toEqual([
       { cron: "20 2 * * 0" },
+    ]);
+  });
+
+  it("serves post-thumbnail sync with bounded per-post concurrency", () => {
+    expect(postThumbnail.opts.retries).toBe(2);
+    expect(postThumbnail.opts.concurrency).toEqual([
+      {
+        scope: "env",
+        key: '"post:" + event.data.postId',
+        limit: 1,
+      },
     ]);
   });
 

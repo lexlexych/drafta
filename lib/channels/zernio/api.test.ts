@@ -7,6 +7,7 @@ import {
   getZernioConversationParticipant,
   getZernioConnectAuthUrl,
   listZernioConversationParticipants,
+  listZernioPostThumbnails,
   sendZernioInboxMessage,
   ZernioApiError,
 } from "./api";
@@ -231,6 +232,65 @@ describe("Zernio conversation participants", () => {
         { participantExternalId: "ig_user_2", avatarUrl: null },
       ],
       nextCursor: "cursor_2",
+    });
+  });
+});
+
+describe("Zernio post thumbnails", () => {
+  it("maps picture URLs from the comments inbox and passes an opaque cursor", async () => {
+    const fetchMock = mockFetch({
+      ok: true,
+      json: {
+        data: [
+          {
+            id: "ig_post_1",
+            picture: "https://scontent.cdninstagram.com/post.jpg",
+          },
+          { id: "ig_post_2", picture: null },
+        ],
+        pagination: { nextCursor: "cursor_2" },
+      },
+    });
+
+    await expect(
+      listZernioPostThumbnails(config, {
+        accountId: "acct_ig_1",
+        cursor: "cursor_1",
+      }),
+    ).resolves.toEqual({
+      posts: [
+        {
+          postExternalId: "ig_post_1",
+          thumbnailUrl: "https://scontent.cdninstagram.com/post.jpg",
+        },
+        { postExternalId: "ig_post_2", thumbnailUrl: null },
+      ],
+      nextCursor: "cursor_2",
+    });
+
+    const url = new URL(fetchMock.mock.calls[0][0] as string);
+    expect(url.pathname).toBe("/api/v1/inbox/comments");
+    expect(url.searchParams.get("accountId")).toBe("acct_ig_1");
+    expect(url.searchParams.get("minComments")).toBe("0");
+    expect(url.searchParams.get("sortBy")).toBe("date");
+    expect(url.searchParams.get("sortOrder")).toBe("desc");
+    expect(url.searchParams.get("cursor")).toBe("cursor_1");
+  });
+
+  it("drops non-HTTPS picture URLs", async () => {
+    mockFetch({
+      ok: true,
+      json: {
+        data: [{ id: "ig_post_1", picture: "http://example.com/post.jpg" }],
+        pagination: {},
+      },
+    });
+
+    await expect(
+      listZernioPostThumbnails(config, { accountId: "acct_ig_1" }),
+    ).resolves.toEqual({
+      posts: [{ postExternalId: "ig_post_1", thumbnailUrl: null }],
+      nextCursor: null,
     });
   });
 });

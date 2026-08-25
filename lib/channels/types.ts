@@ -286,6 +286,17 @@ export interface ListParticipantAvatarsResult {
   nextCursor: string | null;
 }
 
+/** Input to the optional provider lookup for one post's preview image. */
+export interface FetchPostThumbnailInput {
+  externalAccountId: string;
+  /** Provider-side post ID stored in `posts.external_id`. */
+  postExternalId: string;
+}
+
+export interface FetchPostThumbnailResult {
+  thumbnailUrl: string | null;
+}
+
 /** Input to the optional `parseConnectCallback` — the query parameters the provider appended to the redirect. */
 export interface ParseConnectCallbackInput {
   /** Query-string parameters of the provider's redirect back to us (keys as-is). */
@@ -377,6 +388,11 @@ export interface ChannelAdapter {
   listParticipantAvatars?(
     input: ListParticipantAvatarsInput,
   ): Promise<ListParticipantAvatarsResult>;
+
+  /** Optional provider lookup used after a post/comment webhook, never in it. */
+  fetchPostThumbnail?(
+    input: FetchPostThumbnailInput,
+  ): Promise<FetchPostThumbnailResult>;
 }
 
 /**

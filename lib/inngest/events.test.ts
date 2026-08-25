@@ -22,8 +22,10 @@ const {
   emitContactAvatarSyncRequested,
   emitInteractionReceived,
   emitMessageSendRequested,
+  emitPostThumbnailSyncRequested,
   interactionReceivedEvent,
   messageSendRequestedEvent,
+  postThumbnailSyncRequestedEvent,
 } = await import("./events");
 
 describe("Inngest event schemas", () => {
@@ -56,6 +58,16 @@ describe("Inngest event schemas", () => {
         conversationId: "conv-1",
         workspaceId: "ws-1",
       },
+    });
+
+    expect(
+      postThumbnailSyncRequestedEvent.create({
+        workspaceId: "ws-1",
+        postId: "post-1",
+      }),
+    ).toMatchObject({
+      name: "post/thumbnail.sync-requested",
+      data: { workspaceId: "ws-1", postId: "post-1" },
     });
 
     expect(
@@ -110,6 +122,13 @@ describe("Inngest event schemas", () => {
       // @ts-expect-error Rule 7: provider URLs must never enter an Inngest payload.
       avatarUrl: "https://cdn.example/avatar.jpg",
     });
+
+    postThumbnailSyncRequestedEvent.create({
+      workspaceId: "ws-1",
+      postId: "post-1",
+      // @ts-expect-error Rule 7: provider URLs must never enter an Inngest payload.
+      thumbnailUrl: "https://cdn.example/post.jpg",
+    });
   });
 });
 
@@ -131,6 +150,25 @@ describe("emitContactAvatarSyncRequested", () => {
       "conversationId",
       "workspaceId",
     ]);
+  });
+});
+
+describe("emitPostThumbnailSyncRequested", () => {
+  it("sends exactly workspaceId and postId and is fail-safe", async () => {
+    sendMock.mockReset();
+    sendMock.mockResolvedValueOnce(undefined);
+
+    await emitPostThumbnailSyncRequested({
+      workspaceId: "ws-1",
+      postId: "post-1",
+    });
+
+    const sent = sendMock.mock.calls[0][0];
+    expect(sent).toMatchObject({
+      name: "post/thumbnail.sync-requested",
+      data: { workspaceId: "ws-1", postId: "post-1" },
+    });
+    expect(Object.keys(sent.data).sort()).toEqual(["postId", "workspaceId"]);
   });
 });
 

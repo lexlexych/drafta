@@ -4,6 +4,8 @@ import type {
   DisconnectAccountInput,
   FetchParticipantAvatarInput,
   FetchParticipantAvatarResult,
+  FetchPostThumbnailInput,
+  FetchPostThumbnailResult,
   GetConnectUrlInput,
   GetConnectUrlResult,
   ListParticipantAvatarsInput,
@@ -21,6 +23,7 @@ import {
   getZernioConversationParticipant,
   getZernioConnectAuthUrl,
   listZernioConversationParticipants,
+  listZernioPostThumbnails,
   sendZernioCommentReply,
   sendZernioInboxMessage,
   ZernioApiError,
@@ -31,6 +34,7 @@ import { parseZernioWebhook } from "./parse";
 import { verifyZernioSignature } from "./verify";
 
 const PROVIDER = "zernio" as const;
+const MAX_POST_THUMBNAIL_PAGES = 10;
 
 /**
  * Builds the Zernio `ChannelAdapter` (docs/architecture/05-channels.md —
@@ -196,6 +200,30 @@ export function createZernioAdapter(
       }
 
       return { avatarUrl: null };
+    };
+
+    adapter.fetchPostThumbnail = async (
+      input: FetchPostThumbnailInput,
+    ): Promise<FetchPostThumbnailResult> => {
+      let cursor: string | undefined;
+
+      for (let pageNumber = 0; pageNumber < MAX_POST_THUMBNAIL_PAGES; pageNumber += 1) {
+        const page = await listZernioPostThumbnails(getApiConfig(), {
+          accountId: input.externalAccountId,
+          cursor,
+          limit: 100,
+        });
+        const post = page.posts.find(
+          (candidate) => candidate.postExternalId === input.postExternalId,
+        );
+        if (post) {
+          return { thumbnailUrl: post.thumbnailUrl };
+        }
+        if (!page.nextCursor) break;
+        cursor = page.nextCursor;
+      }
+
+      return { thumbnailUrl: null };
     };
   }
 

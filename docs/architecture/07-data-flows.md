@@ -41,13 +41,17 @@ updated: 2026-07-19
 | Событие | Что записывается | Событие Inngest |
 |---|---|---|
 | `message.received` | contact_identity (+contact и доступный аватар), conversation, message | `interaction/received` → черновик; при устаревшем/отсутствующем аватаре — `contact/avatar.sync-requested` |
-| `comment.received` | contact_identity (+contact), post (лениво), comment | **нет** |
-| `post.published` | post | **нет** |
+| `comment.received` | contact_identity (+contact), post (лениво), comment | `post/thumbnail.sync-requested` → запрос миниатюры, только если её ещё нет |
+| `post.published` | post | `post/thumbnail.sync-requested` → первая попытка получить миниатюру |
 
 Комментарий не порождает события генерации: черновик к комментарию создаётся
 только по явному запросу пользователя ([6.4](#64-черновики-к-комментариям)).
 `post.published` нужен, чтобы только что опубликованный пост появился в
 «Комментариях» ещё до первого комментария.
+Событие миниатюры содержит только `workspaceId` и `postId`; внешний API вызывается
+Inngest-функцией после повторной проверки `posts.thumbnail_url`. Если провайдер ещё
+не вернул картинку, поле остаётся пустым, а следующий комментарий естественно
+повторяет попытку. Cron и backfill старых постов не используются.
 
 Всё за доли секунды. **LLM в запросе не вызывается никогда.**
 
@@ -225,6 +229,7 @@ SPF/DKIM/DMARC к этому моменту уже настроены (они н
 | `send-push` | Web Push на каждое входящее — для пользователей в режиме «каждое входящее» ([11. PWA](11-realtime-pwa.md#web-push)) |
 | `contact-avatar` | фоновая загрузка фото одного участника через API адаптера; событие содержит только IDs |
 | `contact-avatar-backfill` | cron раз в неделю: пакетно обновляет фото существующих identities по активным каналам |
+| `post-thumbnail` | получает миниатюру одного поста через API адаптера; повторные события ничего не делают после заполнения `thumbnail_url` |
 | `push-digest` | cron: сводки для пользователей в режиме «дайджест» — счётчики и список новых входящих с прошлой сводки, по интервалу из [`notification_settings`](06-data-model.md#notification_settings) |
 | `reconcile-webhooks` | cron: переобработать зависшие `webhook_events` — страховка |
 | `cleanup` | cron: старые `webhook_events` по политике ретенции, мёртвые push-подписки |

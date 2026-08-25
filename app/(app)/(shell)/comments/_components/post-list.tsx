@@ -122,10 +122,28 @@ export function PostList({
             href={buildHref(PATHNAME, { [QUERY_KEYS.post]: item.id })}
           >
             <span
-              className={`${uiStyles.avatar} ${uiStyles.avatarMd} ${styles.postIcon}`}
+              className={styles.postThumbnail}
               aria-hidden="true"
             >
               <CommentsIcon size={17} />
+              {item.thumbnailUrl?.startsWith("https://") ? (
+                // Provider post previews are decorative; the adjacent title
+                // remains the accessible identity of the list item.
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  className={styles.postThumbnailImage}
+                  src={item.thumbnailUrl}
+                  alt=""
+                  loading="lazy"
+                  decoding="async"
+                  draggable={false}
+                  referrerPolicy="no-referrer"
+                  onError={(event) => {
+                    // Reveal the CommentsIcon already rendered underneath.
+                    event.currentTarget.style.display = "none";
+                  }}
+                />
+              ) : null}
             </span>
             <span className={styles.listBody}>
               <span className={styles.listTitleRow}>

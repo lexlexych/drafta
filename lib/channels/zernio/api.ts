@@ -47,6 +47,16 @@ export interface ZernioConversationParticipantPage {
   nextCursor: string | null;
 }
 
+export interface ZernioPostThumbnail {
+  postExternalId: string;
+  thumbnailUrl: string | null;
+}
+
+export interface ZernioPostThumbnailPage {
+  posts: ZernioPostThumbnail[];
+  nextCursor: string | null;
+}
+
 /** Thrown when a Zernio API call fails (non-2xx or an unexpected response shape). */
 export class ZernioApiError extends Error {
   constructor(
@@ -78,6 +88,18 @@ function nonEmptyString(value: unknown): string | null {
   return typeof value === "string" && value.trim().length > 0
     ? value.trim()
     : null;
+}
+
+function nonEmptyHttpsUrl(value: unknown): string | null {
+  const candidate = nonEmptyString(value);
+  if (!candidate) return null;
+
+  try {
+    const url = new URL(candidate);
+    return url.protocol === "https:" ? url.toString() : null;
+  } catch {
+    return null;
+  }
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -320,6 +342,65 @@ export async function listZernioConversationParticipants(
 
   return {
     participants,
+    nextCursor: nonEmptyString(pagination?.nextCursor),
+  };
+}
+
+/**
+ * Lists post previews from Zernio's comments inbox. `picture` is the
+ * provider-reported thumbnail URL documented on `GET /v1/inbox/comments`.
+ * `minComments=0` keeps a just-published post eligible before its first
+ * comment; callers pass the opaque cursor back unchanged.
+ */
+export async function listZernioPostThumbnails(
+  config: ZernioApiConfig,
+  input: { accountId: string; cursor?: string; limit?: number },
+): Promise<ZernioPostThumbnailPage> {
+  const url = new URL(joinUrl(config.apiBaseUrl, "inbox/comments"));
+  url.searchParams.set("accountId", input.accountId);
+  url.searchParams.set("minComments", "0");
+  url.searchParams.set("sortBy", "date");
+  url.searchParams.set("sortOrder", "desc");
+  url.searchParams.set(
+    "limit",
+    String(Math.min(100, Math.max(1, input.limit ?? 100))),
+  );
+  if (input.cursor) {
+    url.searchParams.set("cursor", input.cursor);
+  }
+
+  const response = await fetch(url, {
+    method: "GET",
+    headers: authHeaders(config),
+  });
+  if (!response.ok) {
+    throw await zernioHttpError(response, "Zernio post thumbnail list failed");
+  }
+
+  const body = asRecord(await readJson(response));
+  const dataRecord = asRecord(body?.data);
+  const rows = Array.isArray(body?.data)
+    ? body.data
+    : Array.isArray(dataRecord?.posts)
+      ? dataRecord.posts
+      : [];
+  const pagination = asRecord(body?.pagination) ?? asRecord(dataRecord?.pagination);
+
+  const posts = rows.flatMap((value) => {
+    const row = asRecord(value);
+    const postExternalId = nonEmptyString(row?.id);
+    if (!row || !postExternalId) return [];
+
+    return [
+      {
+        postExternalId,
+        thumbnailUrl: nonEmptyHttpsUrl(row.picture),
+      },
+    ];
+  });
+
+  return {
+    posts,
     nextCursor: nonEmptyString(pagination?.nextCursor),
   };
 }

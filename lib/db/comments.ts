@@ -95,6 +95,7 @@ type PostRow = {
   external_id: string;
   text: string;
   permalink: string | null;
+  thumbnail_url: string | null;
   published_at: string | null;
   draft_description: string;
   draft_instruction: string;
@@ -104,7 +105,7 @@ type PostRow = {
 };
 
 const POST_COLUMNS =
-  "id, channel_connection_id, external_id, text, permalink, published_at, draft_description, draft_instruction, draft_brief_set_at, last_comment_at, unread_count";
+  "id, channel_connection_id, external_id, text, permalink, thumbnail_url, published_at, draft_description, draft_instruction, draft_brief_set_at, last_comment_at, unread_count";
 
 type CommentRow = {
   id: string;
@@ -396,6 +397,7 @@ export async function getPostListView(
       time: activityAt ? formatListTime(activityAt, nowIso) : "",
       unreadCount: post.unread_count,
       commentCount: preview?.commentCount ?? 0,
+      thumbnailUrl: post.thumbnail_url,
       channel: channel
         ? channelBadge(channel)
         : {

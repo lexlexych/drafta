@@ -81,6 +81,7 @@ export type PostListItemView = {
   time: string;
   unreadCount: number;
   commentCount: number;
+  thumbnailUrl: string | null;
   channel: ChannelBadgeView;
 };
 
