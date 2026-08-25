@@ -14,6 +14,55 @@ function readFixture(name: string): string {
 }
 
 describe("parseZernioWebhook", () => {
+  it("prefers the conversation participant picture for an Instagram DM", () => {
+    const rawBody = JSON.stringify({
+      id: "wh_avatar_1",
+      event: "message.received",
+      account: { id: "acct_ig_1", platform: "instagram" },
+      conversation: {
+        id: "conversation_1",
+        participantPicture: "https://scontent.cdninstagram.com/profile.jpg",
+      },
+      message: {
+        id: "message_1",
+        text: "Hallo",
+        sender: {
+          id: "ig_user_1",
+          name: "Anna",
+          picture: "https://scontent.cdninstagram.com/sender.jpg",
+        },
+      },
+    });
+
+    const [event] = parseZernioWebhook({ rawBody, headers: {} });
+
+    expect(event?.type).toBe("message.received");
+    expect(
+      event?.type === "message.received" && event.message.sender.avatarUrl,
+    ).toBe("https://scontent.cdninstagram.com/profile.jpg");
+  });
+
+  it("uses sender.picture when a conversation picture is absent", () => {
+    const rawBody = JSON.stringify({
+      id: "wh_avatar_2",
+      event: "message.received",
+      account: { id: "acct_ig_1", platform: "instagram" },
+      conversation: { id: "conversation_1" },
+      message: {
+        id: "message_2",
+        sender: {
+          id: "ig_user_1",
+          picture: "https://scontent.cdninstagram.com/sender.jpg",
+        },
+      },
+    });
+
+    const [event] = parseZernioWebhook({ rawBody, headers: {} });
+    expect(
+      event?.type === "message.received" && event.message.sender.avatarUrl,
+    ).toBe("https://scontent.cdninstagram.com/sender.jpg");
+  });
+
   it("maps a Telegram DM message.received fixture to a normalized event, field for field", () => {
     const rawBody = readFixture("telegram-dm.json");
 

@@ -4,7 +4,9 @@ import {
   createZernioProfile,
   deleteZernioAccount,
   deleteZernioProfile,
+  getZernioConversationParticipant,
   getZernioConnectAuthUrl,
+  listZernioConversationParticipants,
   sendZernioInboxMessage,
   ZernioApiError,
 } from "./api";
@@ -169,6 +171,67 @@ describe("sendZernioInboxMessage", () => {
         text: "hi",
       }),
     ).rejects.toThrow(ZernioApiError);
+  });
+});
+
+describe("Zernio conversation participants", () => {
+  it("reads participantPicture from one conversation", async () => {
+    const fetchMock = mockFetch({
+      ok: true,
+      json: {
+        data: {
+          participantId: "ig_user_1",
+          participantPicture: "https://scontent.cdninstagram.com/avatar.jpg",
+        },
+      },
+    });
+
+    await expect(
+      getZernioConversationParticipant(config, {
+        accountId: "acct_ig_1",
+        conversationExternalId: "conversation 1",
+        participantExternalId: "ig_user_1",
+      }),
+    ).resolves.toEqual({
+      participantExternalId: "ig_user_1",
+      avatarUrl: "https://scontent.cdninstagram.com/avatar.jpg",
+    });
+
+    const url = new URL(fetchMock.mock.calls[0][0] as string);
+    expect(url.pathname).toBe("/api/v1/inbox/conversations/conversation%201");
+    expect(url.searchParams.get("accountId")).toBe("acct_ig_1");
+  });
+
+  it("maps a documented conversation-list page and its cursor", async () => {
+    mockFetch({
+      ok: true,
+      json: {
+        data: [
+          {
+            participantId: "ig_user_1",
+            participantPicture: "https://scontent.cdninstagram.com/avatar.jpg",
+          },
+          { participantId: "ig_user_2", participantPicture: null },
+        ],
+        pagination: { nextCursor: "cursor_2" },
+      },
+    });
+
+    await expect(
+      listZernioConversationParticipants(config, {
+        accountId: "acct_ig_1",
+        limit: 100,
+      }),
+    ).resolves.toEqual({
+      participants: [
+        {
+          participantExternalId: "ig_user_1",
+          avatarUrl: "https://scontent.cdninstagram.com/avatar.jpg",
+        },
+        { participantExternalId: "ig_user_2", avatarUrl: null },
+      ],
+      nextCursor: "cursor_2",
+    });
   });
 });
 

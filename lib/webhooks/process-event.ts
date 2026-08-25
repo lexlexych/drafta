@@ -8,7 +8,11 @@ import type {
   NormalizedPostRef,
   NormalizedSender,
 } from "@/lib/channels/types";
-import { emitInteractionReceived } from "@/lib/inngest/events";
+import { isAvatarStale } from "@/lib/avatars";
+import {
+  emitContactAvatarSyncRequested,
+  emitInteractionReceived,
+} from "@/lib/inngest/events";
 
 /**
  * One normalized event → the DB side of §6.1's pipeline
@@ -235,12 +239,13 @@ async function processIncomingDirectMessage(params: {
   } = params;
 
   try {
-    const { contactIdentityId, contactId } = await upsertContactIdentity(
-      supabase,
-      workspaceId,
-      event.platform,
-      event.message.sender,
-    );
+    const { contactIdentityId, contactId, avatarFetchedAt } =
+      await upsertContactIdentity(
+        supabase,
+        workspaceId,
+        event.platform,
+        event.message.sender,
+      );
 
     const conversationId = await upsertConversation(
       supabase,
@@ -263,7 +268,18 @@ async function processIncomingDirectMessage(params: {
     // Fail-safe by design (docs/architecture/14-vibecoding-rules.md#7) —
     // never allowed to turn a persisted message into a failed webhook. The
     // event payload is IDs-only.
-    await emitInteractionReceived({ messageId, conversationId, workspaceId });
+    await Promise.all([
+      emitInteractionReceived({ messageId, conversationId, workspaceId }),
+      ...(isAvatarStale(avatarFetchedAt)
+        ? [
+            emitContactAvatarSyncRequested({
+              workspaceId,
+              contactIdentityId,
+              conversationId,
+            }),
+          ]
+        : []),
+    ]);
   } catch (error) {
     console.error("[webhooks] failed to process incoming direct message", error);
     await markUnprocessedWithError(describeError(error));
@@ -356,19 +372,34 @@ async function upsertContactIdentity(
   workspaceId: string,
   platform: string,
   sender: NormalizedSender,
-): Promise<{ contactIdentityId: string; contactId: string }> {
+): Promise<{
+  contactIdentityId: string;
+  contactId: string;
+  avatarFetchedAt: string | null;
+}> {
   const externalId = sender.externalId;
 
   const { data: existing, error: selectError } = await supabase
     .from("contact_identities")
-    .select("id, contact_id")
+    .select("id, contact_id, avatar_url, avatar_fetched_at")
     .eq("workspace_id", workspaceId)
     .eq("platform", platform)
     .eq("external_id", externalId)
     .maybeSingle();
   if (selectError) throw selectError;
   if (existing) {
-    return { contactIdentityId: existing.id, contactId: existing.contact_id };
+    const avatarFetchedAt = await refreshIdentityAvatar(
+      supabase,
+      existing.id,
+      existing.avatar_url,
+      existing.avatar_fetched_at,
+      sender.avatarUrl,
+    );
+    return {
+      contactIdentityId: existing.id,
+      contactId: existing.contact_id,
+      avatarFetchedAt,
+    };
   }
 
   // New identity → new contact (docs/architecture/06-data-model.md#contact_identities:
@@ -390,8 +421,10 @@ async function upsertContactIdentity(
       platform,
       external_id: externalId,
       display_name: sender.displayName ?? null,
+      avatar_url: sender.avatarUrl ?? null,
+      avatar_fetched_at: sender.avatarUrl ? new Date().toISOString() : null,
     })
-    .select("id")
+    .select("id, avatar_fetched_at")
     .single();
 
   if (identityError) {
@@ -403,18 +436,67 @@ async function upsertContactIdentity(
       // transaction for at this scope.
       const { data: winner, error: winnerError } = await supabase
         .from("contact_identities")
-        .select("id, contact_id")
+        .select("id, contact_id, avatar_url, avatar_fetched_at")
         .eq("workspace_id", workspaceId)
         .eq("platform", platform)
         .eq("external_id", externalId)
         .single();
       if (winnerError || !winner) throw winnerError ?? identityError;
-      return { contactIdentityId: winner.id, contactId: winner.contact_id };
+      const avatarFetchedAt = await refreshIdentityAvatar(
+        supabase,
+        winner.id,
+        winner.avatar_url,
+        winner.avatar_fetched_at,
+        sender.avatarUrl,
+      );
+      return {
+        contactIdentityId: winner.id,
+        contactId: winner.contact_id,
+        avatarFetchedAt,
+      };
     }
     throw identityError;
   }
 
-  return { contactIdentityId: newIdentity.id, contactId: newContact.id };
+  return {
+    contactIdentityId: newIdentity.id,
+    contactId: newContact.id,
+    avatarFetchedAt: newIdentity.avatar_fetched_at,
+  };
+}
+
+async function refreshIdentityAvatar(
+  supabase: SupabaseClient,
+  contactIdentityId: string,
+  currentAvatarUrl: string | null,
+  currentFetchedAt: string | null,
+  incomingAvatarUrl: string | undefined,
+): Promise<string | null> {
+  if (!incomingAvatarUrl) {
+    return currentFetchedAt;
+  }
+
+  const fetchedAt = new Date().toISOString();
+  if (incomingAvatarUrl === currentAvatarUrl && !isAvatarStale(currentFetchedAt)) {
+    return currentFetchedAt;
+  }
+
+  const { error } = await supabase
+    .from("contact_identities")
+    .update({
+      avatar_url: incomingAvatarUrl,
+      avatar_fetched_at: fetchedAt,
+      updated_at: fetchedAt,
+    })
+    .eq("id", contactIdentityId);
+
+  if (error) {
+    // Decorative data must never make a valid inbound message fail.
+    console.error("[webhooks] failed to refresh a contact avatar", error);
+    return currentFetchedAt;
+  }
+
+  return fetchedAt;
 }
 
 async function upsertConversation(

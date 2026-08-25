@@ -22,6 +22,8 @@ import type { ChannelPlatform } from "../types";
  *       -> 200 { success, data: { messageId } }        (id at data.messageId)
  *   - POST /v1/inbox/comments/{commentId}/replies  { accountId, message }
  *       -> 200 { success, data: { commentId } }         (id at data.commentId)
+ *   - GET  /v1/inbox/conversations  ?accountId&limit&cursor
+ *       -> 200 { data: Conversation[], pagination }     (participantPicture per row)
  * Both authenticate with `Authorization: Bearer <ZERNIO_API_KEY>`. A Zernio
  * "profile" is the tenant boundary: drafta provisions exactly one per workspace
  * before the workspace row is created.
@@ -33,6 +35,16 @@ export interface ZernioApiConfig {
   apiBaseUrl: string;
   /** API key sent as `Authorization: Bearer`. */
   apiKey: string;
+}
+
+export interface ZernioConversationParticipant {
+  participantExternalId: string;
+  avatarUrl: string | null;
+}
+
+export interface ZernioConversationParticipantPage {
+  participants: ZernioConversationParticipant[];
+  nextCursor: string | null;
 }
 
 /** Thrown when a Zernio API call fails (non-2xx or an unexpected response shape). */
@@ -60,6 +72,18 @@ async function readJson(response: Response): Promise<unknown> {
   } catch {
     return null;
   }
+}
+
+function nonEmptyString(value: unknown): string | null {
+  return typeof value === "string" && value.trim().length > 0
+    ? value.trim()
+    : null;
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value !== null && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
 }
 
 /**
@@ -198,6 +222,106 @@ export async function sendZernioInboxMessage(
   }
 
   return messageId;
+}
+
+/**
+ * Reads one conversation by id. Zernio currently returns
+ * `participantPicture` here in production even though the generated response
+ * type documents that field only on the list endpoint. A missing field is not
+ * treated as an error: callers fall back to the documented paginated list.
+ */
+export async function getZernioConversationParticipant(
+  config: ZernioApiConfig,
+  input: {
+    accountId: string;
+    conversationExternalId: string;
+    participantExternalId: string;
+  },
+): Promise<ZernioConversationParticipant | null> {
+  const url = new URL(
+    joinUrl(
+      config.apiBaseUrl,
+      `inbox/conversations/${encodeURIComponent(input.conversationExternalId)}`,
+    ),
+  );
+  url.searchParams.set("accountId", input.accountId);
+
+  const response = await fetch(url, {
+    method: "GET",
+    headers: authHeaders(config),
+  });
+
+  if (response.status === 404) {
+    return null;
+  }
+  if (!response.ok) {
+    throw await zernioHttpError(response, "Zernio conversation lookup failed");
+  }
+
+  const body = asRecord(await readJson(response));
+  const row = asRecord(body?.data) ?? body;
+  if (!row) {
+    return null;
+  }
+
+  return {
+    participantExternalId:
+      nonEmptyString(row.participantId) ?? input.participantExternalId,
+    avatarUrl: nonEmptyString(row.participantPicture),
+  };
+}
+
+/** Lists conversation participants using Zernio's documented inbox endpoint. */
+export async function listZernioConversationParticipants(
+  config: ZernioApiConfig,
+  input: { accountId: string; cursor?: string; limit?: number },
+): Promise<ZernioConversationParticipantPage> {
+  const url = new URL(joinUrl(config.apiBaseUrl, "inbox/conversations"));
+  url.searchParams.set("accountId", input.accountId);
+  url.searchParams.set(
+    "limit",
+    String(Math.min(100, Math.max(1, input.limit ?? 100))),
+  );
+  if (input.cursor) {
+    url.searchParams.set("cursor", input.cursor);
+  }
+
+  const response = await fetch(url, {
+    method: "GET",
+    headers: authHeaders(config),
+  });
+  if (!response.ok) {
+    throw await zernioHttpError(response, "Zernio conversation list failed");
+  }
+
+  const body = asRecord(await readJson(response));
+  const dataRecord = asRecord(body?.data);
+  const rows = Array.isArray(body?.data)
+    ? body.data
+    : Array.isArray(dataRecord?.conversations)
+      ? dataRecord.conversations
+      : [];
+  const pagination = asRecord(body?.pagination) ?? asRecord(dataRecord?.pagination);
+
+  const participants = rows.flatMap((value) => {
+    const row = asRecord(value);
+    const participantExternalId = nonEmptyString(row?.participantId);
+    if (!row || !participantExternalId) {
+      return [];
+    }
+
+    return [
+      {
+        participantExternalId,
+        avatarUrl: nonEmptyString(row.participantPicture),
+      },
+    ];
+  });
+
+  return {
+    participants,
+    nextCursor: nonEmptyString(pagination?.nextCursor),
+  };
 }
 
 /**

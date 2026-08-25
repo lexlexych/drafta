@@ -74,6 +74,7 @@ interface ZernioRawConversation {
   /** Zernio's internal conversation ID — see `parseSingleEnvelope` for why this, not `platformConversationId`, is used as the normalized conversation's `externalId`. */
   id: string;
   platformConversationId?: string;
+  participantPicture?: string | null;
 }
 
 /**
@@ -129,6 +130,7 @@ interface ZernioRawAttachment {
 interface ZernioRawSender {
   id: string;
   name?: string | null;
+  picture?: string | null;
 }
 
 interface ZernioRawMessage {
@@ -284,6 +286,11 @@ function mapAttachment(raw: ZernioRawAttachment): NormalizedAttachment {
   };
 }
 
+function nonEmptyString(value: string | null | undefined): string | null {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : null;
+}
+
 function parseSingleEnvelope(raw: unknown): NormalizedEvent | null {
   if (!isZernioEnvelope(raw)) {
     console.warn(
@@ -357,6 +364,10 @@ function buildDmEvent(
       sender: {
         externalId: raw.message.sender.id,
         displayName: raw.message.sender.name ?? undefined,
+        avatarUrl:
+          nonEmptyString(raw.conversation.participantPicture) ??
+          nonEmptyString(raw.message.sender.picture) ??
+          undefined,
       },
     },
     // Kept in full per docs/architecture/05-channels.md#нормализованное-событие.
@@ -426,6 +437,7 @@ function buildCommentEvent(
         externalId: comment.author.id,
         displayName:
           comment.author.name ?? comment.author.username ?? undefined,
+        avatarUrl: nonEmptyString(comment.author.picture) ?? undefined,
       },
       ...(comment.parentCommentId
         ? { parentExternalId: comment.parentCommentId }

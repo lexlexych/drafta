@@ -69,6 +69,7 @@ updated: 2026-07-20
 | Только ID в событиях Inngest | [§7.2](07-data-flows.md#62-дебаунс-и-генерация-черновика) |
 | Маскирование идентификаторов перед LLM | [§8](08-ai-subsystem.md#маскирование-идентификаторов-перед-llm) |
 | Шифрование credentials каналов | [`channel_connections`](06-data-model.md#channel_connections) |
+| Фото контакта отдаётся через RLS-защищённый прокси; браузер оператора не обращается к Meta CDN | [`contact_identities`](06-data-model.md#contact_identities) |
 | RLS-изоляция тенантов | [§4](04-multitenancy.md#изоляция-данных) |
 | Ретенция `webhook_events` через `cleanup` | [§7.6](07-data-flows.md#66-полный-список-inngest-функций) |
 | Ретенция `ai_request_log` — 30 дней, cron `cleanup-ai-request-log` | [`ai_request_log`](06-data-model.md#ai_request_log), [§7.6](07-data-flows.md#66-полный-список-inngest-функций) |

@@ -162,6 +162,32 @@ describe("createZernioAdapter", () => {
     ).toBeDefined();
   });
 
+  it("fetches a participant avatar directly from its conversation", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        data: {
+          participantId: "ig_user_1",
+          participantPicture: "https://scontent.cdninstagram.com/avatar.jpg",
+        },
+      }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const adapter = createZernioAdapter(() => "secret", () => apiConfig);
+    await expect(
+      adapter.fetchParticipantAvatar!({
+        externalAccountId: "acct_ig_1",
+        participantExternalId: "ig_user_1",
+        conversationExternalId: "conversation_1",
+      }),
+    ).resolves.toEqual({
+      avatarUrl: "https://scontent.cdninstagram.com/avatar.jpg",
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it("disconnectAccount deletes the account at Zernio", async () => {
     const fetchMock = vi.fn().mockResolvedValueOnce({
       ok: true,

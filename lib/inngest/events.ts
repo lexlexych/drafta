@@ -18,6 +18,12 @@ export type InteractionReceivedEvent = {
   workspaceId: string;
 };
 
+export type ContactAvatarSyncRequestedEvent = {
+  workspaceId: string;
+  contactIdentityId: string;
+  conversationId: string;
+};
+
 export type DraftRegenerateRequestedEvent = {
   conversationId: string;
   workspaceId: string;
@@ -100,6 +106,11 @@ export const interactionReceivedEvent = eventType("interaction/received", {
   schema: staticSchema<InteractionReceivedEvent>(),
 });
 
+export const contactAvatarSyncRequestedEvent = eventType(
+  "contact/avatar.sync-requested",
+  { schema: staticSchema<ContactAvatarSyncRequestedEvent>() },
+);
+
 export const draftRegenerateRequestedEvent = eventType(
   "draft/regenerate.requested",
   {
@@ -153,6 +164,24 @@ export async function emitInteractionReceived(
   } catch (error) {
     console.error(
       '[inngest] failed to emit "interaction/received" (webhook already persisted; not retried from here)',
+      error,
+    );
+  }
+}
+
+/**
+ * Requests a provider lookup after the webhook data is safely persisted.
+ * Failure is cosmetic, so it follows the same fail-safe boundary as the
+ * draft-pipeline event and never changes the webhook response.
+ */
+export async function emitContactAvatarSyncRequested(
+  payload: ContactAvatarSyncRequestedEvent,
+): Promise<void> {
+  try {
+    await inngest.send(contactAvatarSyncRequestedEvent.create(payload));
+  } catch (error) {
+    console.error(
+      '[inngest] failed to emit "contact/avatar.sync-requested"',
       error,
     );
   }

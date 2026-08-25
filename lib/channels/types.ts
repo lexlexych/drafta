@@ -54,6 +54,8 @@ export interface NormalizedSender {
   externalId: string;
   /** Display name as reported by the provider, when available. */
   displayName?: string;
+  /** Provider-hosted profile picture URL, when the provider exposes one. */
+  avatarUrl?: string;
 }
 
 /** The direct-message body carried by a `message.*` event. */
@@ -255,6 +257,35 @@ export interface DisconnectAccountInput {
   externalAccountId: string;
 }
 
+/** Input to the optional participant-avatar lookup. */
+export interface FetchParticipantAvatarInput {
+  externalAccountId: string;
+  participantExternalId: string;
+  /** Provider conversation id, when a direct lookup is available. */
+  conversationExternalId?: string;
+}
+
+export interface FetchParticipantAvatarResult {
+  avatarUrl: string | null;
+}
+
+/** One page of provider participants used by the periodic avatar backfill. */
+export interface ListParticipantAvatarsInput {
+  externalAccountId: string;
+  cursor?: string;
+  limit?: number;
+}
+
+export interface ParticipantAvatar {
+  participantExternalId: string;
+  avatarUrl: string | null;
+}
+
+export interface ListParticipantAvatarsResult {
+  participants: ParticipantAvatar[];
+  nextCursor: string | null;
+}
+
 /** Input to the optional `parseConnectCallback` — the query parameters the provider appended to the redirect. */
 export interface ParseConnectCallbackInput {
   /** Query-string parameters of the provider's redirect back to us (keys as-is). */
@@ -336,6 +367,16 @@ export interface ChannelAdapter {
    * Idempotent: an account the provider no longer knows is a success.
    */
   disconnectAccount?(input: DisconnectAccountInput): Promise<void>;
+
+  /** Optional provider lookup used outside the webhook request path. */
+  fetchParticipantAvatar?(
+    input: FetchParticipantAvatarInput,
+  ): Promise<FetchParticipantAvatarResult>;
+
+  /** Optional paginated listing used by the scheduled avatar refresh. */
+  listParticipantAvatars?(
+    input: ListParticipantAvatarsInput,
+  ): Promise<ListParticipantAvatarsResult>;
 }
 
 /**

@@ -2,8 +2,12 @@ import type {
   ChannelAdapter,
   ConnectCallbackResult,
   DisconnectAccountInput,
+  FetchParticipantAvatarInput,
+  FetchParticipantAvatarResult,
   GetConnectUrlInput,
   GetConnectUrlResult,
+  ListParticipantAvatarsInput,
+  ListParticipantAvatarsResult,
   NormalizedEvent,
   ParseConnectCallbackInput,
   ParseWebhookInput,
@@ -14,7 +18,9 @@ import type {
 import { ChannelOperationNotImplementedError } from "../types";
 import {
   deleteZernioAccount,
+  getZernioConversationParticipant,
   getZernioConnectAuthUrl,
+  listZernioConversationParticipants,
   sendZernioCommentReply,
   sendZernioInboxMessage,
   ZernioApiError,
@@ -140,6 +146,56 @@ export function createZernioAdapter(
       input: DisconnectAccountInput,
     ): Promise<void> => {
       await deleteZernioAccount(getApiConfig(), input.externalAccountId);
+    };
+
+    adapter.listParticipantAvatars = async (
+      input: ListParticipantAvatarsInput,
+    ): Promise<ListParticipantAvatarsResult> => {
+      return listZernioConversationParticipants(getApiConfig(), {
+        accountId: input.externalAccountId,
+        cursor: input.cursor,
+        limit: input.limit,
+      });
+    };
+
+    adapter.fetchParticipantAvatar = async (
+      input: FetchParticipantAvatarInput,
+    ): Promise<FetchParticipantAvatarResult> => {
+      if (input.conversationExternalId) {
+        const participant = await getZernioConversationParticipant(
+          getApiConfig(),
+          {
+            accountId: input.externalAccountId,
+            conversationExternalId: input.conversationExternalId,
+            participantExternalId: input.participantExternalId,
+          },
+        );
+        if (participant?.avatarUrl) {
+          return { avatarUrl: participant.avatarUrl };
+        }
+      }
+
+      let cursor: string | undefined;
+      for (let pageNumber = 0; pageNumber < 5; pageNumber += 1) {
+        const page = await listZernioConversationParticipants(getApiConfig(), {
+          accountId: input.externalAccountId,
+          cursor,
+          limit: 100,
+        });
+        const participant = page.participants.find(
+          (candidate) =>
+            candidate.participantExternalId === input.participantExternalId,
+        );
+        if (participant) {
+          return { avatarUrl: participant.avatarUrl };
+        }
+        if (!page.nextCursor) {
+          break;
+        }
+        cursor = page.nextCursor;
+      }
+
+      return { avatarUrl: null };
     };
   }
 

@@ -6,10 +6,12 @@ import {
   listChannelConnections,
   type ChannelConnectionRow,
 } from "@/lib/db/channel-connections";
+import { avatarProxyUrl } from "@/lib/avatars";
 import {
   avatarFor,
   countWithNoun,
   platformLabel,
+  type AvatarView,
   type ChannelFilterView,
   type ContactCardView,
   type ContactHistoryEntryView,
@@ -76,10 +78,24 @@ type ContactIdentityRow = {
   platform: string;
   external_id: string;
   display_name: string | null;
+  avatar_url: string | null;
 };
 
 const CONTACT_COLUMNS = "id, display_name, notes, tags";
-const IDENTITY_COLUMNS = "id, contact_id, platform, external_id, display_name";
+const IDENTITY_COLUMNS =
+  "id, contact_id, platform, external_id, display_name, avatar_url";
+
+function contactAvatar(
+  contact: ContactRow,
+  identities: ContactIdentityRow[],
+): AvatarView {
+  const withPicture = identities.find((identity) => identity.avatar_url);
+  return avatarFor(
+    contact.id,
+    contact.display_name,
+    withPicture ? avatarProxyUrl(withPicture.id, withPicture.avatar_url) : null,
+  );
+}
 
 function truncate(text: string, limit: number): string {
   return text.length <= limit ? text : `${text.slice(0, limit).trimEnd()}…`;
@@ -202,7 +218,8 @@ async function loadIdentities(
   let query = supabase
     .from("contact_identities")
     .select(IDENTITY_COLUMNS)
-    .eq("workspace_id", workspaceId);
+    .eq("workspace_id", workspaceId)
+    .order("created_at", { ascending: true });
 
   if (contactIds) {
     query = query.in("contact_id", contactIds);
@@ -267,7 +284,7 @@ function contactListItem(
   return {
     id: contact.id,
     name: contact.display_name,
-    avatar: avatarFor(contact.id, contact.display_name),
+    avatar: contactAvatar(contact, identities),
     handles: identities.map(identityHandle).join(" · "),
     platforms: identities.map((identity) => identity.platform as Platform),
     tag: contact.tags[0] ?? null,
@@ -467,7 +484,7 @@ export async function getContactCardView(
   return {
     id: contact.id,
     name: contact.display_name,
-    avatar: avatarFor(contact.id, contact.display_name),
+    avatar: contactAvatar(contact, identities),
     tags: contact.tags,
     notes: contact.notes,
     identities: identities.map((identity) => ({

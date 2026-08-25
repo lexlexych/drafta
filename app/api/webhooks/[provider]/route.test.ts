@@ -23,8 +23,11 @@ vi.mock("server-only", () => ({}));
 // rejected emission still lets the webhook answer 200 with the message
 // already persisted — see the "Inngest emission failure" test below.
 const emitInteractionReceivedMock = vi.fn().mockResolvedValue(undefined);
+const emitContactAvatarSyncRequestedMock = vi.fn().mockResolvedValue(undefined);
 vi.mock("@/lib/inngest/events", () => ({
   emitInteractionReceived: (...args: unknown[]) => emitInteractionReceivedMock(...args),
+  emitContactAvatarSyncRequested: (...args: unknown[]) =>
+    emitContactAvatarSyncRequestedMock(...args),
 }));
 
 const ZERNIO_WEBHOOK_SECRET = "test-zernio-webhook-secret";
@@ -79,6 +82,7 @@ function buildEnvelope(overrides: {
   senderId: string;
   senderName?: string;
   text?: string;
+  participantPicture?: string;
 }): string {
   return JSON.stringify({
     id: overrides.id,
@@ -88,6 +92,7 @@ function buildEnvelope(overrides: {
     conversation: {
       id: overrides.conversationId,
       platformConversationId: overrides.conversationId,
+      participantPicture: overrides.participantPicture,
     },
     message: {
       id: overrides.messageId,
@@ -117,6 +122,7 @@ describe.skipIf(!hasLocalSupabaseConfig)("POST /api/webhooks/[provider] (zernio)
 
   afterEach(async () => {
     emitInteractionReceivedMock.mockClear();
+    emitContactAvatarSyncRequestedMock.mockClear();
 
     // workspaces cascade-delete channel_connections/contacts/contact_identities/
     // conversations/messages/posts/comments/webhook_events (docs/architecture/06-data-model.md
@@ -239,6 +245,43 @@ describe.skipIf(!hasLocalSupabaseConfig)("POST /api/webhooks/[provider] (zernio)
       conversationId: conversation!.id,
       workspaceId,
     });
+    expect(emitContactAvatarSyncRequestedMock).toHaveBeenCalledWith({
+      contactIdentityId: contactIdentity!.id,
+      conversationId: conversation!.id,
+      workspaceId,
+    });
+  });
+
+  it("stores participantPicture from an Instagram DM without scheduling an API lookup", async () => {
+    const workspaceId = await createTestWorkspace();
+    await createTestChannelConnection(workspaceId, {
+      platform: "instagram",
+      externalId: "acct_ig_avatar_1",
+    });
+    const avatarUrl = "https://scontent-fra3-1.cdninstagram.com/avatar.jpg?sig=1";
+    const response = await postZernioWebhook(
+      buildEnvelope({
+        id: "wh_evt_avatar_1",
+        accountId: "acct_ig_avatar_1",
+        platform: "instagram",
+        conversationId: "ig_conversation_avatar_1",
+        messageId: "ig_message_avatar_1",
+        senderId: "ig_sender_avatar_1",
+        senderName: "Avatar Contact",
+        participantPicture: avatarUrl,
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    const { data: identity } = await supabase
+      .from("contact_identities")
+      .select("avatar_url, avatar_fetched_at")
+      .eq("workspace_id", workspaceId)
+      .eq("external_id", "ig_sender_avatar_1")
+      .single();
+    expect(identity?.avatar_url).toBe(avatarUrl);
+    expect(identity?.avatar_fetched_at).not.toBeNull();
+    expect(emitContactAvatarSyncRequestedMock).not.toHaveBeenCalled();
   });
 
   it("idempotency: delivering the same webhook twice processes it once (one webhook_events row, one message)", async () => {

@@ -14,10 +14,12 @@ vi.mock("./client", () => ({
 }));
 
 const {
+  contactAvatarSyncRequestedEvent,
   draftRegenerateRequestedEvent,
   draftRunNowRequestedEvent,
   emitDraftRegenerateRequested,
   emitDraftRunNowRequested,
+  emitContactAvatarSyncRequested,
   emitInteractionReceived,
   emitMessageSendRequested,
   interactionReceivedEvent,
@@ -26,6 +28,21 @@ const {
 
 describe("Inngest event schemas", () => {
   it("accepts ID-only payloads for both event types", () => {
+    expect(
+      contactAvatarSyncRequestedEvent.create({
+        workspaceId: "ws-1",
+        contactIdentityId: "identity-1",
+        conversationId: "conv-1",
+      }),
+    ).toMatchObject({
+      name: "contact/avatar.sync-requested",
+      data: {
+        workspaceId: "ws-1",
+        contactIdentityId: "identity-1",
+        conversationId: "conv-1",
+      },
+    });
+
     expect(
       interactionReceivedEvent.create({
         messageId: "msg-1",
@@ -85,6 +102,35 @@ describe("Inngest event schemas", () => {
       // @ts-expect-error Rule 7: outgoing text must never enter an Inngest payload.
       text: "reply text",
     });
+
+    contactAvatarSyncRequestedEvent.create({
+      workspaceId: "ws-1",
+      contactIdentityId: "identity-1",
+      conversationId: "conv-1",
+      // @ts-expect-error Rule 7: provider URLs must never enter an Inngest payload.
+      avatarUrl: "https://cdn.example/avatar.jpg",
+    });
+  });
+});
+
+describe("emitContactAvatarSyncRequested", () => {
+  it("sends exactly three IDs and is fail-safe", async () => {
+    sendMock.mockReset();
+    sendMock.mockResolvedValueOnce(undefined);
+
+    await emitContactAvatarSyncRequested({
+      workspaceId: "ws-1",
+      contactIdentityId: "identity-1",
+      conversationId: "conv-1",
+    });
+
+    const sent = sendMock.mock.calls[0][0];
+    expect(sent.name).toBe("contact/avatar.sync-requested");
+    expect(Object.keys(sent.data).sort()).toEqual([
+      "contactIdentityId",
+      "conversationId",
+      "workspaceId",
+    ]);
   });
 });
 

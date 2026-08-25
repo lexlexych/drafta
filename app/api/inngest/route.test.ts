@@ -12,6 +12,8 @@ const {
   sendPush,
   pushDigest,
   cleanupAiRequestLog,
+  contactAvatar,
+  contactAvatarBackfill,
   inngestFunctions,
 } = await import("@/lib/inngest/functions");
 const { DRAFT_PIPELINE_CONCURRENCY } = await import(
@@ -38,6 +40,8 @@ describe("Inngest serve route", () => {
       sendPush,
       pushDigest,
       cleanupAiRequestLog,
+      contactAvatar,
+      contactAvatarBackfill,
     ]);
     expect(generateDraft.opts.concurrency).toEqual([
       ...DRAFT_PIPELINE_CONCURRENCY,
@@ -73,6 +77,13 @@ describe("Inngest serve route", () => {
     // defensible (docs/architecture/15-compliance-gdpr.md), so an unregistered
     // or unscheduled cleanup is a compliance bug, not a missing nicety.
     expect(cleanupAiRequestLog.opts.triggers).toEqual([{ cron: "0 3 * * *" }]);
+  });
+
+  it("serves contact-avatar sync and the weekly backfill", () => {
+    expect(contactAvatar.opts.retries).toBe(2);
+    expect(contactAvatarBackfill.opts.triggers).toEqual([
+      { cron: "20 2 * * 0" },
+    ]);
   });
 
   it("exports all App Router handlers", () => {
