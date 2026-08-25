@@ -716,6 +716,9 @@ describe("contacts page", () => {
     expect(screen.getByRole("heading", { name: "Контакты" })).toBeDefined();
     expect(screen.queryByText("Карточка контакта")).toBeNull();
     expect(screen.getByText(/Выберите контакт/)).toBeDefined();
+    expect(
+      screen.queryAllByRole("button", { name: /Обновить аватар контакта/ }),
+    ).toHaveLength(0);
   });
 
   it("renders the card of the picked contact", async () => {
@@ -727,6 +730,9 @@ describe("contacts page", () => {
     expect(screen.getByText("Identities по каналам")).toBeDefined();
     expect(screen.getByText("Кросс-канальная история")).toBeDefined();
     expect(screen.getByRole("button", { name: "Склеить с другим…" })).toBeDefined();
+    expect(
+      screen.getAllByRole("button", { name: /Обновить аватар контакта/ }),
+    ).toHaveLength(1);
   });
 
   it("filters contacts by channel through the multi-select", async () => {
