@@ -144,6 +144,25 @@ vi.mock("@/lib/db/knowledge-base", async (importOriginal) => ({
   listKnowledgeFiles: async () => KNOWLEDGE_FILES,
 }));
 
+const REPLY_TEMPLATES = [
+  {
+    id: "tpl_shipping",
+    workspace_id: "wsp_tonwerk",
+    name: "Сроки доставки",
+    bodies: { de: "Zwei Werktage.", en: "Two business days." },
+    is_enabled_for_messages: true,
+    is_enabled_for_comments: false,
+    sort_order: 0,
+    created_at: "2026-08-20T10:00:00.000Z",
+    updated_at: "2026-08-20T10:00:00.000Z",
+  },
+];
+
+vi.mock("@/lib/db/reply-templates", () => ({
+  listReplyTemplates: async () => REPLY_TEMPLATES,
+  listActiveReplyTemplates: async () => REPLY_TEMPLATES,
+}));
+
 vi.mock("@/lib/db/ai-settings", () => ({
   getWorkspaceAiSettings: async () => ({
     id: "ais_tonwerk",
@@ -812,6 +831,23 @@ describe("settings page", () => {
     // Загрузка .md убрана: категория редактируется прямо в интерфейсе.
     expect(screen.queryByText("Загрузить .md")).toBeNull();
     expect(screen.getByText(/Бюджет токенов/)).toBeDefined();
+  });
+
+  it("renders the reply templates section under the knowledge base", async () => {
+    render(
+      await SettingsPage({
+        searchParams: searchParams({ section: "templates" }),
+      }),
+    );
+
+    const titles = SETTINGS_SECTIONS.map((section) => section.title);
+    expect(titles.indexOf("Шаблоны ответов")).toBe(
+      titles.indexOf("База знаний") + 1,
+    );
+    expect(screen.getByRole("button", { name: "Сроки доставки" })).toBeDefined();
+    expect(screen.getByText("Активен для сообщений")).toBeDefined();
+    expect(screen.queryByText("Активен для комментариев")).toBeNull();
+    expect(screen.getByRole("button", { name: "+ Новый шаблон" })).toBeDefined();
   });
 });
 

@@ -13,6 +13,7 @@ import type { ActiveDraftView } from "@/lib/drafts/types";
 import { DRAFT_REALTIME_EVENT } from "@/lib/realtime/draft-panel";
 
 import { Composer } from "./composer";
+import type { ReplyTemplateOption } from "./template-picker";
 
 const refresh = vi.fn();
 vi.mock("next/navigation", () => ({
@@ -71,7 +72,23 @@ function emitDraftRow(row: Record<string, unknown>) {
   });
 }
 
-function renderComposer(initialDraft: ActiveDraftView | null = null) {
+const TEMPLATES: ReplyTemplateOption[] = [
+  {
+    id: "template-1",
+    name: "Сроки доставки",
+    bodies: { de: "Zwei Werktage.", en: "Two business days." },
+  },
+  {
+    id: "template-2",
+    name: "Только немецкий",
+    bodies: { de: "Nur auf Deutsch." },
+  },
+];
+
+function renderComposer(
+  initialDraft: ActiveDraftView | null = null,
+  templates: ReplyTemplateOption[] = [],
+) {
   return render(
     <Composer
       conversationId={CONVERSATION_ID}
@@ -79,6 +96,8 @@ function renderComposer(initialDraft: ActiveDraftView | null = null) {
       draft={initialDraft}
       placeholder="Написать ответ…"
       replyWindowWarning={null}
+      templates={templates}
+      workspaceLanguage="de"
     />,
   );
 }
@@ -86,6 +105,8 @@ function renderComposer(initialDraft: ActiveDraftView | null = null) {
 const field = () => screen.getByLabelText("Ответ") as HTMLTextAreaElement;
 const generateButton = () =>
   screen.queryByRole("button", { name: "Сгенерировать черновик" });
+const templateButton = () =>
+  screen.queryByRole("button", { name: "Вставить шаблон" });
 
 beforeEach(() => {
   cleanup();
@@ -288,5 +309,57 @@ describe("Composer", () => {
         null,
       ),
     );
+  });
+  it("hides the template icon when there are no templates at all", () => {
+    renderComposer();
+
+    expect(generateButton()).not.toBeNull();
+    expect(templateButton()).toBeNull();
+  });
+
+  it("offers templates only while the field is empty", () => {
+    renderComposer(null, TEMPLATES);
+
+    expect(templateButton()).not.toBeNull();
+
+    fireEvent.change(field(), { target: { value: "Печатаю сам" } });
+
+    // То же правило, что и у значка генерации: помощники — только пустому полю.
+    expect(templateButton()).toBeNull();
+  });
+
+  it("puts the picked language's text into the field", () => {
+    renderComposer(null, TEMPLATES);
+
+    fireEvent.click(templateButton()!);
+    fireEvent.click(screen.getByRole("menuitem", { name: /Сроки доставки/ }));
+
+    // Язык воркспейса идёт первым в списке.
+    const languages = screen.getAllByRole("menuitem");
+    expect(languages[0]!.textContent).toContain("Deutsch");
+
+    fireEvent.click(languages[0]!);
+
+    expect(field().value).toBe("Zwei Werktage.");
+    expect(screen.queryByRole("menu")).toBeNull();
+  });
+
+  it("skips the language step for a single-language template", () => {
+    renderComposer(null, TEMPLATES);
+
+    fireEvent.click(templateButton()!);
+    fireEvent.click(screen.getByRole("menuitem", { name: /Только немецкий/ }));
+
+    expect(field().value).toBe("Nur auf Deutsch.");
+  });
+
+  it("hides both helpers while a ready draft fills the field", () => {
+    renderComposer(draft(), TEMPLATES);
+
+    // Текст черновика — тоже текст: чтобы взять вместо него шаблон, черновик
+    // сначала удаляют корзиной в строке-заметке.
+    expect(field().value).toBe("Здравствуйте! Доставим завтра.");
+    expect(generateButton()).toBeNull();
+    expect(templateButton()).toBeNull();
   });
 });

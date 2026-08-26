@@ -8,7 +8,10 @@ import {
   getThreadView,
   listChannelConnections,
 } from "@/lib/db/inbox";
+import { listActiveReplyTemplates } from "@/lib/db/reply-templates";
 import { createServerSupabaseClient } from "@/lib/db/server";
+import { getWorkspaceLanguage } from "@/lib/db/workspace-language";
+import { defaultTemplateLanguage } from "@/lib/i18n/template-languages";
 import { getAuthenticatedUser, getCurrentWorkspace } from "@/lib/db/workspace";
 
 import { Avatar } from "../_components/avatar";
@@ -51,6 +54,13 @@ export default async function InboxPage({
   const hasChannels = channels.length > 0;
 
   const categories = await listKnowledgeFiles(supabase, workspace.id);
+
+  // Шаблоны для значка в поле ответа. Список маленький и меняется редко —
+  // едет пропом вместе с остальным тредом, без отдельного клиентского запроса.
+  const [replyTemplates, workspaceLanguage] = await Promise.all([
+    listActiveReplyTemplates(supabase, workspace.id, "message"),
+    getWorkspaceLanguage(supabase, workspace.id),
+  ]);
 
   // Первая страница без фильтра: дальше список дозагружает себя сам через
   // `loadConversationsAction` (см. `_components/conversation-list.tsx`).
@@ -164,6 +174,12 @@ export default async function InboxPage({
                 draft={thread.draft}
                 placeholder="Написать ответ…"
                 replyWindowWarning={thread.replyWindowWarning}
+                templates={replyTemplates.map((template) => ({
+                  id: template.id,
+                  name: template.name,
+                  bodies: template.bodies,
+                }))}
+                workspaceLanguage={defaultTemplateLanguage(workspaceLanguage)}
               />
             </div>
           </>

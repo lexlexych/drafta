@@ -20,9 +20,17 @@ import {
   listKnowledgeFiles,
   type KnowledgeFileRow,
 } from "@/lib/db/knowledge-base";
+import {
+  listReplyTemplates,
+  type ReplyTemplateRow,
+} from "@/lib/db/reply-templates";
 import { getWorkspaceLanguage } from "@/lib/db/workspace-language";
 import { createServerSupabaseClient } from "@/lib/db/server";
 import type { WorkspaceLanguage } from "@/lib/i18n/languages";
+import {
+  defaultTemplateLanguage,
+  type TemplateLanguage,
+} from "@/lib/i18n/template-languages";
 import {
   getAuthenticatedUser,
   getCurrentWorkspace,
@@ -41,6 +49,7 @@ import {
   ShieldIcon,
   SparkIcon,
   TeamIcon,
+  TemplateIcon,
 } from "../_components/icons";
 import { QUERY_KEYS, buildHref, firstParam } from "../_components/navigation";
 import { StubButton } from "../_components/stub";
@@ -57,6 +66,10 @@ import {
   KnowledgeBasePanel,
   type KnowledgeFileListItem,
 } from "./knowledge/knowledge-base-panel";
+import {
+  ReplyTemplatesPanel,
+  type ReplyTemplateListItem,
+} from "./templates/templates-panel";
 import { AiSettingsForm } from "./ai/ai-settings-form";
 import { AppInstallPanel } from "./app/app-install-panel";
 import { NotificationsForm } from "./notifications/notifications-form";
@@ -71,6 +84,7 @@ const SECTION_ICONS: Record<SettingsSectionId, typeof PlugIcon> = {
   channels: PlugIcon,
   ai: SparkIcon,
   knowledge: BookIcon,
+  templates: TemplateIcon,
   team: TeamIcon,
   notifications: BellIcon,
   app: DeviceIcon,
@@ -92,6 +106,12 @@ type AccountSectionData = {
 type AiSectionData = {
   settings: AiSettingsRow;
   modelOptions: AiModelOption[];
+};
+
+type TemplatesSectionData = {
+  templates: ReplyTemplateListItem[];
+  /** Язык из «Аккаунта» — первая вкладка нового шаблона. */
+  workspaceLanguage: TemplateLanguage;
 };
 
 /**
@@ -152,6 +172,43 @@ async function loadKnowledgeSectionData(): Promise<KnowledgeFileListItem[]> {
       updated_at: row.updated_at,
     }),
   );
+}
+
+/**
+ * Раздел «Шаблоны ответов»: сами шаблоны плюс язык workspace — с него
+ * начинается набор языков у нового шаблона.
+ */
+async function loadTemplatesSectionData(): Promise<TemplatesSectionData | null> {
+  const user = await getAuthenticatedUser();
+
+  if (!user) {
+    return null;
+  }
+
+  const workspace = await getCurrentWorkspace(user.id);
+
+  if (!workspace) {
+    return null;
+  }
+
+  const supabase = await createServerSupabaseClient();
+  const rows = await listReplyTemplates(supabase, workspace.id);
+
+  return {
+    templates: rows.map(
+      (row: ReplyTemplateRow): ReplyTemplateListItem => ({
+        id: row.id,
+        name: row.name,
+        bodies: row.bodies,
+        isEnabledForMessages: row.is_enabled_for_messages,
+        isEnabledForComments: row.is_enabled_for_comments,
+        updated_at: row.updated_at,
+      }),
+    ),
+    workspaceLanguage: defaultTemplateLanguage(
+      await getWorkspaceLanguage(supabase, workspace.id),
+    ),
+  };
 }
 
 async function loadNotificationsSectionData(): Promise<NotificationSettingsView | null> {
@@ -263,6 +320,8 @@ export default async function SettingsPage({
     sectionId === "channels" ? await loadChannelsSectionData() : null;
   const knowledgeFiles =
     sectionId === "knowledge" ? await loadKnowledgeSectionData() : null;
+  const templatesData =
+    sectionId === "templates" ? await loadTemplatesSectionData() : null;
   const aiData = sectionId === "ai" ? await loadAiSectionData() : null;
   const notificationsData =
     sectionId === "notifications" ? await loadNotificationsSectionData() : null;
@@ -321,6 +380,7 @@ export default async function SettingsPage({
               channels={channels}
               connectResult={connectResult}
               knowledgeFiles={knowledgeFiles}
+              templatesData={templatesData}
             />
           </div>
         </div>
@@ -337,6 +397,7 @@ function SectionDetail({
   channels,
   connectResult,
   knowledgeFiles,
+  templatesData,
 }: {
   sectionId: SettingsSectionId;
   accountData: AccountSectionData | null;
@@ -345,6 +406,7 @@ function SectionDetail({
   channels: ChannelConnectionListItem[] | null;
   connectResult: ChannelConnectResult | null;
   knowledgeFiles: KnowledgeFileListItem[] | null;
+  templatesData: TemplatesSectionData | null;
 }) {
   switch (sectionId) {
     case "channels":
@@ -365,6 +427,8 @@ function SectionDetail({
           <KnowledgeBasePanel files={knowledgeFiles ?? []} />
         </>
       );
+    case "templates":
+      return <TemplatesSection data={templatesData} />;
     case "team":
       return <TeamSection />;
     case "notifications":
@@ -428,6 +492,27 @@ function AiSection({ data }: { data: AiSectionData | null }) {
       }}
       modelOptions={data.modelOptions}
     />
+  );
+}
+
+function TemplatesSection({ data }: { data: TemplatesSectionData | null }) {
+  if (!data) {
+    return <p className={setStyles.formError}>Шаблоны недоступны.</p>;
+  }
+
+  return (
+    <>
+      <p className={setStyles.description}>
+        Шаблон — готовый ответ, который оператор подставляет в поле одним
+        кликом, без генерации. Значки в списке показывают, где шаблон
+        предлагается: в переписке, под комментариями или и там, и там. Текст
+        хранится на нескольких языках — оператор выбирает нужный при вставке.
+      </p>
+      <ReplyTemplatesPanel
+        templates={data.templates}
+        workspaceLanguage={data.workspaceLanguage}
+      />
+    </>
   );
 }
 

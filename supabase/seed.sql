@@ -622,6 +622,59 @@ set
   is_enabled = excluded.is_enabled,
   updated_at = now();
 
+-- ---------------------------------------------------------------------------
+-- Reply templates: ready-made answers the operator drops into the reply field.
+-- One workspace gets two, the other one, so the RLS suite can prove isolation;
+-- each carries two languages — the picker's second step only makes sense with
+-- more than one.
+-- ---------------------------------------------------------------------------
+
+insert into public.reply_templates (
+  id,
+  workspace_id,
+  name,
+  bodies,
+  is_enabled_for_messages,
+  is_enabled_for_comments,
+  sort_order
+)
+values
+  (
+    'a0000000-0000-4000-8000-000000000801',
+    'a0000000-0000-4000-8000-000000000001',
+    'Versandzeiten',
+    '{"de":"Der Standardversand dauert zwei Werktage.","en":"Standard shipping takes two business days."}'::jsonb,
+    true,
+    false,
+    0
+  ),
+  (
+    'a0000000-0000-4000-8000-000000000802',
+    'a0000000-0000-4000-8000-000000000001',
+    'Danke für die Bestellung',
+    '{"de":"Vielen Dank für Ihre Bestellung!","en":"Thank you for your order!"}'::jsonb,
+    true,
+    true,
+    1
+  ),
+  (
+    'b0000000-0000-4000-8000-000000000801',
+    'b0000000-0000-4000-8000-000000000001',
+    'Öffnungszeiten',
+    '{"de":"Wir sind Montag bis Freitag von 9 bis 18 Uhr erreichbar.","en":"We are available Monday to Friday, 9am to 6pm."}'::jsonb,
+    true,
+    false,
+    0
+  )
+on conflict (id) do update
+set
+  name = excluded.name,
+  bodies = excluded.bodies,
+  is_enabled_for_messages = excluded.is_enabled_for_messages,
+  is_enabled_for_comments = excluded.is_enabled_for_comments,
+  sort_order = excluded.sort_order,
+  updated_at = now();
+
 insert into public.webhook_events (
   id,
   workspace_id,

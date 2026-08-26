@@ -1,0 +1,129 @@
+/* Поповер шаблонов в поле ответа (template-picker.tsx). Токены — из
+   app/globals.css, как и у остальных контролов. */
+
+.root {
+  position: relative;
+  flex: none;
+  display: inline-flex;
+}
+
+/* Тот же размер, что у .draftButton в panes.module.css: значки стоят рядом и
+   должны читаться как пара. Цвет приглушённый — акцентным в этой паре остаётся
+   AI-значок. */
+.trigger {
+  width: 30px;
+  height: 34px;
+  border-radius: 9px;
+  color: var(--ink3);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.trigger:hover,
+.trigger[aria-expanded="true"] {
+  color: var(--ink);
+  background: var(--hover);
+}
+
+/* Композер прижат к низу треда, поэтому панель раскрывается вверх — как меню
+   пользователя в подвале левого меню. */
+.panel {
+  position: absolute;
+  z-index: 30;
+  bottom: calc(100% + 6px);
+  left: 0;
+  width: max-content;
+  min-width: 240px;
+  max-width: min(360px, 80vw);
+  border: 1px solid var(--line2);
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  color: var(--ink);
+}
+
+.panelHead {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px 6px 6px;
+  border-bottom: 1px solid var(--line);
+}
+
+.back {
+  width: 24px;
+  height: 24px;
+  border-radius: 7px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ink2);
+}
+
+.back:hover {
+  background: var(--hover);
+}
+
+.panelTitle {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12.5px;
+  font-weight: 700;
+}
+
+.list {
+  max-height: 280px;
+  margin: 0;
+  padding: 4px;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.option {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 8px;
+  border-radius: 6px;
+  text-align: left;
+  color: inherit;
+  font: inherit;
+  font-size: 13px;
+}
+
+.option:hover {
+  background: var(--hover);
+}
+
+.optionLabel {
+  flex: none;
+  max-width: 60%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.optionHint {
+  margin-left: auto;
+  flex: none;
+  color: var(--ink3);
+  font-size: 11px;
+}
+
+/* Начало текста на выбранном языке: по названию языка не всегда понятно, тот ли
+   это шаблон. */
+.optionPreview {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink3);
+  font-size: 11.5px;
+}

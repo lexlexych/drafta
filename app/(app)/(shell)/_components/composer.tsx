@@ -28,6 +28,7 @@ import {
 } from "react";
 
 import type { ActiveDraftView } from "@/lib/drafts/types";
+import type { TemplateLanguage } from "@/lib/i18n/template-languages";
 import {
   DRAFT_REALTIME_EVENT,
   reduceActiveDraft,
@@ -50,6 +51,7 @@ import {
   WarningIcon,
 } from "./icons";
 import { showToast } from "./stub";
+import { TemplatePicker, type ReplyTemplateOption } from "./template-picker";
 import draftStyles from "./draft.module.css";
 import styles from "./panes.module.css";
 
@@ -88,12 +90,17 @@ export function Composer({
   draft,
   placeholder,
   replyWindowWarning,
+  templates = [],
+  workspaceLanguage = "en",
 }: {
   conversationId: string;
   workspaceId: string;
   draft: ActiveDraftView | null;
   placeholder: string;
   replyWindowWarning: string | null;
+  /** Шаблоны, активные для переписки. Пустой список прячет значок целиком. */
+  templates?: readonly ReplyTemplateOption[];
+  workspaceLanguage?: TemplateLanguage;
 }) {
   const router = useRouter();
   const [realtimeDraft, setRealtimeDraft] = useState<ActiveDraftView | null>(
@@ -292,6 +299,23 @@ export function Composer({
     }
   };
 
+  /**
+   * Текст шаблона кладётся тем же путём, что и ручной ввод: `value` перестаёт
+   * быть `null`, поле показывает его вместо черновика, а `sourceDraftId`
+   * становится `editedDraftId` — отправка закроет черновик, если он был.
+   */
+  const applyTemplate = (templateText: string) => {
+    if (isLocked) {
+      return;
+    }
+
+    if (value === null) {
+      setEditedDraftId(readyDraft?.id ?? null);
+    }
+    setValue(templateText);
+    fieldRef.current?.focus();
+  };
+
   const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     // Enter отправляет, как и у прежнего однострочного поля; перенос строки —
     // Shift+Enter.
@@ -319,16 +343,25 @@ export function Composer({
       ) : null}
 
       <form className={styles.composer} onSubmit={(event) => void submit(event)}>
+        {/* Оба значка живут по одному правилу: они помощники для пустого
+            поля, а над набранным текстом только мешали бы. */}
         {!text.trim() && !isLocked ? (
-          <button
-            type="button"
-            className={styles.draftButton}
-            aria-label="Сгенерировать черновик"
-            title="Сгенерировать черновик"
-            onClick={() => void generate()}
-          >
-            <SparkIcon size={16} />
-          </button>
+          <>
+            <button
+              type="button"
+              className={styles.draftButton}
+              aria-label="Сгенерировать черновик"
+              title="Сгенерировать черновик"
+              onClick={() => void generate()}
+            >
+              <SparkIcon size={16} />
+            </button>
+            <TemplatePicker
+              templates={templates}
+              workspaceLanguage={workspaceLanguage}
+              onPick={applyTemplate}
+            />
+          </>
         ) : null}
         <textarea
           ref={fieldRef}

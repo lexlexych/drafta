@@ -591,6 +591,167 @@
   flex-wrap: wrap;
 }
 
+/* ---------- Шаблоны ответов ---------- */
+
+/* Как .knowledgeRow, но вместо переключателя — значки типов: их может быть
+   один, два или (у выключенного шаблона) ни одного, поэтому колонка авто. */
+.templateRow {
+  min-height: 50px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 14px;
+  border-top: 1px solid var(--line);
+}
+
+.templateRow:first-child {
+  border-top: 0;
+}
+
+.templateTypes {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 36px;
+  justify-content: flex-end;
+  color: var(--ink3);
+}
+
+.templateType {
+  display: inline-flex;
+}
+
+.templateSurfaces {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  padding: 0 20px 14px;
+}
+
+.templateSurface {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  color: var(--ink2);
+  font-size: 12.5px;
+}
+
+.langTabs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding: 8px 20px;
+  border-top: 1px solid var(--line);
+  background: var(--surface2);
+}
+
+.langTabList {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.langTab {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  border: 1px solid var(--line2);
+  border-radius: 99px;
+  padding: 0 4px 0 10px;
+  color: var(--ink2);
+  background: var(--surface);
+  font-size: 12px;
+}
+
+.langTab button {
+  padding: 5px 0;
+  color: inherit;
+  font: inherit;
+}
+
+.langTab[data-active="true"] {
+  border-color: transparent;
+  color: var(--accent-ink);
+  background: var(--accent);
+}
+
+.langTabRemove {
+  width: 18px;
+  height: 18px;
+  border-radius: 99px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  line-height: 1;
+  opacity: 0.7;
+}
+
+.langTabRemove:hover {
+  opacity: 1;
+}
+
+/* «+» — это подпись на нативном <select>: своё меню здесь ничего не добавило
+   бы, а нативное на мобильном удобнее. */
+.langTabAdd {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: 1px dashed var(--line2);
+  border-radius: 99px;
+  color: var(--ink3);
+  cursor: pointer;
+}
+
+.langTabAdd:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.langTabAddIcon {
+  display: inline-flex;
+  pointer-events: none;
+}
+
+.langTabAdd select {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.templateBodyField {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+
+.templateBodyField textarea {
+  flex: 1;
+  min-height: 180px;
+  resize: none;
+  border: 0;
+  padding: 16px 20px;
+  color: var(--ink);
+  background: var(--surface);
+  font: inherit;
+  font-size: 13.5px;
+  line-height: 1.6;
+}
+
+.templateBodyField textarea:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
 .visuallyHidden {
   position: absolute;
   width: 1px;
@@ -622,6 +783,13 @@
   border-radius: 16px;
   background: var(--surface);
   box-shadow: 0 22px 70px rgba(13, 27, 24, 0.24);
+}
+
+/* У шаблона одна колонка вместо пары «редактор + превью», и на 1080px строка
+   текста получалась бы неудобно длинной. */
+.editorDialogNarrow {
+  width: min(720px, 100%);
+  height: min(640px, calc(100dvh - 44px));
 }
 
 .editorForm {
