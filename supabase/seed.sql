@@ -958,3 +958,48 @@ set
   response = excluded.response,
   status_code = excluded.status_code,
   duration_ms = excluded.duration_ms;
+
+-- Кэш переводов: по одной готовой строке на workspace, чтобы тест изоляции
+-- (tests/rls/isolation.integration.ts) видел «свою» строку и не видел чужую.
+-- Немецкий оригинал → русский, как и в жизни: язык workspace против языка
+-- клиента.
+insert into public.message_translations (
+  id,
+  workspace_id,
+  conversation_id,
+  message_id,
+  target_language,
+  source_language,
+  text,
+  provider,
+  model
+)
+values
+  (
+    'a0000000-0000-4000-8000-000000000901',
+    'a0000000-0000-4000-8000-000000000001',
+    'a0000000-0000-4000-8000-000000000401',
+    'a0000000-0000-4000-8000-000000000501',
+    'ru',
+    'de',
+    'Здравствуйте, товар ещё в наличии?',
+    'mistral',
+    'mistral-small-latest'
+  ),
+  (
+    'b0000000-0000-4000-8000-000000000901',
+    'b0000000-0000-4000-8000-000000000001',
+    'b0000000-0000-4000-8000-000000000401',
+    'b0000000-0000-4000-8000-000000000501',
+    'ru',
+    'de',
+    'Могу ли я оплатить по счёту?',
+    'mistral',
+    'mistral-small-latest'
+  )
+on conflict (id) do update
+set
+  text = excluded.text,
+  source_language = excluded.source_language,
+  provider = excluded.provider,
+  model = excluded.model;

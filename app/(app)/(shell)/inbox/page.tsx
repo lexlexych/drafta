@@ -17,9 +17,9 @@ import { getAuthenticatedUser, getCurrentWorkspace } from "@/lib/db/workspace";
 import { Avatar } from "../_components/avatar";
 import { ChannelChip } from "../_components/chips";
 import { Composer } from "../_components/composer";
-import { BackIcon, ClockIcon, PictureIcon } from "../_components/icons";
+import { BackIcon, ClockIcon } from "../_components/icons";
+import { MessageBubble } from "../_components/message-bubble";
 import { QUERY_KEYS, buildHref, firstParam } from "../_components/navigation";
-import { RetrySendButton } from "../_components/retry-send-button";
 import styles from "../_components/panes.module.css";
 import uiStyles from "../_components/ui.module.css";
 import { ConversationList } from "./_components/conversation-list";
@@ -79,7 +79,14 @@ export default async function InboxPage({
   // `conversation`, правая панель пуста и ни один элемент списка не активен.
   const openedId = conversationId;
   const thread = openedId
-    ? await getThreadView(supabase, workspace.id, channels, openedId, categories)
+    ? await getThreadView(
+        supabase,
+        workspace.id,
+        channels,
+        openedId,
+        categories,
+        workspaceLanguage,
+      )
     : null;
   const isDetail = conversationId !== null;
 
@@ -132,35 +139,15 @@ export default async function InboxPage({
             </div>
 
             <div className={styles.messages}>
+              {/* Пузырь — клиентский компонент ради значка перевода: он
+                  переключает текст на месте, и это состояние не должно
+                  сбрасываться при `router.refresh()` от Realtime. */}
               {thread.messages.map((message) => (
-                <div
+                <MessageBubble
                   key={message.id}
-                  className={`${styles.bubble} ${
-                    message.direction === "in"
-                      ? styles.bubbleIn
-                      : styles.bubbleOut
-                  }`}
-                >
-                  {message.attachmentName ? (
-                    <>
-                      <span className={styles.attachment}>
-                        <PictureIcon /> {message.attachmentName}
-                      </span>
-                      <br />
-                    </>
-                  ) : null}
-                  {message.text}
-                  <time className={`${styles.bubbleMeta} ${uiStyles.num}`}>
-                    {message.time}
-                    {message.deliveryLabel ? ` · ${message.deliveryLabel}` : ""}
-                  </time>
-                  {message.canRetrySend ? (
-                    <RetrySendButton
-                      conversationId={thread.conversationId}
-                      messageId={message.id}
-                    />
-                  ) : null}
-                </div>
+                  conversationId={thread.conversationId}
+                  message={message}
+                />
               ))}
             </div>
 

@@ -12,6 +12,11 @@ import { getActiveConversationDraft } from "@/lib/db/drafts";
 import type { ActiveDraftView } from "@/lib/drafts/types";
 import { categoryBadges, type KnowledgeFileRow } from "@/lib/db/knowledge-base";
 import {
+  listConversationTranslations,
+  type MessageTranslationView,
+} from "@/lib/db/message-translations";
+import { DEFAULT_WORKSPACE_LANGUAGE } from "@/lib/i18n/languages";
+import {
   avatarFor,
   countWithNoun,
   type CategoryBadgeView,
@@ -134,6 +139,13 @@ type MessageRow = {
 export type InboxThreadMessageView = ThreadMessageView & {
   /** Failed outgoing message — the thread renders the retry button (stage 3). */
   canRetrySend: boolean;
+  /**
+   * Готовый перевод на язык workspace, если он уже в кэше
+   * (`lib/db/message-translations.ts`). Едет вместе с тредом, чтобы значок
+   * перевода на уже переведённом сообщении срабатывал мгновенно и без вызова
+   * LLM; `null` — перевода ещё нет, значок пойдёт в `translateMessageAction`.
+   */
+  translation: MessageTranslationView | null;
 };
 
 export type InboxThreadView = Omit<ThreadView, "draft" | "messages"> & {
@@ -555,6 +567,12 @@ export async function getThreadView(
   channels: ChannelConnectionRow[],
   conversationId: string,
   categories: readonly KnowledgeFileRow[] = [],
+  /**
+   * Язык из «Настройки → Аккаунт»: определяет, какие переводы считать готовыми.
+   * Дефолт — тот же, что у `resolveWorkspaceLanguage`, чтобы вызов без языка
+   * (тесты) не падал и просто не находил кэша.
+   */
+  targetLanguage: string = DEFAULT_WORKSPACE_LANGUAGE,
 ): Promise<InboxThreadView | null> {
   const { data: conversation, error: conversationError } = await supabase
     .from("conversations")
@@ -589,18 +607,28 @@ export async function getThreadView(
     return null;
   }
 
-  const [contact, messages, draft, avatarByContactPlatform] = await Promise.all([
-    conversation.contact_id
-      ? loadContactById(supabase, workspaceId, conversation.contact_id)
-      : Promise.resolve(null),
-    listMessagesForConversation(supabase, workspaceId, conversation.id),
-    getActiveConversationDraft(supabase, workspaceId, conversation.id),
-    loadIdentityAvatars(
-      supabase,
-      workspaceId,
-      conversation.contact_id ? [conversation.contact_id] : [],
-    ),
-  ]);
+  const [contact, messages, draft, avatarByContactPlatform, translations] =
+    await Promise.all([
+      conversation.contact_id
+        ? loadContactById(supabase, workspaceId, conversation.contact_id)
+        : Promise.resolve(null),
+      listMessagesForConversation(supabase, workspaceId, conversation.id),
+      getActiveConversationDraft(supabase, workspaceId, conversation.id),
+      loadIdentityAvatars(
+        supabase,
+        workspaceId,
+        conversation.contact_id ? [conversation.contact_id] : [],
+      ),
+      // Все переводы треда разом, а не по сообщению: один запрос по тому же
+      // индексу вместо N штук, и значок на уже переведённом сообщении
+      // срабатывает без похода на сервер.
+      listConversationTranslations(
+        supabase,
+        workspaceId,
+        conversation.id,
+        targetLanguage,
+      ),
+    ]);
 
   const name = contact?.display_name ?? "Без контакта";
   const nowIso = new Date().toISOString();
@@ -648,6 +676,7 @@ export async function getThreadView(
       attachmentName: attachmentIndicatorLabel(message.attachments),
       canRetrySend:
         message.direction === "outgoing" && message.delivery_status === "failed",
+      translation: translations.get(message.id) ?? null,
     })),
     draft,
   };

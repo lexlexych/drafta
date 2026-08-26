@@ -298,17 +298,58 @@
   border-bottom-right-radius: 4px;
 }
 
-.bubbleMeta {
-  display: block;
-  font-size: 10.5px;
+/* Нижняя строка пузыря: слева перевод, справа время. */
+.bubbleFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
   margin-top: 3px;
+}
+
+.bubbleMeta {
+  font-size: 10.5px;
   opacity: 0.65;
-  text-align: right;
+  /* Время прижато вправо и без соседа слева — на случай пузыря без значка. */
+  margin-left: auto;
+  white-space: nowrap;
 }
 
 .bubbleIn .bubbleMeta {
   color: var(--ink3);
   opacity: 1;
+}
+
+.translateToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 10.5px;
+  /* Наследуем цвет пузыря: `.bubbleOut` рисуется на --out-bg с --out-ink, и
+     любой фиксированный цвет пропал бы на одном из двух фонов. */
+  color: inherit;
+  opacity: 0.65;
+  cursor: pointer;
+  /* Значок мелкий, а палец нет — добираем область нажатия высотой. */
+  min-height: 20px;
+}
+
+.translateToggle:hover:not(:disabled),
+.translateToggle:focus-visible {
+  opacity: 1;
+}
+
+.translateToggle:disabled {
+  cursor: default;
+}
+
+.bubbleIn .translateToggle {
+  color: var(--ink3);
+  opacity: 0.9;
 }
 
 .attachment {

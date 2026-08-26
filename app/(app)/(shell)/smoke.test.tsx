@@ -228,6 +228,7 @@ const INBOX_THREAD_MAXIM = {
       time: "11:50",
       deliveryLabel: null,
       attachmentName: null,
+      translation: null,
     },
     {
       id: "msg_dm_maxim_ig_3",
@@ -236,6 +237,7 @@ const INBOX_THREAD_MAXIM = {
       time: "11:52",
       deliveryLabel: null,
       attachmentName: "IMG_2214.jpg",
+      translation: null,
     },
   ],
   draft: null,
@@ -255,6 +257,8 @@ const INBOX_THREAD_ANNA_IG = {
       time: "12:41",
       deliveryLabel: null,
       attachmentName: null,
+      // Перевод уже в кэше: значок должен переключать текст без вызова действия.
+      translation: { text: "Und wie viel kostet der Versand nach Hamburg?", sourceLanguage: "ru" },
     },
   ],
 };
@@ -319,6 +323,11 @@ vi.mock("./inbox/actions", () => ({
 
     return { ok: true, items, total: items.length, hasMore: false };
   },
+  translateMessageAction: async () => ({
+    ok: true,
+    text: "Guten Tag. Die Bestellung ist da, aber eine Tasse hat einen Sprung.",
+    sourceLanguage: "ru",
+  }),
 }));
 
 const POST_LIST_ITEMS = [
@@ -688,6 +697,41 @@ describe("inbox page", () => {
 
     expect(screen.getByText(/чашка со сколом/)).toBeDefined();
     expect(screen.getByText(/IMG_2214\.jpg/)).toBeDefined();
+  });
+
+  it("translates a message in place and switches back to the original", async () => {
+    render(
+      await InboxPage({
+        searchParams: searchParams({ conversation: "cnv_dm_maxim_ig" }),
+      }),
+    );
+
+    fireEvent.click(screen.getAllByRole("button", { name: "Перевести" })[0]!);
+
+    expect(await screen.findByText(/eine Tasse hat einen Sprung/)).toBeDefined();
+    expect(screen.queryByText(/чашка со сколом/)).toBeNull();
+
+    // Кнопка возврата называет язык оригинала, а не просто «назад».
+    fireEvent.click(
+      screen.getByRole("button", { name: "Показать оригинал — Русский" }),
+    );
+
+    expect(await screen.findByText(/чашка со сколом/)).toBeDefined();
+  });
+
+  // Перевод из кэша едет вместе с тредом, чтобы клик не ходил в LLM повторно.
+  it("shows a cached translation without calling the action", async () => {
+    render(
+      await InboxPage({
+        searchParams: searchParams({ conversation: "cnv_dm_anna_ig" }),
+      }),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Перевести" }));
+
+    expect(
+      await screen.findByText(/Versand nach Hamburg/),
+    ).toBeDefined();
   });
 });
 

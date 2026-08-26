@@ -40,6 +40,15 @@ export type {
   PromptLogger,
   PromptLogOptions,
 } from "./prompt";
+export {
+  TRANSLATION_SOURCE_MARKER,
+  buildTranslationPrompt,
+  parseTranslationCompletion,
+} from "./translate-prompt";
+export type {
+  ParsedTranslationCompletion,
+  TranslationPromptInput,
+} from "./translate-prompt";
 export { buildCommentDraftPrompt } from "./comment-prompt";
 export type {
   CommentPromptAiSettings,

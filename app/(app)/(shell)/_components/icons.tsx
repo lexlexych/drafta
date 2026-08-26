@@ -444,3 +444,31 @@ export function StopIcon(props: IconProps) {
     </Icon>
   );
 }
+
+/**
+ * Перевод сообщения. Классический «А→文»: буква латиницы и иероглиф со стрелкой
+ * между ними — узнаётся без подписи и не путается с глобусом (тот в интерфейсах
+ * обычно означает выбор языка, а не действие).
+ */
+export function TranslateIcon(props: IconProps) {
+  return (
+    <Icon size={14} {...stroke} strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <path d="M3 6h7" />
+      <path d="M6.5 6V4.2" />
+      <path d="M8.6 6c0 3.1-2 5.6-5.1 6.6" />
+      <path d="M5 9.4c.9 1.7 2.4 2.7 4.2 3.2" />
+      <path d="m13 20 3.8-9 3.8 9" />
+      <path d="M14.4 16.8h4.8" />
+    </Icon>
+  );
+}
+
+/** Возврат к оригиналу под переведённым сообщением. */
+export function UndoIcon(props: IconProps) {
+  return (
+    <Icon size={14} {...stroke} strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <path d="M9 7 5 11l4 4" />
+      <path d="M5 11h8.5a4.5 4.5 0 0 1 0 9H11" />
+    </Icon>
+  );
+}

@@ -9,10 +9,10 @@ import type { AiUsageOperation, AiUsageSurface } from "@/lib/db/ai-usage";
  * LLM and what came back, byte for byte, next to the token counts for the same
  * call.
  *
- * Written from the Inngest pipelines only, hence the admin client; no other
- * role has a grant on the table. The text stored here is the masked text the
- * provider was given (lib/ai/masking.ts), which is what "the request, 1:1"
- * means — but it is still conversation content, so rows are dropped after
+ * Written from the Inngest pipelines and from the translation action, hence the
+ * admin client; no other role has a grant on the table. The text stored here is
+ * the masked text the provider was given (lib/ai/masking.ts), which is what
+ * "the request, 1:1" means — but it is still conversation content, so rows are dropped after
  * `AI_REQUEST_LOG_RETENTION_DAYS` by the `cleanup-ai-request-log` cron.
  */
 

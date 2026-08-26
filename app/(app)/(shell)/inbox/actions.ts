@@ -23,6 +23,8 @@ import {
   type OutgoingSendResult,
 } from "@/lib/db/outgoing";
 import { createServerSupabaseClient } from "@/lib/db/server";
+import { getWorkspaceLanguage } from "@/lib/db/workspace-language";
+import { translateMessage } from "@/lib/translation/translate-message";
 import {
   getAuthenticatedUser,
   getCurrentWorkspace,
@@ -358,4 +360,41 @@ export async function cancelDraftGenerationAction(conversationId: string) {
 
   revalidateInboxViews();
   return { ok: true as const };
+}
+
+/**
+ * Значок перевода в пузыре сообщения: текст переводится на язык из
+ * «Настройки → Аккаунт» и кэшируется в `message_translations`.
+ *
+ * Единственный вызов LLM, который идёт синхронно в запросе, а не событием
+ * Inngest: пользователь ждёт результат здесь и сейчас со спиннером на месте
+ * значка, и очередь с ретраями сделала бы это ожидание неопределённым. Правило
+ * 8 сюда не распространяется — наружу ничего не отправляется, а вебхуки (правило
+ * 6) это не затрагивает.
+ *
+ * `revalidatePath` намеренно нет: перевод живёт в состоянии клиентского
+ * компонента пузыря, и перерисовывать ради него весь инбокс незачем.
+ */
+export async function translateMessageAction(
+  conversationId: string,
+  messageId: string,
+) {
+  const context = await getDraftActionContext();
+
+  if ("error" in context) {
+    return { ok: false as const, error: context.error };
+  }
+
+  const targetLanguage = await getWorkspaceLanguage(
+    context.supabase,
+    context.workspace.id,
+  );
+
+  return translateMessage(
+    context.supabase,
+    context.workspace.id,
+    conversationId,
+    messageId,
+    targetLanguage,
+  );
 }

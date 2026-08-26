@@ -31,6 +31,7 @@ export const workspaceSeededTables = [
   { column: "workspace_id", name: "kb_files" },
   { column: "workspace_id", name: "reply_templates" },
   { column: "workspace_id", name: "ai_usage" },
+  { column: "workspace_id", name: "message_translations" },
 ] as const;
 
 export const publicClientTables = [
@@ -54,4 +55,5 @@ export const publicClientTables = [
   "ai_settings",
   "ai_usage",
   "ai_request_log",
+  "message_translations",
 ] as const;
