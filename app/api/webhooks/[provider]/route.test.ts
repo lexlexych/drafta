@@ -22,11 +22,11 @@ vi.mock("server-only", () => ({}));
 // depending on network access to a real Inngest endpoint, and (b) prove a
 // rejected emission still lets the webhook answer 200 with the message
 // already persisted — see the "Inngest emission failure" test below.
-const emitInteractionReceivedMock = vi.fn().mockResolvedValue(undefined);
+const emitPushNotifyRequestedMock = vi.fn().mockResolvedValue(undefined);
 const emitContactAvatarSyncRequestedMock = vi.fn().mockResolvedValue(undefined);
 const emitPostThumbnailSyncRequestedMock = vi.fn().mockResolvedValue(undefined);
 vi.mock("@/lib/inngest/events", () => ({
-  emitInteractionReceived: (...args: unknown[]) => emitInteractionReceivedMock(...args),
+  emitPushNotifyRequested: (...args: unknown[]) => emitPushNotifyRequestedMock(...args),
   emitContactAvatarSyncRequested: (...args: unknown[]) =>
     emitContactAvatarSyncRequestedMock(...args),
   emitPostThumbnailSyncRequested: (...args: unknown[]) =>
@@ -124,7 +124,7 @@ describe.skipIf(!hasLocalSupabaseConfig)("POST /api/webhooks/[provider] (zernio)
   });
 
   afterEach(async () => {
-    emitInteractionReceivedMock.mockClear();
+    emitPushNotifyRequestedMock.mockClear();
     emitContactAvatarSyncRequestedMock.mockClear();
 
     // workspaces cascade-delete channel_connections/contacts/contact_identities/
@@ -243,7 +243,7 @@ describe.skipIf(!hasLocalSupabaseConfig)("POST /api/webhooks/[provider] (zernio)
     // into the Inngest payload — see lib/inngest/events.test.ts for the
     // exact-keys check; here we confirm the route wires the *right* IDs
     // through (not e.g. the workspace's other conversation, or nothing).
-    expect(emitInteractionReceivedMock).toHaveBeenCalledWith({
+    expect(emitPushNotifyRequestedMock).toHaveBeenCalledWith({
       messageId: message!.id,
       conversationId: conversation!.id,
       workspaceId,
@@ -324,7 +324,7 @@ describe.skipIf(!hasLocalSupabaseConfig)("POST /api/webhooks/[provider] (zernio)
 
     // Only the first delivery reaches Inngest — the second is a pure
     // idempotency no-op (docs/architecture/07-data-flows.md#61).
-    expect(emitInteractionReceivedMock).toHaveBeenCalledTimes(1);
+    expect(emitPushNotifyRequestedMock).toHaveBeenCalledTimes(1);
   });
 
   it("two messages from the same sender: one contact, one conversation, two messages", async () => {
@@ -392,7 +392,7 @@ describe.skipIf(!hasLocalSupabaseConfig)("POST /api/webhooks/[provider] (zernio)
       .eq("external_id", "msg_invalid_sig");
     expect(messages).toHaveLength(0);
 
-    expect(emitInteractionReceivedMock).not.toHaveBeenCalled();
+    expect(emitPushNotifyRequestedMock).not.toHaveBeenCalled();
   });
 
   it("unknown external account id: 200, webhook_event journaled with an error, no message created", async () => {
@@ -424,7 +424,7 @@ describe.skipIf(!hasLocalSupabaseConfig)("POST /api/webhooks/[provider] (zernio)
       .eq("external_id", "msg_unknown_account");
     expect(messages).toHaveLength(0);
 
-    expect(emitInteractionReceivedMock).not.toHaveBeenCalled();
+    expect(emitPushNotifyRequestedMock).not.toHaveBeenCalled();
   });
 
   it("unknown provider: 404", async () => {
@@ -441,7 +441,7 @@ describe.skipIf(!hasLocalSupabaseConfig)("POST /api/webhooks/[provider] (zernio)
   });
 
   it("Inngest emission failure is fail-safe: the webhook still returns 200 and the message is still persisted", async () => {
-    emitInteractionReceivedMock.mockRejectedValueOnce(new Error("inngest down"));
+    emitPushNotifyRequestedMock.mockRejectedValueOnce(new Error("inngest down"));
 
     const workspaceId = await createTestWorkspace();
     await createTestChannelConnection(workspaceId, {
@@ -449,7 +449,7 @@ describe.skipIf(!hasLocalSupabaseConfig)("POST /api/webhooks/[provider] (zernio)
       externalId: "acct_tg_98213",
     });
 
-    // emitInteractionReceived itself never rejects by contract (see
+    // emitPushNotifyRequested itself never rejects by contract (see
     // lib/inngest/events.ts / events.test.ts) — this mock deliberately
     // bypasses that contract to prove there's a second layer of defense:
     // even a rejecting emitter (lib/webhooks/process-event.ts's own
@@ -502,7 +502,7 @@ describe.skipIf(!hasLocalSupabaseConfig)("POST /api/webhooks/[provider] (zernio)
       .select("id")
       .eq("external_id", "msg_inactive_channel");
     expect(messages).toHaveLength(0);
-    expect(emitInteractionReceivedMock).not.toHaveBeenCalled();
+    expect(emitPushNotifyRequestedMock).not.toHaveBeenCalled();
   });
 
   it(

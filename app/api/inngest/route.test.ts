@@ -5,7 +5,6 @@ vi.mock("server-only", () => ({}));
 const route = await import("./route");
 const {
   generateDraft,
-  regenerateDraft,
   generateCommentDrafts,
   sendMessage,
   sendComment,
@@ -30,10 +29,9 @@ const { SEND_COMMENT_CONCURRENCY } = await import(
 );
 
 describe("Inngest serve route", () => {
-  it("registers generation, regeneration, and send functions", () => {
+  it("registers generation and send functions", () => {
     expect(inngestFunctions).toEqual([
       generateDraft,
-      regenerateDraft,
       generateCommentDrafts,
       sendMessage,
       sendComment,
@@ -46,11 +44,18 @@ describe("Inngest serve route", () => {
     expect(generateDraft.opts.concurrency).toEqual([
       ...DRAFT_PIPELINE_CONCURRENCY,
     ]);
-    expect(regenerateDraft.opts.concurrency).toEqual([
-      ...DRAFT_PIPELINE_CONCURRENCY,
-    ]);
     expect(generateDraft.opts.onFailure).toBeTypeOf("function");
-    expect(regenerateDraft.opts.onFailure).toBeTypeOf("function");
+  });
+
+  it("lets «стоп» cancel a run by conversation", () => {
+    // Без cancelOn кнопка «стоп» только гасила бы строку черновика, а прогон
+    // продолжал бы жечь токены и в конце перезаписал бы поле ввода.
+    expect(generateDraft.opts.cancelOn).toEqual([
+      {
+        event: expect.objectContaining({ name: "draft/generate.cancelled" }),
+        if: "async.data.conversationId == event.data.conversationId",
+      },
+    ]);
   });
 
   it("serves comment drafts as their own function, one run per post", () => {

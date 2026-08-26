@@ -45,9 +45,7 @@ import {
  * заменят реальные запросы lib/db, поменяется только этот слой: форма
  * моделей представления останется прежней". `categories` are filled from
  * `conversations.matched_kb_file_ids` (written by the pipeline when it
- * finalizes a draft) once the caller passes the workspace categories;
- * `debounceNote` stays `null` — the live countdown is `draftDebounceUntil` plus
- * a client component.
+ * finalizes a draft) once the caller passes the workspace categories.
  *
  * Callers pass in an already-loaded `channels: ChannelConnectionRow[]`
  * (from `listChannelConnections`) instead of each function re-fetching it,
@@ -141,12 +139,6 @@ export type InboxThreadMessageView = ThreadMessageView & {
 export type InboxThreadView = Omit<ThreadView, "draft" | "messages"> & {
   draft: ActiveDraftView | null;
   messages: InboxThreadMessageView[];
-  /**
-   * `conversations.draft_debounce_until` — the deadline of the debounce window
-   * a draft run is currently waiting out. The thread renders a countdown and a
-   * «Запустить сейчас» button while it is in the future.
-   */
-  draftDebounceUntil: string | null;
   /**
    * Set when the platform's response window (channel capabilities) has
    * already closed — the composer warns but does not block
@@ -567,7 +559,7 @@ export async function getThreadView(
   const { data: conversation, error: conversationError } = await supabase
     .from("conversations")
     .select(
-      "id, channel_connection_id, contact_id, matched_kb_file_ids, last_incoming_at, draft_debounce_until",
+      "id, channel_connection_id, contact_id, matched_kb_file_ids, last_incoming_at",
     )
     .eq("workspace_id", workspaceId)
     .eq("id", conversationId)
@@ -657,11 +649,6 @@ export async function getThreadView(
       canRetrySend:
         message.direction === "outgoing" && message.delivery_status === "failed",
     })),
-    debounceNote: null,
-    draftDebounceUntil:
-      typeof conversation.draft_debounce_until === "string"
-        ? conversation.draft_debounce_until
-        : null,
     draft,
   };
 }

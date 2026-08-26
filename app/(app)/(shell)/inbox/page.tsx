@@ -14,7 +14,6 @@ import { getAuthenticatedUser, getCurrentWorkspace } from "@/lib/db/workspace";
 import { Avatar } from "../_components/avatar";
 import { ChannelChip } from "../_components/chips";
 import { Composer } from "../_components/composer";
-import { DraftPanel } from "../_components/draft-panel";
 import { BackIcon, ClockIcon, PictureIcon } from "../_components/icons";
 import { QUERY_KEYS, buildHref, firstParam } from "../_components/navigation";
 import { RetrySendButton } from "../_components/retry-send-button";
@@ -156,16 +155,14 @@ export default async function InboxPage({
             </div>
 
             <div className={styles.draftWrap}>
-              <DraftPanel
-                key={`${thread.conversationId}:${thread.draft?.id ?? "none"}:${thread.draft?.updatedAt ?? "none"}`}
-                draft={thread.draft}
-                workspaceId={workspace.id}
-                conversationId={thread.conversationId}
-                debounceUntil={thread.draftDebounceUntil}
-              />
+              {/* Ключ только по диалогу: черновик приезжает в уже смонтированное
+                  поле через Realtime, а ремоунт затёр бы набранный текст. */}
               <Composer
+                key={thread.conversationId}
                 conversationId={thread.conversationId}
-                placeholder="Написать ответ вручную…"
+                workspaceId={workspace.id}
+                draft={thread.draft}
+                placeholder="Написать ответ…"
                 replyWindowWarning={thread.replyWindowWarning}
               />
             </div>

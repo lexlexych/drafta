@@ -150,7 +150,6 @@ vi.mock("@/lib/db/ai-settings", () => ({
     workspace_id: "wsp_tonwerk",
     system_prompt: "Пиши от лица мастерской Tonwerk.",
     comment_system_prompt: "Отвечай на комментарии Tonwerk коротко.",
-    debounce_seconds: 45,
     model: "mistral-large-latest",
     auto_generate_dm: true,
     created_at: "2026-07-22T10:00:00.000Z",
@@ -220,7 +219,6 @@ const INBOX_THREAD_MAXIM = {
       attachmentName: "IMG_2214.jpg",
     },
   ],
-  debounceNote: null,
   draft: null,
 };
 
@@ -636,8 +634,12 @@ describe("inbox page", () => {
       }),
     );
 
+    // Черновика нет, пока его не попросили — над полем только сам композер.
     expect(screen.queryByText("AI-черновик")).toBeNull();
     expect(screen.getByLabelText("Ответ")).toBeDefined();
+    expect(
+      screen.getByRole("button", { name: "Сгенерировать черновик" }),
+    ).toBeDefined();
   });
 
   // Фильтр — состояние списка, а не query-параметр: страница рендерится без
@@ -783,14 +785,13 @@ describe("settings page", () => {
     expect(screen.queryByText("Правила классификации входящих")).toBeNull();
   });
 
-  it("renders the ai section with switches", async () => {
+  it("renders the ai section with both system prompts", async () => {
     render(await SettingsPage({ searchParams: searchParams({ section: "ai" }) }));
 
     expect(screen.getByLabelText("Черновики сообщений")).toBeDefined();
     expect(screen.getByLabelText("Черновики комментариев")).toBeDefined();
-    expect(
-      screen.getByRole("switch", { name: "Авто-генерация для сообщений" }),
-    ).toBeDefined();
+    // Автогенерации больше нет — настраивать её нечем.
+    expect(screen.queryByRole("switch")).toBeNull();
   });
 
   it("renders the real knowledge base section", async () => {

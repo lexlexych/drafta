@@ -189,15 +189,19 @@ export function ActivityIndicator() {
   );
 }
 
-function Spinner() {
+/**
+ * Общий спиннер приложения: глобальный индикатор активности и строка
+ * «Генерация черновика» над полем ответа рисуют один и тот же кружок.
+ */
+export function Spinner({ size = 16 }: { size?: number }) {
   return (
     <svg
       aria-hidden="true"
       className={styles.spinner}
       focusable="false"
-      height="16"
+      height={size}
       viewBox="0 0 24 24"
-      width="16"
+      width={size}
     >
       <circle
         className={styles.spinnerTrack}

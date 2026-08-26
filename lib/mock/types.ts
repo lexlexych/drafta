@@ -203,7 +203,6 @@ export type AiSettings = {
   tone: string;
   language: string;
   signature: string;
-  debounce_seconds: number;
   model: string;
   auto_draft_dm: boolean;
   auto_draft_comments: boolean;

@@ -139,12 +139,11 @@ describe("mock selectors", () => {
     expect(unusedFiltered.items).toHaveLength(0);
   });
 
-  it("builds a dm thread with draft and debounce note", () => {
+  it("builds a dm thread with its draft", () => {
     const thread = getThread("cnv_dm_anna_ig");
 
     expect(thread?.messages).toHaveLength(3);
     expect(thread?.draft?.status).toBe("ready");
-    expect(thread?.debounceNote).toContain("дебаунс");
     expect(thread?.replyWindowLabel).toContain("Окно ответа");
   });
 

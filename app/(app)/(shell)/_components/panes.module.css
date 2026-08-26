@@ -487,33 +487,62 @@
 
 .composer {
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   gap: 8px;
   background: var(--surface);
   border: 1px solid var(--line2);
   border-radius: 12px;
-  padding: 6px 6px 6px 14px;
+  padding: 6px 6px 6px 8px;
 }
 
-.composer input {
+/* Поле растёт по содержимому (высоту ставит сам композер), но не выше половины
+   экрана — дальше текст скроллится внутри. */
+.composer textarea {
   flex: 1;
   border: 0;
   background: none;
   font: inherit;
   font-size: 13.5px;
+  line-height: 1.45;
   color: var(--ink);
   min-width: 0;
+  min-height: 34px;
+  max-height: 50dvh;
+  padding: 8px 0 7px 6px;
+  resize: none;
+  overflow-y: auto;
 }
 
-.composer input:focus {
+.composer textarea:focus {
   outline: none;
 }
 
-.composer input::placeholder {
+.composer textarea:disabled {
   color: var(--ink3);
 }
 
+.composer textarea::placeholder {
+  color: var(--ink3);
+}
+
+/* Значок генерации виден только у пустого поля — см. Composer. */
+.draftButton {
+  flex: none;
+  width: 30px;
+  height: 34px;
+  border-radius: 9px;
+  color: var(--draft-ink);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.draftButton:hover {
+  background: var(--draft-chip);
+}
+
 .sendButton {
+  flex: none;
   width: 34px;
   height: 34px;
   border-radius: 9px;

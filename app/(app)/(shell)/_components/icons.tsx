@@ -426,3 +426,11 @@ export function WarningIcon(props: IconProps) {
     </Icon>
   );
 }
+
+export function StopIcon(props: IconProps) {
+  return (
+    <Icon size={14} fill="currentColor" {...props}>
+      <rect x="6.5" y="6.5" width="11" height="11" rx="2" />
+    </Icon>
+  );
+}

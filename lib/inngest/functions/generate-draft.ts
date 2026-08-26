@@ -1,23 +1,20 @@
-import type {
-  DraftRegenerateRequestedEvent,
-  InteractionReceivedEvent,
-} from "../events";
+import type { DraftGenerateRequestedEvent } from "../events";
 import { inngest } from "../client";
 import {
-  draftRegenerateRequestedEvent,
-  interactionReceivedEvent,
+  draftGenerateCancelledEvent,
+  draftGenerateRequestedEvent,
 } from "../events";
 import {
-  cleanupGeneratingDrafts,
+  failGeneratingDrafts,
   runDraftPipeline,
   type DraftPipelineSteps,
 } from "./draft-pipeline";
 
 /**
- * `scope: "env"` makes the workspace pool shared by normal generation and
- * regeneration. The second key prevents two runs from finalizing the same
- * conversation concurrently while still allowing two different conversations
- * in a workspace to call the LLM.
+ * `scope: "env"` bounds how much of the workspace's LLM budget one operator can
+ * burn by mashing the AI icon. The second key prevents two runs from finalizing
+ * the same conversation concurrently while still allowing two different
+ * conversations in a workspace to call the LLM.
  */
 export const DRAFT_PIPELINE_CONCURRENCY = [
   {
@@ -44,55 +41,37 @@ function isId(value: unknown): value is string {
   return typeof value === "string" && value.length > 0;
 }
 
+/**
+ * The only way a DM draft ever comes into existence
+ * (docs/architecture/07-data-flows.md#62-генерация-черновика): an incoming
+ * message no longer starts anything, the operator presses the AI icon in the
+ * thread composer and `draft/generate.requested` starts this run.
+ *
+ * `cancelOn` backs the «стоп» button. Inngest evaluates cancellation at step
+ * boundaries, so a call to the provider that is already in flight still
+ * finishes — but the run stops before `finalize`, and the action that sent the
+ * event has already discarded the generating draft, which is what the composer
+ * actually watches.
+ */
 export const generateDraft = inngest.createFunction(
   {
     id: "generate-draft",
-    triggers: [interactionReceivedEvent],
+    triggers: [draftGenerateRequestedEvent],
     concurrency: [...DRAFT_PIPELINE_CONCURRENCY],
-    onFailure: async ({ event, step }) => {
-      const original = event.data.event.data as Partial<InteractionReceivedEvent>;
-      if (
-        !isId(original.workspaceId) ||
-        !isId(original.conversationId) ||
-        !isId(original.messageId)
-      ) {
-        return;
-      }
-
-      await step.run("cleanup-generating-drafts", () =>
-        cleanupGeneratingDrafts({
-          workspaceId: original.workspaceId!,
-          conversationId: original.conversationId!,
-          lastMessageId: original.messageId!,
-        }),
-      );
-    },
-  },
-  async ({ event, step, logger }) =>
-    runDraftPipeline(
+    cancelOn: [
       {
-        ...event.data,
-        regenerate: false,
+        event: draftGenerateCancelledEvent,
+        if: "async.data.conversationId == event.data.conversationId",
       },
-      stepAdapter(step),
-      undefined,
-      { info: (message) => logger.info(message) },
-    ),
-);
-
-export const regenerateDraft = inngest.createFunction(
-  {
-    id: "regenerate-draft",
-    triggers: [draftRegenerateRequestedEvent],
-    concurrency: [...DRAFT_PIPELINE_CONCURRENCY],
+    ],
     onFailure: async ({ event, step }) => {
-      const original = event.data.event.data as Partial<DraftRegenerateRequestedEvent>;
+      const original = event.data.event.data as Partial<DraftGenerateRequestedEvent>;
       if (!isId(original.workspaceId) || !isId(original.conversationId)) {
         return;
       }
 
-      await step.run("cleanup-generating-drafts", () =>
-        cleanupGeneratingDrafts({
+      await step.run("fail-generating-drafts", () =>
+        failGeneratingDrafts({
           workspaceId: original.workspaceId!,
           conversationId: original.conversationId!,
         }),
@@ -100,13 +79,7 @@ export const regenerateDraft = inngest.createFunction(
     },
   },
   async ({ event, step, logger }) =>
-    runDraftPipeline(
-      {
-        ...event.data,
-        regenerate: true,
-      },
-      stepAdapter(step),
-      undefined,
-      { info: (message) => logger.info(message) },
-    ),
+    runDraftPipeline(event.data, stepAdapter(step), undefined, {
+      info: (message) => logger.info(message),
+    }),
 );

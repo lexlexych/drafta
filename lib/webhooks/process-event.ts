@@ -11,8 +11,8 @@ import type {
 import { isAvatarStale } from "@/lib/avatars";
 import {
   emitContactAvatarSyncRequested,
-  emitInteractionReceived,
   emitPostThumbnailSyncRequested,
+  emitPushNotifyRequested,
 } from "@/lib/inngest/events";
 
 /**
@@ -22,7 +22,8 @@ import {
  * of three independent paths:
  *
  *   * `message.received` → contact/contact_identity, conversation, message,
- *     `interaction/received` (the DM draft pipeline debounces and generates);
+ *     then the IDs-only `push/notify.requested`. A DM draft is never generated
+ *     on arrival — the operator asks for one from the thread composer;
  *   * `comment.received` → contact/contact_identity, post, comment, then an
  *     IDs-only thumbnail lookup (the worker is a no-op once one is stored).
  *     A comment draft is never generated on arrival;
@@ -270,7 +271,7 @@ async function processIncomingDirectMessage(params: {
     // never allowed to turn a persisted message into a failed webhook. The
     // event payload is IDs-only.
     await Promise.all([
-      emitInteractionReceived({ messageId, conversationId, workspaceId }),
+      emitPushNotifyRequested({ messageId, conversationId, workspaceId }),
       ...(isAvatarStale(avatarFetchedAt)
         ? [
             emitContactAvatarSyncRequested({

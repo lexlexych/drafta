@@ -15,17 +15,17 @@ vi.mock("./client", () => ({
 
 const {
   contactAvatarSyncRequestedEvent,
-  draftRegenerateRequestedEvent,
-  draftRunNowRequestedEvent,
-  emitDraftRegenerateRequested,
-  emitDraftRunNowRequested,
+  draftGenerateCancelledEvent,
+  draftGenerateRequestedEvent,
   emitContactAvatarSyncRequested,
-  emitInteractionReceived,
+  emitDraftGenerateCancelled,
+  emitDraftGenerateRequested,
   emitMessageSendRequested,
   emitPostThumbnailSyncRequested,
-  interactionReceivedEvent,
+  emitPushNotifyRequested,
   messageSendRequestedEvent,
   postThumbnailSyncRequestedEvent,
+  pushNotifyRequestedEvent,
 } = await import("./events");
 
 describe("Inngest event schemas", () => {
@@ -46,13 +46,13 @@ describe("Inngest event schemas", () => {
     });
 
     expect(
-      interactionReceivedEvent.create({
+      pushNotifyRequestedEvent.create({
         messageId: "msg-1",
         conversationId: "conv-1",
         workspaceId: "ws-1",
       }),
     ).toMatchObject({
-      name: "interaction/received",
+      name: "push/notify.requested",
       data: {
         messageId: "msg-1",
         conversationId: "conv-1",
@@ -71,28 +71,28 @@ describe("Inngest event schemas", () => {
     });
 
     expect(
-      draftRegenerateRequestedEvent.create({
+      draftGenerateRequestedEvent.create({
         conversationId: "conv-1",
         workspaceId: "ws-1",
       }),
     ).toMatchObject({
-      name: "draft/regenerate.requested",
+      name: "draft/generate.requested",
       data: { conversationId: "conv-1", workspaceId: "ws-1" },
     });
 
     expect(
-      draftRunNowRequestedEvent.create({
+      draftGenerateCancelledEvent.create({
         conversationId: "conv-1",
         workspaceId: "ws-1",
       }),
     ).toMatchObject({
-      name: "draft/run-now.requested",
+      name: "draft/generate.cancelled",
       data: { conversationId: "conv-1", workspaceId: "ws-1" },
     });
   });
 
   it("rejects content fields at compile time", () => {
-    interactionReceivedEvent.create({
+    pushNotifyRequestedEvent.create({
       messageId: "msg-1",
       conversationId: "conv-1",
       workspaceId: "ws-1",
@@ -100,7 +100,7 @@ describe("Inngest event schemas", () => {
       content: "personal message text",
     });
 
-    draftRegenerateRequestedEvent.create({
+    draftGenerateRequestedEvent.create({
       conversationId: "conv-1",
       workspaceId: "ws-1",
       // @ts-expect-error Rule 7: names must never enter an Inngest payload.
@@ -172,15 +172,15 @@ describe("emitPostThumbnailSyncRequested", () => {
   });
 });
 
-describe("emitInteractionReceived", () => {
+describe("emitPushNotifyRequested", () => {
   beforeEach(() => {
     sendMock.mockReset();
   });
 
-  it("sends interaction/received with exactly messageId, conversationId, workspaceId (rule 7)", async () => {
+  it("sends push/notify.requested with exactly messageId, conversationId, workspaceId (rule 7)", async () => {
     sendMock.mockResolvedValueOnce(undefined);
 
-    await emitInteractionReceived({
+    await emitPushNotifyRequested({
       messageId: "msg-1",
       conversationId: "conv-1",
       workspaceId: "ws-1",
@@ -189,7 +189,7 @@ describe("emitInteractionReceived", () => {
     expect(sendMock).toHaveBeenCalledTimes(1);
     expect(sendMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        name: "interaction/received",
+        name: "push/notify.requested",
         data: { messageId: "msg-1", conversationId: "conv-1", workspaceId: "ws-1" },
       }),
     );
@@ -211,7 +211,7 @@ describe("emitInteractionReceived", () => {
     sendMock.mockRejectedValueOnce(new Error("network unreachable"));
 
     await expect(
-      emitInteractionReceived({
+      emitPushNotifyRequested({
         messageId: "msg-1",
         conversationId: "conv-1",
         workspaceId: "ws-1",
@@ -223,38 +223,19 @@ describe("emitInteractionReceived", () => {
   });
 });
 
-describe("emitDraftRegenerateRequested", () => {
+describe("emitDraftGenerateRequested", () => {
   it("sends exactly the two ID fields", async () => {
     sendMock.mockReset();
     sendMock.mockResolvedValueOnce(undefined);
 
-    await emitDraftRegenerateRequested({
+    await emitDraftGenerateRequested({
       conversationId: "conv-1",
       workspaceId: "ws-1",
     });
 
     const sent = sendMock.mock.calls[0][0];
     expect(sent).toMatchObject({
-      name: "draft/regenerate.requested",
-      data: { conversationId: "conv-1", workspaceId: "ws-1" },
-    });
-    expect(Object.keys(sent.data).sort()).toEqual(["conversationId", "workspaceId"]);
-  });
-});
-
-describe("emitDraftRunNowRequested", () => {
-  it("sends exactly the two ID fields so waitForEvent can match the conversation", async () => {
-    sendMock.mockReset();
-    sendMock.mockResolvedValueOnce(undefined);
-
-    await emitDraftRunNowRequested({
-      conversationId: "conv-1",
-      workspaceId: "ws-1",
-    });
-
-    const sent = sendMock.mock.calls[0][0];
-    expect(sent).toMatchObject({
-      name: "draft/run-now.requested",
+      name: "draft/generate.requested",
       data: { conversationId: "conv-1", workspaceId: "ws-1" },
     });
     expect(Object.keys(sent.data).sort()).toEqual([
@@ -263,16 +244,54 @@ describe("emitDraftRunNowRequested", () => {
     ]);
   });
 
-  it("throws on a send() rejection so the countdown does not keep ticking silently", async () => {
+  it("throws on a send() rejection so the locked composer learns about it", async () => {
     sendMock.mockReset();
     sendMock.mockRejectedValueOnce(new Error("inngest down"));
 
     await expect(
-      emitDraftRunNowRequested({
+      emitDraftGenerateRequested({
         conversationId: "conv-1",
         workspaceId: "ws-1",
       }),
     ).rejects.toThrow("inngest down");
+  });
+});
+
+describe("emitDraftGenerateCancelled", () => {
+  it("sends exactly the two ID fields so cancelOn can match the conversation", async () => {
+    sendMock.mockReset();
+    sendMock.mockResolvedValueOnce(undefined);
+
+    await emitDraftGenerateCancelled({
+      conversationId: "conv-1",
+      workspaceId: "ws-1",
+    });
+
+    const sent = sendMock.mock.calls[0][0];
+    expect(sent).toMatchObject({
+      name: "draft/generate.cancelled",
+      data: { conversationId: "conv-1", workspaceId: "ws-1" },
+    });
+    expect(Object.keys(sent.data).sort()).toEqual([
+      "conversationId",
+      "workspaceId",
+    ]);
+  });
+
+  it("is fail-safe: the caller already discarded the draft", async () => {
+    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    sendMock.mockReset();
+    sendMock.mockRejectedValueOnce(new Error("inngest down"));
+
+    await expect(
+      emitDraftGenerateCancelled({
+        conversationId: "conv-1",
+        workspaceId: "ws-1",
+      }),
+    ).resolves.toBeUndefined();
+
+    expect(consoleErrorSpy).toHaveBeenCalledTimes(1);
+    consoleErrorSpy.mockRestore();
   });
 });
 

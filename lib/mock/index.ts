@@ -126,7 +126,6 @@ export type ThreadView = {
   categories: CategoryBadgeView[];
   replyWindowLabel: string | null;
   messages: ThreadMessageView[];
-  debounceNote: string | null;
   draft: DraftView | null;
 };
 
@@ -614,15 +613,6 @@ export function getThread(conversationId: string): ThreadView | null {
       ? null
       : hoursLeftInReplyWindow(conversation.last_incoming_at, now, windowHours);
 
-  const batchSize =
-    draft && draft.status !== "sent"
-      ? messages.filter(
-          (message) =>
-            message.direction === "in" &&
-            message.created_at >=
-              (byId(data.messages, draft.first_message_id)?.created_at ?? ""),
-        ).length
-      : 0;
 
   return {
     conversationId: conversation.id,
@@ -643,13 +633,6 @@ export function getThread(conversationId: string): ThreadView | null {
       deliveryLabel: DELIVERY_LABELS[message.delivery_status],
       attachmentName: message.attachments[0]?.file_name ?? null,
     })),
-    debounceNote:
-      batchSize > 1
-        ? `Пауза ${data.aiSettings.debounce_seconds} сек — дебаунс: один черновик на пачку из ${countWithNoun(
-            batchSize,
-            ["сообщения", "сообщений", "сообщений"],
-          )}`
-        : null,
     draft: draftView(draft, conversation),
   };
 }

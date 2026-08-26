@@ -156,34 +156,26 @@ insert into public.ai_settings (
   workspace_id,
   system_prompt,
   comment_system_prompt,
-  debounce_seconds,
-  model,
-  auto_generate_dm
+  model
 )
 values
   (
     'a0000000-0000-4000-8000-000000000001',
     'Пиши от лица Demo A. Отражай тон клиента и не выдумывай фактов.',
     'Отвечай на комментарии Demo A коротко и дружелюбно.',
-    45,
-    'mistral-large-latest',
-    true
+    'mistral-large-latest'
   ),
   (
     'b0000000-0000-4000-8000-000000000001',
     'Пиши от лица Demo B. Держи деловой стиль и не выдумывай фактов.',
     'Отвечай на комментарии Demo B коротко и в деловом стиле.',
-    60,
-    'mistral-large-latest',
-    true
+    'mistral-large-latest'
   )
 on conflict (workspace_id) do update
 set
   system_prompt = excluded.system_prompt,
   comment_system_prompt = excluded.comment_system_prompt,
-  debounce_seconds = excluded.debounce_seconds,
   model = excluded.model,
-  auto_generate_dm = excluded.auto_generate_dm,
   updated_at = now();
 
 insert into public.channel_connections (

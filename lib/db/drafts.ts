@@ -28,10 +28,6 @@ const DRAFT_COLUMNS =
 
 type KbFileRow = { id: string; name: string };
 
-export type DraftMutationResult =
-  | { ok: true; draft: ActiveDraftView }
-  | { ok: false; error: string };
-
 function isActiveDraftStatus(status: string): status is ActiveDraftStatus {
   return ACTIVE_DRAFT_STATUSES.includes(status as ActiveDraftStatus);
 }
@@ -44,8 +40,9 @@ async function mapDraftRow(
     throw new Error(`Cannot map inactive draft status: ${row.status}`);
   }
 
-  // Панель показывает не всё, что ушло в промпт, а категории, в которых
-  // модель нашла ответ, — это и есть «источник» черновика для оператора.
+  // Строка-заметка над полем ввода показывает не всё, что ушло в промпт, а
+  // категории, в которых модель нашла ответ, — это и есть «источник» черновика
+  // для оператора.
   const kbFileIds = row.matched_kb_file_ids ?? [];
   let kbFileNames: string[] = [];
 
@@ -85,7 +82,13 @@ async function mapDraftRow(
   };
 }
 
-/** Latest generating/ready/edited draft; terminal drafts never reach the panel. */
+/**
+ * Latest generating/ready/edited draft; terminal drafts never reach the thread.
+ *
+ * This is what puts a draft the operator never sent back into the composer
+ * after a reload or a trip to another conversation — the composer's own state
+ * is client-side and does not survive either.
+ */
 export async function getActiveConversationDraft(
   supabase: SupabaseClient,
   workspaceId: string,
@@ -107,45 +110,6 @@ export async function getActiveConversationDraft(
   }
 
   return data ? mapDraftRow(supabase, data as DraftRow) : null;
-}
-
-export async function editConversationDraft(
-  supabase: SupabaseClient,
-  workspaceId: string,
-  conversationId: string,
-  draftId: string,
-  text: string,
-): Promise<DraftMutationResult> {
-  const normalizedText = text.trim();
-
-  if (!normalizedText) {
-    return { ok: false, error: "Текст черновика не может быть пустым." };
-  }
-
-  const { data, error } = await supabase
-    .from("drafts")
-    .update({
-      text: normalizedText,
-      status: "edited",
-      updated_at: new Date().toISOString(),
-    })
-    .eq("workspace_id", workspaceId)
-    .eq("conversation_id", conversationId)
-    .eq("id", draftId)
-    .in("status", ["ready", "edited"])
-    .select(DRAFT_COLUMNS)
-    .maybeSingle();
-
-  if (error) {
-    console.error("[drafts] failed to edit conversation draft", error);
-    return { ok: false, error: "Не удалось сохранить черновик." };
-  }
-
-  if (!data) {
-    return { ok: false, error: "Черновик уже изменился — обновите тред." };
-  }
-
-  return { ok: true, draft: await mapDraftRow(supabase, data as DraftRow) };
 }
 
 export async function discardConversationDraft(
@@ -174,23 +138,81 @@ export async function discardConversationDraft(
     : { ok: false, error: "Черновик уже изменился — обновите тред." };
 }
 
-/** RLS-scoped ownership check before emitting an asynchronous regeneration. */
-export async function canRegenerateConversationDraft(
+/**
+ * «Стоп» during generation: whatever this conversation is currently generating
+ * stops being the operator's problem.
+ *
+ * Deliberately not keyed by draft id — the composer knows a run is in flight
+ * before it ever sees the row (it locks optimistically on click), so the id may
+ * not be on the client yet. Being an UPDATE, it also reaches every other open
+ * tab through the `drafts` realtime subscription, which a DELETE could not.
+ */
+export async function discardGeneratingConversationDraft(
   supabase: SupabaseClient,
   workspaceId: string,
   conversationId: string,
-): Promise<boolean> {
-  const { data, error } = await supabase
-    .from("conversations")
-    .select("id")
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const { error } = await supabase
+    .from("drafts")
+    .update({ status: "discarded", updated_at: new Date().toISOString() })
     .eq("workspace_id", workspaceId)
-    .eq("id", conversationId)
-    .maybeSingle();
+    .eq("conversation_id", conversationId)
+    .eq("status", "generating");
 
   if (error) {
-    console.error("[drafts] failed to validate regeneration conversation", error);
-    return false;
+    console.error("[drafts] failed to discard a generating draft", error);
+    return { ok: false, error: "Не удалось остановить генерацию." };
   }
 
-  return Boolean(data);
+  return { ok: true };
+}
+
+/**
+ * RLS-scoped precondition for asking the pipeline to generate: the conversation
+ * has to be ours, and it has to contain something to answer.
+ *
+ * The incoming-message check is here rather than only in the pipeline because
+ * the composer locks its field the moment the icon is pressed — a run that
+ * would end in `skipped` has to be refused loudly, before the event is emitted.
+ */
+export async function canGenerateConversationDraft(
+  supabase: SupabaseClient,
+  workspaceId: string,
+  conversationId: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const [{ data: conversation, error: conversationError }, { data: incoming, error: incomingError }] =
+    await Promise.all([
+      supabase
+        .from("conversations")
+        .select("id")
+        .eq("workspace_id", workspaceId)
+        .eq("id", conversationId)
+        .maybeSingle(),
+      supabase
+        .from("messages")
+        .select("id")
+        .eq("workspace_id", workspaceId)
+        .eq("conversation_id", conversationId)
+        .eq("direction", "incoming")
+        .limit(1)
+        .maybeSingle(),
+    ]);
+
+  if (conversationError || incomingError) {
+    console.error(
+      "[drafts] failed to validate a generation request",
+      conversationError ?? incomingError,
+    );
+    return { ok: false, error: "Не удалось запустить генерацию." };
+  }
+
+  if (!conversation) {
+    return { ok: false, error: "Диалог не найден." };
+  }
+
+  if (!incoming) {
+    return { ok: false, error: "Нет входящих сообщений для ответа." };
+  }
+
+  return { ok: true };
 }

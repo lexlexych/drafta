@@ -12,12 +12,11 @@ import {
 } from "@/lib/db/inbox";
 import type { ConversationListItemView } from "@/lib/mock";
 import {
-  canRegenerateConversationDraft,
+  canGenerateConversationDraft,
   discardConversationDraft,
-  editConversationDraft,
+  discardGeneratingConversationDraft,
 } from "@/lib/db/drafts";
 import {
-  acceptDraftForSend,
   createManualOutgoingMessage,
   markOutgoingMessageFailedAfterEmit,
   retryFailedOutgoingMessage,
@@ -30,8 +29,8 @@ import {
   type CurrentWorkspace,
 } from "@/lib/db/workspace";
 import {
-  emitDraftRegenerateRequested,
-  emitDraftRunNowRequested,
+  emitDraftGenerateCancelled,
+  emitDraftGenerateRequested,
   emitMessageSendRequested,
 } from "@/lib/inngest/events";
 
@@ -172,32 +171,6 @@ async function getDraftActionContext(): Promise<DraftActionContext> {
   } as const;
 }
 
-export async function editDraftAction(
-  conversationId: string,
-  draftId: string,
-  text: string,
-) {
-  const context = await getDraftActionContext();
-
-  if ("error" in context) {
-    return { ok: false as const, error: context.error };
-  }
-
-  const result = await editConversationDraft(
-    context.supabase,
-    context.workspace.id,
-    conversationId,
-    draftId,
-    text,
-  );
-
-  if (result.ok) {
-    revalidateInboxViews();
-  }
-
-  return result;
-}
-
 export async function discardDraftAction(
   conversationId: string,
   draftId: string,
@@ -260,35 +233,17 @@ async function requestMessageSend(
   return { ok: true, messageId };
 }
 
-/** «Принять и отправить» in the draft panel. */
-export async function sendDraftAction(
-  conversationId: string,
-  draftId: string,
-): Promise<OutgoingSendResult> {
-  const context = await getDraftActionContext();
-
-  if ("error" in context) {
-    return { ok: false, error: context.error };
-  }
-
-  const accepted = await acceptDraftForSend(
-    context.supabase,
-    context.workspace.id,
-    conversationId,
-    draftId,
-  );
-
-  if (!accepted.ok) {
-    return accepted;
-  }
-
-  return requestMessageSend(context, conversationId, accepted.messageId);
-}
-
-/** Manual reply from the thread composer. */
+/**
+ * Reply from the thread composer — the single send path.
+ *
+ * `draftId` is passed when the field still holds the text of a generated
+ * draft, edited or not; the draft is then closed as `sent` rather than
+ * superseded (see `createManualOutgoingMessage`).
+ */
 export async function sendManualMessageAction(
   conversationId: string,
   text: string,
+  draftId: string | null = null,
 ): Promise<OutgoingSendResult> {
   const context = await getDraftActionContext();
 
@@ -301,6 +256,7 @@ export async function sendManualMessageAction(
     context.workspace.id,
     conversationId,
     text,
+    draftId,
   );
 
   if (!created.ok) {
@@ -335,78 +291,71 @@ export async function retrySendMessageAction(
   return requestMessageSend(context, conversationId, messageId);
 }
 
-export async function regenerateDraftAction(conversationId: string) {
+
+/**
+ * Значок AI в композере — единственный способ создать черновик к диалогу
+ * (docs/architecture/07-data-flows.md#62-генерация-черновика). Работа идёт в
+ * Inngest-функции `generate-draft` с ретраями (правило 8); сюда возвращается
+ * только «запустили», а сам черновик приезжает в поле ввода через Realtime.
+ */
+export async function generateDraftAction(conversationId: string) {
   const context = await getDraftActionContext();
 
   if ("error" in context) {
     return { ok: false as const, error: context.error };
   }
 
-  if (
-    !(await canRegenerateConversationDraft(
-      context.supabase,
-      context.workspace.id,
-      conversationId,
-    ))
-  ) {
-    return { ok: false as const, error: "Диалог не найден." };
+  const allowed = await canGenerateConversationDraft(
+    context.supabase,
+    context.workspace.id,
+    conversationId,
+  );
+
+  if (!allowed.ok) {
+    return allowed;
   }
 
   try {
-    await emitDraftRegenerateRequested({
+    await emitDraftGenerateRequested({
       conversationId,
       workspaceId: context.workspace.id,
     });
     return { ok: true as const };
   } catch (error) {
-    console.error("[drafts] failed to request regeneration", error);
-    return { ok: false as const, error: "Не удалось запустить генерацию заново." };
+    console.error("[drafts] failed to request generation", error);
+    return { ok: false as const, error: "Не удалось запустить генерацию." };
   }
 }
 
 /**
- * «Запустить сейчас» под таймером дебаунса: заканчивает окно ожидания, не
- * дожидаясь таймаута. Событие ловит `waitForEvent` уже запущенного прогона —
- * второй прогон не стартует, поэтому логика supersede не меняется.
+ * Кнопка «стоп» под спиннером генерации.
+ *
+ * Черновик гасится здесь и сейчас — именно это разблокирует поле ввода во всех
+ * открытых вкладках. Отмена самого прогона Inngest идёт следом и только
+ * экономит остаток работы, поэтому её неудача не превращается в ошибку.
  */
-export async function runDraftNowAction(conversationId: string) {
+export async function cancelDraftGenerationAction(conversationId: string) {
   const context = await getDraftActionContext();
 
   if ("error" in context) {
     return { ok: false as const, error: context.error };
   }
 
-  if (
-    !(await canRegenerateConversationDraft(
-      context.supabase,
-      context.workspace.id,
-      conversationId,
-    ))
-  ) {
-    return { ok: false as const, error: "Диалог не найден." };
+  const discarded = await discardGeneratingConversationDraft(
+    context.supabase,
+    context.workspace.id,
+    conversationId,
+  );
+
+  if (!discarded.ok) {
+    return discarded;
   }
 
-  try {
-    await emitDraftRunNowRequested({
-      conversationId,
-      workspaceId: context.workspace.id,
-    });
-  } catch (error) {
-    console.error("[drafts] failed to request an immediate draft run", error);
-    return { ok: false as const, error: "Не удалось запустить генерацию." };
-  }
+  await emitDraftGenerateCancelled({
+    conversationId,
+    workspaceId: context.workspace.id,
+  });
 
-  // Гасим счётчик сразу, не дожидаясь, пока это сделает сам пайплайн: кнопку
-  // уже нажали, и таймер, который ещё тикает, читается как «не сработало».
-  const { error } = await context.supabase
-    .from("conversations")
-    .update({ draft_debounce_until: null })
-    .eq("workspace_id", context.workspace.id)
-    .eq("id", conversationId);
-
-  if (error) {
-    console.error("[drafts] failed to clear the debounce deadline", error);
-  }
-
+  revalidateInboxViews();
   return { ok: true as const };
 }

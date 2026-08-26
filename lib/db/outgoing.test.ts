@@ -3,7 +3,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("server-only", () => ({}));
 
 const {
-  acceptDraftForSend,
   createManualOutgoingMessage,
   markOutgoingMessageFailedAfterEmit,
   retryFailedOutgoingMessage,
@@ -46,50 +45,6 @@ beforeEach(() => {
   vi.clearAllMocks();
 });
 
-describe("acceptDraftForSend", () => {
-  it("calls the transactional RPC with a null reply_text (draft text wins server-side)", async () => {
-    const { client } = queryClient({ data: "message-9", error: null });
-
-    const result = await acceptDraftForSend(
-      client,
-      "workspace-1",
-      "conversation-1",
-      "draft-1",
-    );
-
-    expect(result).toEqual({ ok: true, messageId: "message-9" });
-    expect(client.rpc).toHaveBeenCalledWith("accept_reply_for_send", {
-      target_workspace_id: "workspace-1",
-      target_conversation_id: "conversation-1",
-      reply_text: null,
-      target_draft_id: "draft-1",
-    });
-  });
-
-  it("maps a null RPC result to the stale-draft conflict error", async () => {
-    const { client } = queryClient({ data: null, error: null });
-
-    await expect(
-      acceptDraftForSend(client, "workspace-1", "conversation-1", "draft-1"),
-    ).resolves.toEqual({
-      ok: false,
-      error: "Черновик уже изменился — обновите тред.",
-    });
-  });
-
-  it("maps an RPC failure to a generic error", async () => {
-    const consoleErrorSpy = vi
-      .spyOn(console, "error")
-      .mockImplementation(() => {});
-    const { client } = queryClient({ data: null, error: { code: "P0001" } });
-
-    await expect(
-      acceptDraftForSend(client, "workspace-1", "conversation-1", "draft-1"),
-    ).resolves.toEqual({ ok: false, error: "Не удалось подготовить отправку." });
-    consoleErrorSpy.mockRestore();
-  });
-});
-
 describe("createManualOutgoingMessage", () => {
   it("rejects blank text without touching the database", async () => {
     const { client } = queryClient({ data: null, error: null });
@@ -122,12 +77,46 @@ describe("createManualOutgoingMessage", () => {
     });
   });
 
+  it("passes the source draft id so the RPC closes that draft as sent", async () => {
+    const { client } = queryClient({ data: "message-4", error: null });
+
+    const result = await createManualOutgoingMessage(
+      client,
+      "workspace-1",
+      "conversation-1",
+      "Отредактированный черновик",
+      "draft-1",
+    );
+
+    // Текст всё равно наш: RPC больше не подменяет его текстом черновика,
+    // иначе правки оператора терялись бы при отправке.
+    expect(result).toEqual({ ok: true, messageId: "message-4" });
+    expect(client.rpc).toHaveBeenCalledWith("accept_reply_for_send", {
+      target_workspace_id: "workspace-1",
+      target_conversation_id: "conversation-1",
+      reply_text: "Отредактированный черновик",
+      target_draft_id: "draft-1",
+    });
+  });
+
   it("maps a null RPC result to a conversation-not-found error", async () => {
     const { client } = queryClient({ data: null, error: null });
 
     await expect(
       createManualOutgoingMessage(client, "workspace-1", "conversation-1", "hi"),
     ).resolves.toEqual({ ok: false, error: "Диалог не найден." });
+  });
+
+  it("maps an RPC failure to a generic error", async () => {
+    const consoleErrorSpy = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => {});
+    const { client } = queryClient({ data: null, error: { code: "P0001" } });
+
+    await expect(
+      createManualOutgoingMessage(client, "workspace-1", "conversation-1", "hi"),
+    ).resolves.toEqual({ ok: false, error: "Не удалось подготовить отправку." });
+    consoleErrorSpy.mockRestore();
   });
 });
 

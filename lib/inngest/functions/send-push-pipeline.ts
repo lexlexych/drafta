@@ -150,19 +150,20 @@ async function loadContext(
 
 /**
  * Push copy (docs/architecture/11-realtime-pwa.md#частота-уведомлений):
- * «Новое сообщение от {имя} ({канал}) — черновик готов». Only names, channel
- * label and a deep-link — no message text.
+ * «{имя} ({канал}) — Новое сообщение». Only names, channel label and a
+ * deep-link — no message text.
  *
- * Instant pushes are a direct-message thing: they announce a ready draft, and a
- * comment draft only ever exists because the user asked for it while looking at
- * the post.
+ * It announces the arrival itself, not a draft: drafts are generated on request
+ * from the thread composer, so there is nothing ready to announce when the
+ * message lands. Instant pushes stay a direct-message thing — a comment draft
+ * only ever exists because the user asked for it while looking at the post.
  */
 export function buildInstantPayload(
   context: LoadedPushContext,
 ): WebPushPayload {
   return {
     title: `${context.senderName} (${context.channelName})`,
-    body: "Новое сообщение — черновик готов",
+    body: "Новое сообщение",
     // Deep-link uses the `conversation` query key (see (shell)/_components/navigation.ts).
     url: `/inbox?conversation=${context.conversationId}`,
     tag: `conversation:${context.conversationId}`,

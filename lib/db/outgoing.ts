@@ -43,32 +43,22 @@ async function callAcceptReplyForSend(
 }
 
 /**
- * Accepts a ready/edited draft: draft → `sent`, other active drafts →
- * `superseded`, outgoing message inserted as `pending` — one transaction.
- * The outgoing text is the draft's own text, read inside the RPC.
- */
-export async function acceptDraftForSend(
-  supabase: SupabaseClient,
-  workspaceId: string,
-  conversationId: string,
-  draftId: string,
-): Promise<OutgoingSendResult> {
-  return callAcceptReplyForSend(
-    supabase,
-    { workspaceId, conversationId, replyText: null, draftId },
-    "Черновик уже изменился — обновите тред.",
-  );
-}
-
-/**
- * Manual composer send: same transactional RPC with no draft — any active
- * draft is superseded (a manual reply answers the batch the draft targeted).
+ * Composer send — the only send path there is, whether the text was typed from
+ * scratch or generated and then edited in place.
+ *
+ * `draftId` is the draft the field's text came from, when it came from one: the
+ * RPC then marks that draft `sent` in the same transaction instead of letting
+ * it be superseded, so «оператор воспользовался черновиком» stays visible in
+ * the data. The text still comes from the composer, edits included. Any other
+ * active draft is superseded either way — a reply answers the batch they all
+ * targeted.
  */
 export async function createManualOutgoingMessage(
   supabase: SupabaseClient,
   workspaceId: string,
   conversationId: string,
   text: string,
+  draftId: string | null = null,
 ): Promise<OutgoingSendResult> {
   const normalizedText = text.trim();
 
@@ -78,7 +68,7 @@ export async function createManualOutgoingMessage(
 
   return callAcceptReplyForSend(
     supabase,
-    { workspaceId, conversationId, replyText: normalizedText, draftId: null },
+    { workspaceId, conversationId, replyText: normalizedText, draftId },
     "Диалог не найден.",
   );
 }

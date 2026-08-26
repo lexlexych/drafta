@@ -57,7 +57,7 @@ function asActiveDraft(
   };
 }
 
-/** Pure state transition used by the live panel and its contract tests. */
+/** Pure state transition used by the thread composer and its contract tests. */
 export function reduceActiveDraft(
   current: ActiveDraftView | null,
   event: DraftRealtimeEvent,
@@ -76,7 +76,8 @@ export function reduceActiveDraft(
   if (
     row.status === "discarded" ||
     row.status === "superseded" ||
-    row.status === "sent"
+    row.status === "sent" ||
+    row.status === "failed"
   ) {
     return current?.id === row.id ? null : current;
   }

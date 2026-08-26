@@ -1020,7 +1020,6 @@ export const mockWorkspaceData: MockWorkspaceData = {
     tone: "Дружелюбный, на «вы»",
     language: "Как у клиента",
     signature: "— Команда Tonwerk",
-    debounce_seconds: 60,
     model: "Mistral Large (EU)",
     auto_draft_dm: true,
     auto_draft_comments: true,

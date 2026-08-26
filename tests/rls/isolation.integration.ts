@@ -270,8 +270,6 @@ describe("workspace RLS isolation", () => {
       .from("ai_settings")
       .update({
         system_prompt: "hijacked",
-        debounce_seconds: 0,
-        auto_generate_dm: false,
       })
       .eq("workspace_id", rlsSeedFixtures.ownerB.workspaceId)
       .select("workspace_id");
@@ -287,7 +285,7 @@ describe("workspace RLS isolation", () => {
 
     const stillIntact = await ownerBClient
       .from("ai_settings")
-      .select("system_prompt, debounce_seconds, auto_generate_dm")
+      .select("system_prompt")
       .eq("workspace_id", rlsSeedFixtures.ownerB.workspaceId)
       .single();
 
@@ -295,8 +293,6 @@ describe("workspace RLS isolation", () => {
     expect(stillIntact.data).toMatchObject({
       system_prompt:
         "Пиши от лица Demo B. Держи деловой стиль и не выдумывай фактов.",
-      debounce_seconds: 60,
-      auto_generate_dm: true,
     });
   });
 
