@@ -20,7 +20,9 @@ import {
   listKnowledgeFiles,
   type KnowledgeFileRow,
 } from "@/lib/db/knowledge-base";
+import { getWorkspaceLanguage } from "@/lib/db/workspace-language";
 import { createServerSupabaseClient } from "@/lib/db/server";
+import type { WorkspaceLanguage } from "@/lib/i18n/languages";
 import {
   getAuthenticatedUser,
   getCurrentWorkspace,
@@ -83,6 +85,8 @@ type AccountSectionData = {
   userRole: string;
   workspaces: AccountWorkspaceOption[];
   currentWorkspaceId: string;
+  language: WorkspaceLanguage;
+  canManageLanguage: boolean;
 };
 
 type AiSectionData = {
@@ -169,8 +173,9 @@ async function loadNotificationsSectionData(): Promise<NotificationSettingsView 
 }
 
 /**
- * Раздел «Аккаунт» (мобайл): те же данные, что уходят в меню пользователя
- * левого меню — список workspace'ов пользователя и текущий workspace.
+ * Раздел «Аккаунт»: те же данные, что уходят в меню пользователя левого меню
+ * (список workspace'ов пользователя и текущий workspace), плюс язык
+ * приложения из `workspaces.settings.lang`.
  */
 async function loadAccountSectionData(): Promise<AccountSectionData | null> {
   const user = await getAuthenticatedUser();
@@ -186,6 +191,7 @@ async function loadAccountSectionData(): Promise<AccountSectionData | null> {
   }
 
   const workspaces = await listUserWorkspaces(user.id);
+  const supabase = await createServerSupabaseClient();
 
   return {
     userName: user.email?.split("@")[0] ?? "Пользователь",
@@ -195,6 +201,9 @@ async function loadAccountSectionData(): Promise<AccountSectionData | null> {
       name: entry.name,
     })),
     currentWorkspaceId: workspace.id,
+    language: await getWorkspaceLanguage(supabase, workspace.id),
+    // Политика `workspaces_update_owner`: settings меняет только владелец.
+    canManageLanguage: workspace.role === "owner",
   };
 }
 
@@ -277,7 +286,6 @@ export default async function SettingsPage({
                 key={entry.id}
                 className={setStyles.sectionRow}
                 data-active={entry.id === sectionId}
-                data-mobile-only={entry.mobileOnly === true}
                 href={buildHref(PATHNAME, { [QUERY_KEYS.section]: entry.id })}
               >
                 <span className={setStyles.sectionIcon}>
@@ -381,6 +389,8 @@ function AccountSection({ data }: { data: AccountSectionData | null }) {
       userRole={data.userRole}
       workspaces={data.workspaces}
       currentWorkspaceId={data.currentWorkspaceId}
+      language={data.language}
+      canManageLanguage={data.canManageLanguage}
     />
   );
 }

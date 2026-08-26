@@ -215,12 +215,6 @@ export type SettingsSectionView = {
   id: SettingsSectionId;
   title: string;
   description: string;
-  /**
-   * Раздел нужен только на мобайле: на десктопе то же самое лежит в меню
-   * пользователя в подвале левого меню (`_components/user-menu.tsx`), которого
-   * на узком экране нет.
-   */
-  mobileOnly?: boolean;
 };
 
 export type SettingsChannelRowView = {
@@ -923,8 +917,7 @@ export const SETTINGS_SECTIONS: SettingsSectionView[] = [
   {
     id: "account",
     title: "Аккаунт",
-    description: "Рабочие пространства и выход",
-    mobileOnly: true,
+    description: "Язык, рабочие пространства и выход",
   },
 ];
 
