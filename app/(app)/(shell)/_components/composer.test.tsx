@@ -197,6 +197,43 @@ describe("Composer", () => {
     );
   });
 
+  it("leaves no note behind after «удалить» a generated draft", async () => {
+    vi.mocked(generateDraftAction).mockResolvedValue({ ok: true });
+    vi.mocked(discardDraftAction).mockResolvedValue({ ok: true });
+    renderComposer();
+
+    fireEvent.click(generateButton()!);
+    await waitFor(() => expect(field().disabled).toBe(true));
+    emitDraftRow({
+      id: "draft-1",
+      status: "ready",
+      text: "Здравствуйте! Доставим завтра.",
+      created_at: "2026-08-26T10:00:00.000Z",
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Удалить черновик" }));
+
+    // Регрессия: погашенный черновик снова показывался «генерацией», потому что
+    // оптимистичная блокировка не снималась приходом готового результата.
+    expect(screen.queryByText("Генерация черновика…")).toBeNull();
+    expect(screen.queryByText("AI-черновик")).toBeNull();
+    expect(field().disabled).toBe(false);
+    expect(field().value).toBe("");
+  });
+
+  it("shows the refusal and its reason on one strip, without a discard button", () => {
+    renderComposer(
+      draft({ text: "", manualReviewReason: "В базе знаний нет срока." }),
+    );
+
+    expect(screen.getByText("Требуется ручная обработка")).toBeDefined();
+    expect(screen.getByText("В базе знаний нет срока.")).toBeDefined();
+    expect(
+      screen.getByRole("button", { name: "Сгенерировать заново" }),
+    ).toBeDefined();
+    expect(screen.queryByRole("button", { name: "Удалить черновик" })).toBeNull();
+  });
+
   it("stops a running generation on «стоп»", async () => {
     vi.mocked(generateDraftAction).mockResolvedValue({ ok: true });
     vi.mocked(cancelDraftGenerationAction).mockResolvedValue({ ok: true });

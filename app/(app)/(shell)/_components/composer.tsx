@@ -163,6 +163,12 @@ export function Composer({
       // Прогон исчерпал ретраи — `onFailure` пометил строку `failed`.
       if (row.status === "failed") {
         showToast("Не удалось сгенерировать черновик — попробуйте ещё раз.");
+      }
+
+      // Любая строка, кроме `generating`, означает, что запрошенного прогона
+      // больше нет. Не сбросить флаг здесь — и погашенный черновик снова
+      // покажется «генерацией»: `isRequesting` живёт до появления результата.
+      if (row.status !== "generating") {
         setIsRequesting(false);
       }
 
@@ -226,6 +232,7 @@ export function Composer({
     }
 
     clearField();
+    setIsRequesting(false);
     if (activeDraft) {
       setDismissedDraftId(activeDraft.id);
     }
@@ -271,6 +278,7 @@ export function Composer({
   const discard = async () => {
     const discarded = activeDraft;
     clearField();
+    setIsRequesting(false);
 
     if (!discarded) {
       return;
@@ -352,8 +360,11 @@ export function Composer({
 }
 
 /**
- * Строка над полем ответа. `draft === null` означает «идёт генерация»: у бегущего
- * прогона ещё нет ни модели, ни категорий, зато есть кнопка «стоп».
+ * Строка над полем ответа — по умолчанию ровно одна строка; переносится только
+ * то, что не поместилось (длинная причина отказа, много категорий).
+ *
+ * `draft === null` означает «идёт генерация»: у бегущего прогона ещё нет ни
+ * категорий, ни текста, зато есть кнопка «стоп».
  */
 function DraftNote({
   draft,
@@ -368,25 +379,50 @@ function DraftNote({
 }) {
   return (
     <section className={draftStyles.note} aria-live="polite">
-      <div className={draftStyles.noteRow}>
-        {draft ? (
+      <div className={draftStyles.noteBody}>
+        {!draft ? (
+          <>
+            <Spinner size={14} />
+            <span className={draftStyles.noteLabel}>Генерация черновика…</span>
+          </>
+        ) : draft.manualReviewReason ? (
+          // Модель отказалась выдумывать недостающие факты — текста нет,
+          // отправлять нечего, поэтому и «удалить» тут не над чем.
+          <>
+            <span className={draftStyles.noteWarning}>
+              <WarningIcon /> Требуется ручная обработка
+            </span>
+            <span className={draftStyles.noteReason}>
+              {draft.manualReviewReason}
+            </span>
+          </>
+        ) : (
           <>
             <span className={draftStyles.aiLabel}>
               <SparkIcon /> AI-черновик
             </span>
-            {draft.model ? (
-              <span className={draftStyles.caption}>{draft.model}</span>
-            ) : null}
-            <div className={draftStyles.noteActions}>
-              <button
-                type="button"
-                className={draftStyles.noteButton}
-                aria-label="Сгенерировать заново"
-                title="Сгенерировать заново"
-                onClick={onRegenerate}
-              >
-                <RegenerateIcon />
-              </button>
+            {draft.kbFileNames.map((fileName) => (
+              <span key={fileName} className={draftStyles.kbFile}>
+                {fileName}
+              </span>
+            ))}
+          </>
+        )}
+      </div>
+
+      <div className={draftStyles.noteActions}>
+        {draft ? (
+          <>
+            <button
+              type="button"
+              className={draftStyles.noteButton}
+              aria-label="Сгенерировать заново"
+              title="Сгенерировать заново"
+              onClick={onRegenerate}
+            >
+              <RegenerateIcon />
+            </button>
+            {draft.manualReviewReason ? null : (
               <button
                 type="button"
                 className={draftStyles.noteButton}
@@ -396,51 +432,20 @@ function DraftNote({
               >
                 <TrashIcon />
               </button>
-            </div>
+            )}
           </>
         ) : (
-          <>
-            <Spinner size={14} />
-            <span className={draftStyles.noteLabel}>Генерация черновика…</span>
-            <div className={draftStyles.noteActions}>
-              <button
-                type="button"
-                className={draftStyles.noteButton}
-                aria-label="Остановить генерацию"
-                title="Остановить генерацию"
-                onClick={onCancel}
-              >
-                <StopIcon />
-              </button>
-            </div>
-          </>
+          <button
+            type="button"
+            className={draftStyles.noteButton}
+            aria-label="Остановить генерацию"
+            title="Остановить генерацию"
+            onClick={onCancel}
+          >
+            <StopIcon />
+          </button>
         )}
       </div>
-
-      {draft && draft.kbFileNames.length > 0 ? (
-        <div className={draftStyles.kb}>
-          Категории:
-          {draft.kbFileNames.map((fileName) => (
-            <span key={fileName} className={draftStyles.kbFile}>
-              {fileName}
-            </span>
-          ))}
-        </div>
-      ) : null}
-
-      {draft?.manualReviewReason ? (
-        <div className={draftStyles.manualReview} role="note">
-          <span className={draftStyles.manualReviewIcon} aria-hidden="true">
-            <WarningIcon />
-          </span>
-          <span>
-            <b>Требуется ручная обработка</b>
-            <span className={draftStyles.manualReviewReason}>
-              {draft.manualReviewReason}
-            </span>
-          </span>
-        </div>
-      ) : null}
     </section>
   );
 }
