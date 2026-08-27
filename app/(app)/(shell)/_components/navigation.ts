@@ -1,7 +1,7 @@
 /** Маршруты защищённой зоны и сборка ссылок с фильтрами. */
 
 /**
- * Unread total for the "Сообщения"/"Комментарии" nav items (T-05,
+ * Unread total for the "Сообщения"/"Публикации" nav items (T-05,
  * docs/epics/epic_02/T-05-inbox-messages.md) — `lib/db/inbox.ts` (server-only)
  * returns a superset of this shape, `Sidebar`/`Tabbar` (client components)
  * declare it here instead of importing the server module's type directly, same
@@ -33,14 +33,14 @@ export type SectionDescriptor = {
 export const SECTIONS: SectionDescriptor[] = [
   { id: "dashboard", label: "Дашборд", pathname: "/dashboard" },
   { id: "inbox", label: "Сообщения", pathname: "/inbox" },
-  { id: "comments", label: "Комментарии", pathname: "/comments" },
+  { id: "comments", label: "Публикации", pathname: "/comments" },
   { id: "contacts", label: "Контакты", pathname: "/contacts" },
   { id: "settings", label: "Настройки", pathname: "/settings" },
 ];
 
 export const QUERY_KEYS = {
   conversation: "conversation",
-  /** Open post on «Комментарии» — posts are not conversations. */
+  /** Открытый пост в «Публикациях» — posts are not conversations. */
   post: "post",
   contact: "contact",
   section: "section",

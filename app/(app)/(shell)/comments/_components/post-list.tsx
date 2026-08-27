@@ -78,7 +78,7 @@ export function PostList({
     <section className={styles.paneList}>
       <div className={styles.paneHead}>
         <div className={styles.paneHeadRow}>
-          <h2>Комментарии</h2>
+          <h2>Публикации</h2>
         </div>
         <span className={styles.paneSubtitle}>{subtitle}</span>
       </div>

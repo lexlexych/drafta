@@ -7,10 +7,10 @@ import { usePathname } from "next/navigation";
 
 import { LinkActivity } from "./activity";
 import {
-  CommentsIcon,
   ContactsIcon,
   DashboardIcon,
   MessagesIcon,
+  PostsIcon,
   SettingsIcon,
 } from "./icons";
 import {
@@ -26,7 +26,7 @@ import { UserMenu, type WorkspaceOption } from "./user-menu";
 const SECTION_ICONS: Record<SectionId, typeof DashboardIcon> = {
   dashboard: DashboardIcon,
   inbox: MessagesIcon,
-  comments: CommentsIcon,
+  comments: PostsIcon,
   contacts: ContactsIcon,
   settings: SettingsIcon,
 };

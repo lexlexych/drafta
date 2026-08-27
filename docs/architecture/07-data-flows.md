@@ -41,13 +41,14 @@ updated: 2026-07-19
 | Событие | Что записывается | Событие Inngest |
 |---|---|---|
 | `message.received` | contact_identity (+contact и доступный аватар), conversation, message | `push/notify.requested` → мгновенный push; при устаревшем/отсутствующем аватаре — `contact/avatar.sync-requested`. Черновик **не** генерируется |
-| `comment.received` | contact_identity (+contact), post (лениво), comment | `post/thumbnail.sync-requested` → запрос миниатюры, только если её ещё нет |
-| `post.published` | post | `post/thumbnail.sync-requested` → первая попытка получить миниатюру |
+| `comment.received` | contact_identity (+contact), post (лениво, с описанием и ссылкой из блока `post`), comment | `post/thumbnail.sync-requested` → запрос миниатюры, только если её ещё нет |
+| `post.published` (у Zernio — `post.external.*` и `post.platform.published`) | post | `post/thumbnail.sync-requested` → первая попытка получить миниатюру |
 
 Комментарий не порождает события генерации: черновик к комментарию создаётся
 только по явному запросу пользователя ([6.4](#64-черновики-к-комментариям)).
 `post.published` нужен, чтобы только что опубликованный пост появился в
-«Комментариях» ещё до первого комментария.
+«Публикациях» ещё до первого комментария; для нативно опубликованного поста Zernio
+находит его фоновой синхронизацией, поэтому событие приходит с задержкой около часа.
 Событие миниатюры содержит только `workspaceId` и `postId`; внешний API вызывается
 Inngest-функцией после повторной проверки `posts.thumbnail_url`. Если провайдер ещё
 не вернул картинку, поле остаётся пустым, а следующий комментарий естественно

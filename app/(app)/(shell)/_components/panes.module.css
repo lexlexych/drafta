@@ -258,6 +258,22 @@
   flex-wrap: wrap;
 }
 
+/*
+ * «Публикации»: заголовок треда — это описание поста, а не имя собеседника.
+ * Оно длиннее, поэтому даём две строки и обрезаем многоточием тем же приёмом,
+ * что и `.listPreview`. Селектор берёт `.threadWho`, чтобы перебить `nowrap`
+ * из `.threadWho b` выше.
+ */
+.threadWho .postDescription {
+  white-space: normal;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+
 /* ---------- сообщения ---------- */
 
 .messages {
@@ -389,31 +405,11 @@
 
 /* ---------- пост и комментарии ---------- */
 
-.postCard {
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  padding: 12px 14px;
-  margin: 14px 16px 4px;
-  flex: none;
-}
-
-.postCardTop {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.postText {
-  font-size: 13.5px;
-  margin-top: 7px;
-}
-
+/* Строка «N комментариев» под описанием публикации в шапке треда. */
 .postMeta {
   font-size: 11.5px;
   color: var(--ink3);
-  margin-top: 6px;
+  margin-top: 3px;
   display: flex;
   gap: 12px;
   align-items: center;

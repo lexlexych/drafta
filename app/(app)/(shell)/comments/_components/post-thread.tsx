@@ -7,7 +7,6 @@ import { useRouter } from "next/navigation";
 import type { PostThreadView } from "@/lib/comments/types";
 
 import { Avatar } from "../../_components/avatar";
-import { ChannelChip } from "../../_components/chips";
 import { BackIcon, ExternalIcon } from "../../_components/icons";
 import { showToast } from "../../_components/stub";
 import paneStyles from "../../_components/panes.module.css";
@@ -121,12 +120,24 @@ export function PostThread({
           <BackIcon />
         </Link>
         <div className={paneStyles.threadWho}>
-          <b>Комментарии к посту</b>
-          <div className={paneStyles.threadChips}>
-            <ChannelChip channel={post.channel} />
-          </div>
+          {/* Описание публикации вместо прежнего «Комментарии к посту»:
+              две строки, дальше многоточие — места в шапке больше, чем в списке. */}
+          <b className={paneStyles.postDescription}>
+            {post.postText || "Пост без описания"}
+          </b>
+          <div className={paneStyles.postMeta}>{post.postMeta}</div>
         </div>
         <div className={styles.headActions}>
+          {post.postUrl ? (
+            <a
+              className={paneStyles.postLink}
+              href={post.postUrl}
+              target="_blank"
+              rel="noreferrer"
+            >
+              Открыть пост <ExternalIcon />
+            </a>
+          ) : null}
           <button
             type="button"
             className={`${uiStyles.button} ${uiStyles.buttonSecondary} ${uiStyles.buttonSmall}`}
@@ -136,26 +147,6 @@ export function PostThread({
             Черновики
           </button>
         </div>
-      </div>
-
-      <div className={paneStyles.postCard}>
-        <div className={paneStyles.postCardTop}>
-          <ChannelChip channel={post.channel} />
-          {post.postUrl ? (
-            <a
-              className={paneStyles.postLink}
-              href={post.postUrl}
-              target="_blank"
-              rel="noreferrer"
-            >
-              пост <ExternalIcon />
-            </a>
-          ) : null}
-        </div>
-        <div className={paneStyles.postText}>
-          {post.postText || "У поста нет текста."}
-        </div>
-        <div className={paneStyles.postMeta}>{post.postMeta}</div>
       </div>
 
       <div className={`${paneStyles.messages} ${paneStyles.commentsList}`}>
@@ -187,11 +178,6 @@ export function PostThread({
               <div className={paneStyles.commentBody}>
                 <div className={paneStyles.commentHead}>
                   <b>{comment.authorName}</b>
-                  {comment.authorHandle ? (
-                    <span className={paneStyles.commentHandle}>
-                      {comment.authorHandle}
-                    </span>
-                  ) : null}
                   <span
                     className={`${paneStyles.commentHandle} ${uiStyles.num}`}
                   >

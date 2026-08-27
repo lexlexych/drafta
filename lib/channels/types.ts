@@ -79,9 +79,8 @@ export interface NormalizedConversationRef {
 /**
  * The post a comment belongs to, or a newly published one. `externalId` is the
  * provider-side post ID — the key `posts.external_id` stores, and the value a
- * later comment on the same post reports. Everything else is optional: the
- * comment webhook carries IDs only, while a publish webhook usually also has
- * the caption and a link.
+ * later comment on the same post reports. Everything else is optional: not every
+ * provider reports the caption, the link or a preview on every event.
  */
 export interface NormalizedPostRef {
   externalId: string;
@@ -89,6 +88,8 @@ export interface NormalizedPostRef {
   text?: string;
   /** Public link to the post, when the provider reports one. */
   permalink?: string;
+  /** Preview image of the post, when the provider reports one. */
+  thumbnailUrl?: string;
   /** Publication timestamp (ISO-8601), when the provider reports one. */
   publishedAt?: string;
   /** Anything else worth keeping about the post — stored as `posts.metadata`. */

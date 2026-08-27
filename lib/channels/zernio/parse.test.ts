@@ -102,7 +102,11 @@ describe("parseZernioWebhook", () => {
       externalAccountId: "acct_ig_55014",
       post: {
         externalId: "ig_post_88401",
-        text: "",
+        // The caption/preview/permalink ride along on the comment envelope —
+        // this is what fills the post's title in «Публикации».
+        text: "Робот byte (тест)",
+        permalink: "https://www.instagram.com/p/ig_post_88401/",
+        thumbnailUrl: "https://cdn.zernio.com/ig/ig_post_88401.jpg",
         metadata: {
           platformPostId: "ig_post_88401",
           postId: null,
@@ -150,41 +154,137 @@ describe("parseZernioWebhook", () => {
     ).toBe("ig_comment_66120");
   });
 
-  it("maps a post.published envelope to a post event with caption and permalink", () => {
-    const rawBody = JSON.stringify({
-      id: "wh_evt_post_1",
-      event: "post.published",
-      account: { id: "acct_ig_55014", platform: "instagram" },
-      post: {
-        id: "zernio_post_1",
-        platformPostId: "ig_post_99001",
-        caption: "Осенняя коллекция уже в продаже!",
-        permalink: "https://instagram.com/p/ig_post_99001",
-        publishedAt: "2026-07-25T09:00:00.000Z",
-      },
-    });
+  it("maps a post.external.created fixture to a post event — a natively published post before anyone comments", () => {
+    const rawBody = readFixture("instagram-external-post.json");
 
-    const [event] = parseZernioWebhook({ rawBody, headers: {} });
+    const events = parseZernioWebhook({ rawBody, headers: {} });
 
-    expect(event).toEqual({
+    expect(events).toHaveLength(1);
+    expect(events[0]).toEqual({
       type: "post.published",
-      providerEventId: "wh_evt_post_1",
+      providerEventId: "wh_evt_01HZXINSTAGRAMEXT01",
       provider: "zernio",
       platform: "instagram",
       externalAccountId: "acct_ig_55014",
       post: {
-        externalId: "ig_post_99001",
-        text: "Осенняя коллекция уже в продаже!",
-        permalink: "https://instagram.com/p/ig_post_99001",
-        publishedAt: "2026-07-25T09:00:00.000Z",
+        // `post.id` on this envelope is the platform-native id, the same value
+        // a later comment reports as `platformPostId`.
+        externalId: "ig_post_88401",
+        text: "Робот byte (тест)",
+        permalink: "https://www.instagram.com/p/ig_post_88401/",
+        thumbnailUrl: "https://cdn.zernio.com/ig/ig_post_88401.jpg",
+        publishedAt: "2026-07-21T10:31:00.000Z",
         metadata: {
-          platformPostId: "ig_post_99001",
-          postId: "zernio_post_1",
+          platformPostId: "ig_post_88401",
+          postId: null,
           platform: "instagram",
         },
       },
       rawMetadata: JSON.parse(rawBody),
     });
+  });
+
+  it("maps post.external.updated the same way (upsertPost only fills empty columns)", () => {
+    const rawBody = JSON.stringify({
+      id: "wh_evt_post_ext_2",
+      event: "post.external.updated",
+      account: { id: "acct_ig_55014", platform: "instagram" },
+      post: {
+        id: "ig_post_99001",
+        platform: "instagram",
+        content: "Осенняя коллекция уже в продаже!",
+        url: "https://instagram.com/p/ig_post_99001",
+        source: "external",
+      },
+    });
+
+    const [event] = parseZernioWebhook({ rawBody, headers: {} });
+
+    expect(event?.type).toBe("post.published");
+    expect(event?.type === "post.published" && event.post).toEqual({
+      externalId: "ig_post_99001",
+      text: "Осенняя коллекция уже в продаже!",
+      permalink: "https://instagram.com/p/ig_post_99001",
+      metadata: {
+        platformPostId: "ig_post_99001",
+        postId: null,
+        platform: "instagram",
+      },
+    });
+  });
+
+  it("maps post.platform.published (published through Zernio) using the platform block's ids", () => {
+    const rawBody = JSON.stringify({
+      id: "wh_evt_post_platform_1",
+      event: "post.platform.published",
+      account: {
+        accountId: "acct_ig_55014",
+        platform: "instagram",
+        username: "shop",
+      },
+      post: {
+        id: "zernio_post_1",
+        content: "Запускаем предзаказ",
+        publishedAt: "2026-07-25T09:00:00.000Z",
+      },
+      platform: {
+        name: "instagram",
+        status: "published",
+        platformPostId: "ig_post_99002",
+        publishedUrl: "https://instagram.com/p/ig_post_99002",
+      },
+    });
+
+    const [event] = parseZernioWebhook({ rawBody, headers: {} });
+
+    expect(event?.type).toBe("post.published");
+    // `account.accountId` rather than `account.id`, which this envelope lacks.
+    expect(event?.externalAccountId).toBe("acct_ig_55014");
+    expect(event?.type === "post.published" && event.post).toEqual({
+      externalId: "ig_post_99002",
+      text: "Запускаем предзаказ",
+      permalink: "https://instagram.com/p/ig_post_99002",
+      publishedAt: "2026-07-25T09:00:00.000Z",
+      metadata: {
+        platformPostId: "ig_post_99002",
+        postId: null,
+        platform: "instagram",
+      },
+    });
+  });
+
+  it("skips a post.platform.failed-shaped envelope: no platform post id to list", () => {
+    const rawBody = JSON.stringify({
+      id: "wh_evt_post_platform_2",
+      event: "post.platform.published",
+      account: { accountId: "acct_ig_55014", platform: "instagram" },
+      post: { id: "zernio_post_2", content: "Не опубликовалось" },
+      platform: { name: "instagram", status: "failed", error: "rate limited" },
+    });
+
+    expect(parseZernioWebhook({ rawBody, headers: {} })).toEqual([]);
+  });
+
+  it("skips the post-level post.published rollup: it names no account, and every target arrives as post.platform.published", () => {
+    const rawBody = JSON.stringify({
+      id: "wh_evt_post_rollup_1",
+      event: "post.published",
+      post: {
+        id: "zernio_post_1",
+        content: "Запускаем предзаказ",
+        status: "published",
+        platforms: [
+          {
+            platform: "instagram",
+            status: "published",
+            accountId: "acct_ig_55014",
+            platformPostId: "ig_post_99002",
+          },
+        ],
+      },
+    });
+
+    expect(parseZernioWebhook({ rawBody, headers: {} })).toEqual([]);
   });
 
   it("maps a WhatsApp DM message.received fixture to a normalized event, field for field", () => {

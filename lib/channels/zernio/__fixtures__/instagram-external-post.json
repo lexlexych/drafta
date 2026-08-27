@@ -1,0 +1,29 @@
+{
+  "id": "wh_evt_01HZXINSTAGRAMEXT01",
+  "event": "post.external.created",
+  "timestamp": "2026-07-21T10:40:12.118Z",
+  "post": {
+    "id": "ig_post_88401",
+    "platform": "instagram",
+    "accountId": "acct_ig_55014",
+    "url": "https://www.instagram.com/p/ig_post_88401/",
+    "content": "Робот byte (тест)",
+    "mediaType": "image",
+    "mediaItems": [
+      {
+        "type": "image",
+        "url": "https://cdn.zernio.com/ig/ig_post_88401_full.jpg"
+      }
+    ],
+    "thumbnailUrl": "https://cdn.zernio.com/ig/ig_post_88401.jpg",
+    "publishedAt": "2026-07-21T10:31:00.000Z",
+    "mediaProductType": "FEED",
+    "source": "external"
+  },
+  "account": {
+    "id": "acct_ig_55014",
+    "accountId": "acct_ig_55014",
+    "platform": "instagram",
+    "username": "tonwerk.keramik"
+  }
+}

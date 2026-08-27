@@ -53,6 +53,20 @@ export function CommentsIcon(props: IconProps) {
   );
 }
 
+/**
+ * Публикации: стопка карточек — лента постов. `CommentsIcon` осталась речевым
+ * пузырём и используется плейсхолдером превью поста в списке.
+ */
+export function PostsIcon(props: IconProps) {
+  return (
+    <Icon {...stroke} strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <path d="M7.5 4.5h11a1.8 1.8 0 0 1 1.8 1.8v9" />
+      <rect x="3.5" y="8" width="13" height="11.5" rx="2" />
+      <path d="M6.7 12h6.6M6.7 15.4h4" />
+    </Icon>
+  );
+}
+
 export function ContactsIcon(props: IconProps) {
   return (
     <Icon {...stroke} strokeLinecap="round" {...props}>

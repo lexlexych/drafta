@@ -20,7 +20,10 @@
   },
   "post": {
     "id": null,
-    "platformPostId": "ig_post_88401"
+    "platformPostId": "ig_post_88401",
+    "content": "Робот byte (тест)",
+    "imageUrl": "https://cdn.zernio.com/ig/ig_post_88401.jpg",
+    "permalink": "https://www.instagram.com/p/ig_post_88401/"
   },
   "account": {
     "id": "acct_ig_55014",

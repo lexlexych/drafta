@@ -39,13 +39,25 @@ import type {
  * a top-level `comment` (with its own `author`, not a DM `sender`) and `post`,
  * and no `message`/`conversation`. Comments of one post share the post's
  * `platformPostId`, so they group into a single `posts` row; a reply-to-a-reply
- * carries `comment.parentCommentId`. The comment webhook does not include the
- * post caption/permalink — only ids. See `buildCommentEvent`.
+ * carries `comment.parentCommentId`. Its `post` block carries the post's own
+ * `content` (the caption), `imageUrl` and `permalink` — from Zernio's synced
+ * copy, no platform call on the comment path. See `buildCommentEvent`.
  *
- * `post.published` is a third shape: a top-level `post` and nothing else. It is
- * what puts a freshly published post into «Комментарии» before it has any
- * comments, and it is where the caption/permalink actually arrive. See
- * `buildPostPublishedEvent`.
+ * `post.external.created` / `post.external.updated` (`WebhookPayloadExternalPost`)
+ * are what put a post published *natively* — from the Instagram app, not through
+ * Zernio — into «Публикации» before anyone comments. Zernio detects those by
+ * background sync, so they are poll-driven (~hourly), not real-time. The post
+ * block is `ExternalPostWebhookPost`: `id` is the platform-native post id,
+ * `url`/`content`/`thumbnailUrl`/`publishedAt` the rest. See
+ * `buildExternalPostEvent`.
+ *
+ * `post.platform.published` (`WebhookPayloadPostPlatform`) is the same thing for
+ * a post published *through* Zernio: one event per platform target, carrying the
+ * `account` it published through and a `platform` block with `platformPostId` and
+ * `publishedUrl`. The post-level rollup `post.published` is deliberately NOT
+ * handled — its payload carries no `account` at all (the accounts sit inside
+ * `post.platforms[]`), and every target it covers already arrives as its own
+ * `post.platform.published`. See `buildPostPlatformEvent`.
  *
  * `InboxWebhookMessage.attachments[]` only carries `type`, `url`, and an
  * opaque `payload` object ("additional attachment metadata", undocumented
@@ -66,7 +78,14 @@ import type {
  * form.
  */
 interface ZernioRawAccount {
-  id: string;
+  /**
+   * Social account id. Present as `id` on the inbox envelopes and as
+   * `accountId` on the publishing ones (`WebhookPayloadPostPlatform`); Zernio
+   * documents `accountId` as the canonical field and sets both where it can, so
+   * this adapter reads `id` first and falls back — see `envelopeAccountId`.
+   */
+  id?: string;
+  accountId?: string;
   platform: string;
 }
 
@@ -78,20 +97,50 @@ interface ZernioRawConversation {
 }
 
 /**
- * The post a `comment.received` event belongs to, and the subject of a
- * `post.published` event — Zernio's `WebhookPayloadComment.post` /
- * `WebhookPayloadPost.post` (confirmed against docs.zernio.com/api/openapi).
+ * The post a `comment.received` event belongs to — Zernio's
+ * `WebhookPayloadComment.post` (confirmed against docs.zernio.com/api/openapi).
  * Only `platformPostId` is guaranteed: the internal `id` is null for posts not
  * published through Zernio (the common case for organic posts users comment
- * on). A `comment.received` envelope carries ids only — `caption`/`permalink`
- * appear on the publish event, where Zernio does report them.
+ * on), and `content`/`imageUrl`/`permalink` come from Zernio's synced copy, so
+ * they are null for a post their sync has not seen yet.
  */
-interface ZernioRawPost {
+interface ZernioRawCommentPost {
   id?: string | null;
   platformPostId: string;
-  caption?: string | null;
+  /** Post text — the caption shown as the post's title in «Публикации». */
+  content?: string | null;
+  /** Post thumbnail or first media item; platform CDN URLs expire. */
+  imageUrl?: string | null;
   permalink?: string | null;
+}
+
+/**
+ * A natively-authored post detected by Zernio's background sync — the `post`
+ * block of `post.external.*` (`ExternalPostWebhookPost`). Unlike the comment
+ * envelope, `id` here is the *platform-native* post id, which is what
+ * `posts.external_id` stores, so both paths key on the same value.
+ */
+interface ZernioRawExternalPost {
+  id: string;
+  platform?: string;
+  accountId?: string;
+  url?: string | null;
+  content?: string | null;
+  thumbnailUrl?: string | null;
   publishedAt?: string | null;
+  source?: string;
+}
+
+/**
+ * The platform target that just went live on a `post.platform.published` event
+ * (`WebhookPayloadPostPlatform.platform`). `platformPostId` and `publishedUrl`
+ * are documented as present on `published`, absent on `failed`.
+ */
+interface ZernioRawPostPlatformTarget {
+  name?: string;
+  status?: string;
+  platformPostId?: string;
+  publishedUrl?: string;
 }
 
 interface ZernioRawCommentAuthor {
@@ -150,8 +199,14 @@ interface ZernioWebhookEnvelope {
   conversation?: ZernioRawConversation;
   /** Present on `comment.received` — the comment itself. */
   comment?: ZernioRawComment;
-  /** Present on `comment.received` — the post the comment is under. */
-  post?: ZernioRawPost;
+  /**
+   * The post the comment is under (`comment.received`), or the post itself
+   * (`post.external.*`, `post.platform.published`) — the two shapes are told
+   * apart by `isZernioCommentPost` / `isZernioExternalPost`.
+   */
+  post?: ZernioRawCommentPost | ZernioRawExternalPost;
+  /** Present on `post.platform.published` — the platform target that went live. */
+  platform?: ZernioRawPostPlatformTarget;
   metadata?: Record<string, unknown> | null;
   timestamp?: string;
 }
@@ -182,11 +237,22 @@ const DM_EVENT_TYPES: Readonly<
 const COMMENT_EVENT = "comment.received" as const;
 
 /**
- * Publication of a post on the connected account. Its envelope carries only
- * `post` — no comment yet, by definition. drafta creates the `posts` row on it
- * so the post is listed under «Комментарии» from the moment it goes live.
+ * Publication of a post on the connected account — no comment yet, by
+ * definition. drafta creates the `posts` row on these so a post is listed under
+ * «Публикации» from the moment it goes live:
+ *
+ *   * `post.external.created` / `post.external.updated` — published natively
+ *     (from the Instagram app). This is the normal case for drafta's users, and
+ *     it is poll-driven on Zernio's side (~hourly), not real-time;
+ *   * `post.platform.published` — published through Zernio, one event per
+ *     platform target.
  */
-const POST_PUBLISHED_EVENT = "post.published" as const;
+const EXTERNAL_POST_EVENTS: ReadonlySet<string> = new Set([
+  "post.external.created",
+  "post.external.updated",
+]);
+
+const POST_PLATFORM_PUBLISHED_EVENT = "post.platform.published" as const;
 
 /** Platforms this product supports — epic E-002 scope ("Zernio покрывает платформы: Telegram, WhatsApp, Facebook, Instagram (DM)"). */
 const KNOWN_PLATFORMS: ReadonlySet<ChannelPlatform> = new Set([
@@ -213,9 +279,18 @@ function isZernioEnvelope(value: unknown): value is ZernioWebhookEnvelope {
     typeof candidate.event === "string" &&
     typeof account === "object" &&
     account !== null &&
-    typeof account.id === "string" &&
+    (typeof account.id === "string" || typeof account.accountId === "string") &&
     typeof account.platform === "string"
   );
+}
+
+/**
+ * The connected account this envelope is about. Publishing events name it
+ * `accountId` while inbox events name it `id`; `isZernioEnvelope` has already
+ * established that at least one of them is a string.
+ */
+function envelopeAccountId(raw: ZernioWebhookEnvelope): string {
+  return (raw.account.id ?? raw.account.accountId) as string;
 }
 
 function isZernioMessage(value: unknown): value is ZernioRawMessage {
@@ -262,12 +337,21 @@ function isZernioComment(value: unknown): value is ZernioRawComment {
   );
 }
 
-function isZernioPost(value: unknown): value is ZernioRawPost {
+function isZernioCommentPost(value: unknown): value is ZernioRawCommentPost {
   if (typeof value !== "object" || value === null) {
     return false;
   }
 
   return typeof (value as Record<string, unknown>).platformPostId === "string";
+}
+
+/** A `post.external.*` post block: keyed by the platform-native `id`. */
+function isZernioExternalPost(value: unknown): value is ZernioRawExternalPost {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+
+  return typeof (value as Record<string, unknown>).id === "string";
 }
 
 /**
@@ -310,8 +394,12 @@ function parseSingleEnvelope(raw: unknown): NormalizedEvent | null {
     return buildCommentEvent(raw, raw.account.platform);
   }
 
-  if (raw.event === POST_PUBLISHED_EVENT) {
-    return buildPostPublishedEvent(raw, raw.account.platform);
+  if (EXTERNAL_POST_EVENTS.has(raw.event)) {
+    return buildExternalPostEvent(raw, raw.account.platform);
+  }
+
+  if (raw.event === POST_PLATFORM_PUBLISHED_EVENT) {
+    return buildPostPlatformEvent(raw, raw.account.platform);
   }
 
   const dmType = DM_EVENT_TYPES[raw.event];
@@ -351,7 +439,7 @@ function buildDmEvent(
     providerEventId: raw.id,
     provider: "zernio",
     platform,
-    externalAccountId: raw.account.id,
+    externalAccountId: envelopeAccountId(raw),
     // `conversation.id` (Zernio's internal conversation ID) rather than
     // `conversation.platformConversationId`: this adapter consistently keys on
     // Zernio's own IDs, which is what `webhook_events`/`messages` idempotency
@@ -376,30 +464,67 @@ function buildDmEvent(
 }
 
 /**
- * Normalizes Zernio's post shape. `platformPostId` is always the identity:
- * the internal `postId` is null for posts not published through Zernio, so it
- * can't be the key. It is also the value Zernio's reply endpoint
- * (POST /v1/inbox/comments/{postId}) accepts.
+ * Normalizes the post a comment sits under. The platform's own post id is
+ * always the identity: the internal `postId` is null for posts not published
+ * through Zernio, so it can't be the key. It is also the value Zernio's reply
+ * endpoint (POST /v1/inbox/comments/{postId}) accepts.
+ *
+ * `content`/`imageUrl`/`permalink` ride along on every comment event, from
+ * Zernio's synced copy of the post — which is why a post first seen through a
+ * comment still gets its caption and preview without any extra API call.
  */
-function postRef(
-  post: ZernioRawPost,
+function commentPostRef(
+  post: ZernioRawCommentPost,
   platform: ChannelPlatform,
   internalPostId: string | null,
 ): NormalizedPostRef {
-  const permalink = post.permalink?.trim();
-  const publishedAt = post.publishedAt?.trim();
-
   return {
     externalId: post.platformPostId,
-    text: post.caption ?? "",
-    ...(permalink ? { permalink } : {}),
-    ...(publishedAt ? { publishedAt } : {}),
+    text: post.content ?? "",
+    ...optionalUrl("permalink", post.permalink),
+    ...optionalUrl("thumbnailUrl", post.imageUrl),
     metadata: {
       platformPostId: post.platformPostId,
       postId: internalPostId,
       platform,
     },
   };
+}
+
+/** Same normalized shape from a `post.external.*` / `post.platform.*` payload. */
+function publishedPostRef(input: {
+  platformPostId: string;
+  platform: ChannelPlatform;
+  text?: string | null;
+  permalink?: string | null;
+  thumbnailUrl?: string | null;
+  publishedAt?: string | null;
+}): NormalizedPostRef {
+  const publishedAt = input.publishedAt?.trim();
+
+  return {
+    externalId: input.platformPostId,
+    text: input.text ?? "",
+    ...optionalUrl("permalink", input.permalink),
+    ...optionalUrl("thumbnailUrl", input.thumbnailUrl),
+    ...(publishedAt ? { publishedAt } : {}),
+    metadata: {
+      platformPostId: input.platformPostId,
+      // Published-post envelopes don't report Zernio's own post id in a form
+      // this adapter keys on; `platformPostId` above is the identity anyway.
+      postId: null,
+      platform: input.platform,
+    },
+  };
+}
+
+/** Spreads `{ key: value }` only when the provider actually reported one. */
+function optionalUrl(
+  key: "permalink" | "thumbnailUrl",
+  value: string | null | undefined,
+): Record<string, string> {
+  const trimmed = nonEmptyString(value);
+  return trimmed ? { [key]: trimmed } : {};
 }
 
 function buildCommentEvent(
@@ -414,21 +539,21 @@ function buildCommentEvent(
   }
 
   const comment = raw.comment;
-  // A comment envelope carries the post's ids only — no caption, no permalink.
-  // The post row keeps whatever a `post.published` event already filled in;
-  // this event only has to make sure the row exists.
-  const post: ZernioRawPost = raw.post ?? {
-    platformPostId: comment.platformPostId,
-    id: comment.postId ?? null,
-  };
+  // The envelope's `post` block carries the caption, preview and permalink from
+  // Zernio's synced copy. It is optional here only defensively: without it the
+  // event still has to make sure the `posts` row exists, keyed by the id the
+  // comment itself reports.
+  const post: ZernioRawCommentPost = isZernioCommentPost(raw.post)
+    ? raw.post
+    : { platformPostId: comment.platformPostId, id: comment.postId ?? null };
 
   return {
     type: "comment.received",
     providerEventId: raw.id,
     provider: "zernio",
     platform,
-    externalAccountId: raw.account.id,
-    post: postRef(post, platform, comment.postId ?? raw.post?.id ?? null),
+    externalAccountId: envelopeAccountId(raw),
+    post: commentPostRef(post, platform, comment.postId ?? post.id ?? null),
     comment: {
       externalId: comment.id,
       text: comment.text ?? "",
@@ -448,24 +573,81 @@ function buildCommentEvent(
   };
 }
 
-function buildPostPublishedEvent(
+/**
+ * A post published natively on the platform, which Zernio's background sync
+ * discovered (`post.external.created`) or noticed an edit to
+ * (`post.external.updated`). `upsertPost` only ever fills empty columns, so the
+ * "updated" variant is safe to map identically: it re-asserts the row without
+ * overwriting anything already stored.
+ */
+function buildExternalPostEvent(
   raw: ZernioWebhookEnvelope,
   platform: ChannelPlatform,
 ): NormalizedEvent | null {
-  if (!isZernioPost(raw.post)) {
+  if (!isZernioExternalPost(raw.post)) {
     console.warn(
-      `[zernio] skipping "post.published" event with no usable post payload (event id: ${raw.id})`,
+      `[zernio] skipping "${raw.event}" event with no usable post payload (event id: ${raw.id})`,
     );
     return null;
   }
+
+  const post = raw.post;
 
   return {
     type: "post.published",
     providerEventId: raw.id,
     provider: "zernio",
     platform,
-    externalAccountId: raw.account.id,
-    post: postRef(raw.post, platform, raw.post.id ?? null),
+    externalAccountId: envelopeAccountId(raw),
+    post: publishedPostRef({
+      platformPostId: post.id,
+      platform,
+      text: post.content,
+      permalink: post.url,
+      thumbnailUrl: post.thumbnailUrl,
+      publishedAt: post.publishedAt,
+    }),
+    rawMetadata: raw as unknown as Record<string, unknown>,
+  };
+}
+
+/**
+ * One platform target of a post published *through* Zernio reaching its
+ * terminal state. Only `status: "published"` produces a row — a failed target
+ * has no platform post to list, and the same envelope shape is reused by
+ * `post.platform.failed`/`.deleted`, which this adapter does not subscribe to.
+ */
+function buildPostPlatformEvent(
+  raw: ZernioWebhookEnvelope,
+  platform: ChannelPlatform,
+): NormalizedEvent | null {
+  const target = raw.platform;
+  const platformPostId = nonEmptyString(target?.platformPostId);
+
+  if (!platformPostId || target?.status !== "published") {
+    console.warn(
+      `[zernio] skipping "${raw.event}" event with no published platform post id (event id: ${raw.id})`,
+    );
+    return null;
+  }
+
+  const post = isZernioExternalPost(raw.post) ? raw.post : null;
+
+  return {
+    type: "post.published",
+    providerEventId: raw.id,
+    provider: "zernio",
+    platform,
+    externalAccountId: envelopeAccountId(raw),
+    post: publishedPostRef({
+      platformPostId,
+      platform,
+      // The rollup `post` block here is Zernio's own post (its `id` is internal,
+      // not the platform's) — only its text and timestamp are of any use.
+      text: post?.content,
+      permalink: target.publishedUrl,
+      publishedAt: post?.publishedAt,
+    }),
     rawMetadata: raw as unknown as Record<string, unknown>,
   };
 }

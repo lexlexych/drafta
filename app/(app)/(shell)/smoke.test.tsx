@@ -361,11 +361,6 @@ const POST_LIST_ITEMS = [
 
 const POST_THREAD = {
   postId: "post_autumn_ig",
-  channel: {
-    id: "chc_instagram_shop",
-    name: "Instagram Магазин",
-    platform: "instagram",
-  },
   postText: "Осенняя коллекция уже в продаже — заходите за новинками!",
   postUrl: "https://instagram.com/p/ig_post_autumn",
   postMeta: "2 комментария",
@@ -375,7 +370,6 @@ const POST_THREAD = {
     {
       id: "cmt_lena",
       authorName: "Lena Fischer",
-      authorHandle: "@ig_user_lena",
       avatar: { initials: "LF", hue: 40 },
       text: "Сколько стоит доставка по Берлину?",
       time: "10:12",
@@ -412,7 +406,7 @@ vi.mock("@/lib/db/comments", () => ({
     const items = filterByChannels(POST_LIST_ITEMS, filter.channelIds);
 
     return {
-      title: "Комментарии",
+      title: "Публикации",
       subtitle: `все каналы · ${items.length} поста`,
       items,
       total: items.length,
@@ -739,7 +733,7 @@ describe("comments page", () => {
   it("lists every post, including one without comments yet", async () => {
     render(await CommentsPage({ searchParams: searchParams() }));
 
-    expect(screen.getByRole("heading", { name: "Комментарии" })).toBeDefined();
+    expect(screen.getByRole("heading", { name: "Публикации" })).toBeDefined();
     expect(screen.getByText("Новый стеллаж в мастерской")).toBeDefined();
     expect(screen.getByText("Пока нет комментариев")).toBeDefined();
     expect(screen.getByText(/Выберите пост слева/)).toBeDefined();
@@ -752,7 +746,14 @@ describe("comments page", () => {
       }),
     );
 
-    expect(screen.getByText("Комментарии к посту")).toBeDefined();
+    // Заголовок треда — описание публикации, а не подпись «Комментарии к посту».
+    expect(
+      screen.getByText("Осенняя коллекция уже в продаже — заходите за новинками!"),
+    ).toBeDefined();
+    expect(screen.getByText("2 комментария")).toBeDefined();
+    expect(screen.getByRole("link", { name: /Открыть пост/ }).getAttribute("href")).toBe(
+      "https://instagram.com/p/ig_post_autumn",
+    );
     expect(screen.getByRole("button", { name: "Черновики" })).toBeDefined();
     expect(screen.getByText("Lena Fischer")).toBeDefined();
     // Черновик не создаётся при получении комментария — его запускает кнопка.
@@ -926,7 +927,7 @@ describe("shell navigation", () => {
 
     expect(screen.getByText("Дашборд")).toBeDefined();
     expect(screen.getByText("Сообщения")).toBeDefined();
-    expect(screen.getByText("Комментарии")).toBeDefined();
+    expect(screen.getByText("Публикации")).toBeDefined();
     expect(screen.getByText("Контакты")).toBeDefined();
     expect(screen.getByText(String(messagesCounters.totalUnread))).toBeDefined();
     // Разделы больше не расхлопываются в каналы — списки показывают все каналы.

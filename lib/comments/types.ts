@@ -29,7 +29,6 @@ export type CommentDraftView = {
 export type CommentView = {
   id: string;
   authorName: string;
-  authorHandle: string | null;
   avatar: AvatarView | null;
   text: string;
   time: string;
@@ -63,10 +62,11 @@ export type PostDraftBriefView = {
 
 export type PostThreadView = {
   postId: string;
-  channel: ChannelBadgeView;
+  /** Описание публикации — заголовок треда (в макете было «Комментарии к посту»). */
   postText: string;
+  /** Ссылка на публикацию в мессенджере; null, если провайдер её не сообщил. */
   postUrl: string | null;
-  /** "N комментариев" line under the post card. */
+  /** Строка «N комментариев» под описанием в шапке треда. */
   postMeta: string;
   draftBrief: PostDraftBriefView;
   comments: CommentView[];

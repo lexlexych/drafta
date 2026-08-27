@@ -416,7 +416,7 @@ export async function getPostListView(
   const scope = selectedChannel ? "канал" : "все каналы";
 
   return {
-    title: selectedChannel?.name ?? "Комментарии",
+    title: selectedChannel?.name ?? "Публикации",
     subtitle: [scope, countLabel].join(" · "),
     items,
     total,
@@ -542,12 +542,6 @@ export async function getPostThreadView(
     return {
       id: comment.id,
       authorName,
-      authorHandle:
-        !isOurs && identity && identity.platform === "instagram"
-          ? `@${identity.external_id}`
-          : isOurs
-            ? channel.name
-            : null,
       avatar: isOurs
         ? null
         : avatarFor(
@@ -583,7 +577,6 @@ export async function getPostThreadView(
 
   return {
     postId: post.id,
-    channel: channelBadge(channel),
     postText: post.text,
     postUrl: post.permalink,
     postMeta: countWithNoun(incomingCount, [

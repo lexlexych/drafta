@@ -25,7 +25,8 @@ import {
  *     then the IDs-only `push/notify.requested`. A DM draft is never generated
  *     on arrival — the operator asks for one from the thread composer;
  *   * `comment.received` → contact/contact_identity, post, comment, then an
- *     IDs-only thumbnail lookup (the worker is a no-op once one is stored).
+ *     IDs-only thumbnail lookup (the worker is a no-op once one is stored —
+ *     which it usually is, since the comment payload brings the preview along).
  *     A comment draft is never generated on arrival;
  *   * `post.published` → the post row alone, so a freshly published post is
  *     listed with zero comments.
@@ -559,9 +560,10 @@ async function upsertConversation(
 
 /**
  * Resolves the post row for a normalized post reference, creating it when the
- * post is new. An existing row is only *enriched*: `post.published` carries the
- * caption and permalink, `comment.received` carries neither, and a comment on
- * an older post must never blank out what a publish event already stored.
+ * post is new. An existing row is only *enriched*: which of the caption,
+ * permalink, preview and publication time a provider reports differs per event
+ * (and per how long its own sync has known the post), so a later event fills
+ * the gaps and never blanks out what an earlier one already stored.
  */
 async function upsertPost(
   supabase: SupabaseClient,
@@ -571,7 +573,7 @@ async function upsertPost(
 ): Promise<string> {
   const { data: existing, error: selectError } = await supabase
     .from("posts")
-    .select("id, text, permalink, published_at")
+    .select("id, text, permalink, thumbnail_url, published_at")
     .eq("channel_connection_id", channelConnectionId)
     .eq("external_id", post.externalId)
     .maybeSingle();
@@ -584,6 +586,9 @@ async function upsertPost(
     }
     if (post.permalink && !existing.permalink) {
       enrichment.permalink = post.permalink;
+    }
+    if (post.thumbnailUrl && !existing.thumbnail_url) {
+      enrichment.thumbnail_url = post.thumbnailUrl;
     }
     if (post.publishedAt && !existing.published_at) {
       enrichment.published_at = post.publishedAt;
@@ -609,6 +614,7 @@ async function upsertPost(
       external_id: post.externalId,
       text: post.text ?? "",
       permalink: post.permalink ?? null,
+      thumbnail_url: post.thumbnailUrl ?? null,
       published_at: post.publishedAt ?? null,
       metadata: post.metadata ?? {},
     })
