@@ -12,14 +12,9 @@
 
 import { useState, type FormEvent } from "react";
 
-import {
-  WORKSPACE_LANGUAGES,
-  type WorkspaceLanguage,
-} from "@/lib/i18n/languages";
-
 import { CheckIcon, LogoutIcon, PlusIcon } from "../../_components/icons";
+import { StubButton } from "../../_components/stub";
 import uiStyles from "../../_components/ui.module.css";
-import { saveWorkspaceLanguageAction } from "./actions";
 import {
   createWorkspaceFromShellAction,
   switchWorkspaceAction,
@@ -38,15 +33,11 @@ export function AccountPanel({
   userRole,
   workspaces,
   currentWorkspaceId,
-  language,
-  canManageLanguage,
 }: {
   userName: string;
   userRole: string;
   workspaces: AccountWorkspaceOption[];
   currentWorkspaceId: string;
-  language: WorkspaceLanguage;
-  canManageLanguage: boolean;
 }) {
   const [isCreating, setIsCreating] = useState(false);
   const [newWorkspaceName, setNewWorkspaceName] = useState("");
@@ -97,11 +88,6 @@ export function AccountPanel({
       <p className={styles.description}>
         Вы вошли как <b>{userName}</b> · {userRole}.
       </p>
-
-      <LanguageCard
-        initialLanguage={language}
-        canManage={canManageLanguage}
-      />
 
       <div className={uiStyles.card}>
         <h3>Рабочие пространства</h3>
@@ -180,83 +166,19 @@ export function AccountPanel({
           <LogoutIcon /> Выйти
         </button>
       </form>
-    </>
-  );
-}
 
-/**
- * Язык приложения на весь workspace (`workspaces.settings.lang`). Сохраняется
- * сразу по выбору — отдельной кнопки «Сохранить» у одного поля не нужно.
- * Интерфейс пока не переводится: это только сохранённое предпочтение.
- */
-function LanguageCard({
-  initialLanguage,
-  canManage,
-}: {
-  initialLanguage: WorkspaceLanguage;
-  canManage: boolean;
-}) {
-  const [language, setLanguage] = useState<WorkspaceLanguage>(initialLanguage);
-  const [error, setError] = useState<string | null>(null);
-  const [saved, setSaved] = useState(false);
-  const [isPending, startTransition] = useActivityTransition("Сохраняем язык…");
-
-  function handleChange(next: string) {
-    const previous = language;
-    // Значения <option> приходят из того же списка, что и тип.
-    const value = next as WorkspaceLanguage;
-
-    setLanguage(value);
-    setError(null);
-    setSaved(false);
-
-    startTransition(async () => {
-      const result = await saveWorkspaceLanguageAction(value);
-
-      if (!result.ok) {
-        setLanguage(previous);
-        setError(result.error);
-        return;
-      }
-
-      setSaved(true);
-    });
-  }
-
-  return (
-    <div className={`${uiStyles.card} ${uiStyles.cardStack}`}>
-      <h3>Язык</h3>
-      <div className={uiStyles.field}>
-        <label htmlFor="workspace-language">Язык приложения</label>
-        <select
-          id="workspace-language"
-          value={language}
-          onChange={(event) => handleChange(event.target.value)}
-          disabled={isPending || !canManage}
+      <div className={`${uiStyles.card} ${uiStyles.cardStack}`}>
+        <h3>Удаление рабочего пространства</h3>
+        <p className={styles.description}>
+          GDPR: удаление стирает все данные рабочего пространства каскадно и
+          необратимо.
+        </p>
+        <StubButton
+          className={`${uiStyles.button} ${uiStyles.buttonSecondary} ${uiStyles.buttonDanger} ${uiStyles.buttonSelfStart}`}
         >
-          {WORKSPACE_LANGUAGES.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-        <span className={styles.fieldHint}>
-          {canManage
-            ? "Язык общий для всего рабочего пространства."
-            : "Менять язык может только владелец рабочего пространства."}
-        </span>
+          Удалить workspace…
+        </StubButton>
       </div>
-      <div aria-live="polite">
-        {error ? (
-          <p className={styles.formError} role="alert">
-            {error}
-          </p>
-        ) : saved ? (
-          <p className={styles.formSuccess} role="status">
-            Язык сохранён.
-          </p>
-        ) : null}
-      </div>
-    </div>
+    </>
   );
 }

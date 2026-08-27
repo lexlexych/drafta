@@ -114,7 +114,6 @@ export function Sidebar({
           workspaces={workspaces}
           currentWorkspaceId={currentWorkspaceId}
         />
-        <div className={styles.mockNote}>UI-каркас · mock-данные</div>
       </div>
     </aside>
   );

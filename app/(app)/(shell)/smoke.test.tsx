@@ -1013,6 +1013,63 @@ describe("settings page", () => {
     expect(screen.queryByText("Правила классификации входящих")).toBeNull();
   });
 
+  it("hides the team section from the list but keeps its page", async () => {
+    // «Команда» скрыта из меню настроек, страница остаётся доступной по ссылке.
+    expect(
+      SETTINGS_SECTIONS.find((section) => section.id === "team")?.hidden,
+    ).toBe(true);
+
+    const { unmount } = render(
+      await SettingsPage({ searchParams: searchParams() }),
+    );
+
+    expect(screen.queryByText("Участники и приглашения")).toBeNull();
+    unmount();
+
+    render(await SettingsPage({ searchParams: searchParams({ section: "team" }) }));
+
+    expect(screen.getAllByText("Команда").length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: "+ Пригласить" })).toBeDefined();
+  });
+
+  it("no longer offers a privacy section", async () => {
+    // Раздел «Приватность» убран: удаление workspace переехало в «Аккаунт»,
+    // экспорта данных нет вовсе.
+    expect(
+      SETTINGS_SECTIONS.some((section) => (section.id as string) === "privacy"),
+    ).toBe(false);
+
+    render(
+      await SettingsPage({ searchParams: searchParams({ section: "privacy" }) }),
+    );
+
+    expect(
+      screen.queryByRole("button", { name: "Экспортировать данные" }),
+    ).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Удалить workspace…" }),
+    ).toBeNull();
+  });
+
+  it("keeps the language card in the app section", async () => {
+    render(await SettingsPage({ searchParams: searchParams({ section: "app" }) }));
+
+    expect(screen.getByLabelText("Язык приложения")).toBeDefined();
+  });
+
+  it("offers workspace deletion in the account section", async () => {
+    const { unmount } = render(
+      await SettingsPage({ searchParams: searchParams({ section: "account" }) }),
+    );
+
+    expect(
+      screen.getByRole("button", { name: "Удалить workspace…" }),
+    ).toBeDefined();
+    // Язык переехал в «Приложение».
+    expect(screen.queryByLabelText("Язык приложения")).toBeNull();
+    unmount();
+  });
+
   it("renders the ai section with both system prompts", async () => {
     render(await SettingsPage({ searchParams: searchParams({ section: "ai" }) }));
 

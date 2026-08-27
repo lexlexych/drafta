@@ -291,13 +291,6 @@
   color: var(--ink3);
 }
 
-.mockNote {
-  font-size: 10.5px;
-  color: var(--ink3);
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-
 /* ---------- нижний таббар (мобайл) ---------- */
 
 .tabButton {

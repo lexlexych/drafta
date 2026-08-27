@@ -46,7 +46,6 @@ import {
   BookIcon,
   DeviceIcon,
   PlugIcon,
-  ShieldIcon,
   SparkIcon,
   TeamIcon,
   TemplateIcon,
@@ -72,6 +71,7 @@ import {
 } from "./templates/templates-panel";
 import { AiSettingsForm } from "./ai/ai-settings-form";
 import { AppInstallPanel } from "./app/app-install-panel";
+import { LanguageCard } from "./app/language-card";
 import { NotificationsForm } from "./notifications/notifications-form";
 import setStyles from "./settings.module.css";
 import styles from "../_components/panes.module.css";
@@ -88,7 +88,6 @@ const SECTION_ICONS: Record<SettingsSectionId, typeof PlugIcon> = {
   team: TeamIcon,
   notifications: BellIcon,
   app: DeviceIcon,
-  privacy: ShieldIcon,
   account: AccountIcon,
 };
 
@@ -99,6 +98,10 @@ type AccountSectionData = {
   userRole: string;
   workspaces: AccountWorkspaceOption[];
   currentWorkspaceId: string;
+};
+
+/** Раздел «Приложение»: установка PWA плюс язык рабочего пространства. */
+type AppSectionData = {
   language: WorkspaceLanguage;
   canManageLanguage: boolean;
 };
@@ -230,9 +233,8 @@ async function loadNotificationsSectionData(): Promise<NotificationSettingsView 
 }
 
 /**
- * Раздел «Аккаунт»: те же данные, что уходят в меню пользователя левого меню
- * (список workspace'ов пользователя и текущий workspace), плюс язык
- * приложения из `workspaces.settings.lang`.
+ * Раздел «Аккаунт»: те же данные, что уходят в меню пользователя левого меню —
+ * список workspace'ов пользователя и текущий workspace.
  */
 async function loadAccountSectionData(): Promise<AccountSectionData | null> {
   const user = await getAuthenticatedUser();
@@ -248,7 +250,6 @@ async function loadAccountSectionData(): Promise<AccountSectionData | null> {
   }
 
   const workspaces = await listUserWorkspaces(user.id);
-  const supabase = await createServerSupabaseClient();
 
   return {
     userName: user.email?.split("@")[0] ?? "Пользователь",
@@ -258,6 +259,26 @@ async function loadAccountSectionData(): Promise<AccountSectionData | null> {
       name: entry.name,
     })),
     currentWorkspaceId: workspace.id,
+  };
+}
+
+/** Язык приложения из `workspaces.settings.lang` для раздела «Приложение». */
+async function loadAppSectionData(): Promise<AppSectionData | null> {
+  const user = await getAuthenticatedUser();
+
+  if (!user) {
+    return null;
+  }
+
+  const workspace = await getCurrentWorkspace(user.id);
+
+  if (!workspace) {
+    return null;
+  }
+
+  const supabase = await createServerSupabaseClient();
+
+  return {
     language: await getWorkspaceLanguage(supabase, workspace.id),
     // Политика `workspaces_update_owner`: settings меняет только владелец.
     canManageLanguage: workspace.role === "owner",
@@ -327,6 +348,7 @@ export default async function SettingsPage({
     sectionId === "notifications" ? await loadNotificationsSectionData() : null;
   const accountData =
     sectionId === "account" ? await loadAccountSectionData() : null;
+  const appData = sectionId === "app" ? await loadAppSectionData() : null;
   const connectResult =
     sectionId === "channels" ? readConnectResult(params) : null;
 
@@ -337,7 +359,7 @@ export default async function SettingsPage({
           <h2>Настройки</h2>
         </div>
         <div className={styles.list}>
-          {SETTINGS_SECTIONS.map((entry) => {
+          {SETTINGS_SECTIONS.filter((entry) => !entry.hidden).map((entry) => {
             const Icon = SECTION_ICONS[entry.id];
 
             return (
@@ -376,6 +398,7 @@ export default async function SettingsPage({
               sectionId={sectionId}
               accountData={accountData}
               aiData={aiData}
+              appData={appData}
               notificationsData={notificationsData}
               channels={channels}
               connectResult={connectResult}
@@ -393,6 +416,7 @@ function SectionDetail({
   sectionId,
   accountData,
   aiData,
+  appData,
   notificationsData,
   channels,
   connectResult,
@@ -402,6 +426,7 @@ function SectionDetail({
   sectionId: SettingsSectionId;
   accountData: AccountSectionData | null;
   aiData: AiSectionData | null;
+  appData: AppSectionData | null;
   notificationsData: NotificationSettingsView | null;
   channels: ChannelConnectionListItem[] | null;
   connectResult: ChannelConnectResult | null;
@@ -434,9 +459,7 @@ function SectionDetail({
     case "notifications":
       return <NotificationsSection data={notificationsData} />;
     case "app":
-      return <AppSection />;
-    case "privacy":
-      return <PrivacySection />;
+      return <AppSection data={appData} />;
     case "account":
       return <AccountSection data={accountData} />;
   }
@@ -453,8 +476,6 @@ function AccountSection({ data }: { data: AccountSectionData | null }) {
       userRole={data.userRole}
       workspaces={data.workspaces}
       currentWorkspaceId={data.currentWorkspaceId}
-      language={data.language}
-      canManageLanguage={data.canManageLanguage}
     />
   );
 }
@@ -585,7 +606,7 @@ function NotificationsSection({
   );
 }
 
-function AppSection() {
+function AppSection({ data }: { data: AppSectionData | null }) {
   return (
     <>
       <p className={setStyles.description}>
@@ -593,28 +614,14 @@ function AppSection() {
         как обычное — в отдельном окне, с поддержкой push-уведомлений.
       </p>
       <AppInstallPanel />
-    </>
-  );
-}
-
-function PrivacySection() {
-  return (
-    <>
-      <p className={setStyles.description}>
-        GDPR: экспорт и удаление данных workspace. Удаление стирает всё каскадно.
-      </p>
-      <div className={`${uiStyles.card} ${uiStyles.cardRow}`}>
-        <StubButton
-          className={`${uiStyles.button} ${uiStyles.buttonSecondary}`}
-        >
-          Экспортировать данные
-        </StubButton>
-        <StubButton
-          className={`${uiStyles.button} ${uiStyles.buttonSecondary} ${uiStyles.buttonDanger}`}
-        >
-          Удалить workspace…
-        </StubButton>
-      </div>
+      {data ? (
+        <LanguageCard
+          initialLanguage={data.language}
+          canManage={data.canManageLanguage}
+        />
+      ) : (
+        <p className={setStyles.formError}>Язык приложения недоступен.</p>
+      )}
     </>
   );
 }

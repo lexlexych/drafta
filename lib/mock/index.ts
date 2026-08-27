@@ -209,13 +209,17 @@ export type SettingsSectionId =
   | "team"
   | "notifications"
   | "app"
-  | "privacy"
   | "account";
 
 export type SettingsSectionView = {
   id: SettingsSectionId;
   title: string;
   description: string;
+  /**
+   * Раздел не показывается в списке настроек, но остаётся доступным по
+   * `?section=<id>` — так скрытая от пользователя страница продолжает жить.
+   */
+  hidden?: boolean;
 };
 
 export type SettingsChannelRowView = {
@@ -908,22 +912,22 @@ export const SETTINGS_SECTIONS: SettingsSectionView[] = [
     title: "Шаблоны ответов",
     description: "Готовые тексты ответов по языкам",
   },
-  { id: "team", title: "Команда", description: "Участники и приглашения" },
+  {
+    id: "team",
+    title: "Команда",
+    description: "Участники и приглашения",
+    hidden: true,
+  },
   { id: "notifications", title: "Уведомления", description: "Частота push" },
   {
     id: "app",
     title: "Приложение",
-    description: "Установка на устройство",
-  },
-  {
-    id: "privacy",
-    title: "Приватность",
-    description: "Экспорт и удаление данных",
+    description: "Установка на устройство и язык",
   },
   {
     id: "account",
     title: "Аккаунт",
-    description: "Язык, рабочие пространства и выход",
+    description: "Рабочие пространства, выход и удаление workspace",
   },
 ];
 
