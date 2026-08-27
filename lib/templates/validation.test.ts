@@ -65,6 +65,28 @@ describe("validateTemplate", () => {
     ).toBe("Неизвестный язык шаблона.");
   });
 
+  it("принимает несколько вариантов на один язык", () => {
+    const result = validateTemplate({
+      ...base,
+      bodies: { ru: "Первый вариант", "ru-2": "Второй вариант", de: "Text" },
+    });
+
+    expect(result.ok && result.value.bodies).toEqual({
+      ru: "Первый вариант",
+      "ru-2": "Второй вариант",
+      de: "Text",
+    });
+  });
+
+  it("не пропускает номер варианта вне формата", () => {
+    // `ru-1` — это `ru`; ноль, сотня и вариант несуществующего языка тоже нет.
+    for (const key of ["ru-1", "ru-0", "ru-100", "xx-2"]) {
+      expect(
+        expectError(validateTemplate({ ...base, bodies: { [key]: "Text" } })),
+      ).toBe("Неизвестный язык шаблона.");
+    }
+  });
+
   it("ограничивает суммарный размер текстов", () => {
     expect(
       expectError(

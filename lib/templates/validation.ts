@@ -6,12 +6,16 @@
  * прошедшее здесь, не может упасть на стороне базы.
  */
 
-import { isTemplateLanguage } from "@/lib/i18n/template-languages";
+import { isTemplateBodyKey } from "@/lib/i18n/template-languages";
 
 export const MAX_TEMPLATE_NAME_LENGTH = 120;
 export const MAX_TEMPLATE_BODIES_BYTES = 256 * 1024;
 
-/** Тексты шаблона: код языка → текст. */
+/**
+ * Тексты шаблона: ключ → текст. Ключ — это язык плюс номер варианта
+ * (`ru`, `ru-2`), см. `parseTemplateBodyKey`: на одном языке у шаблона может
+ * быть несколько формулировок.
+ */
 export type TemplateBodies = Record<string, string>;
 
 export type TemplateInput = {
@@ -51,17 +55,17 @@ export function validateTemplate(input: {
 
   const bodies: TemplateBodies = {};
 
-  for (const [language, rawText] of Object.entries(input.bodies)) {
-    if (!isTemplateLanguage(language)) {
+  for (const [key, rawText] of Object.entries(input.bodies)) {
+    if (!isTemplateBodyKey(key)) {
       return { ok: false, error: "Неизвестный язык шаблона." };
     }
 
     const text = rawText.replace(/\r\n?/g, "\n");
 
-    // Язык без текста не сохраняется: пустая вкладка ничего не добавила бы в
-    // поповер, зато засоряла бы список языков шаблона.
+    // Вариант без текста не сохраняется: пустая вкладка ничего не добавила бы в
+    // поповер, зато засоряла бы список вариантов шаблона.
     if (text.trim()) {
-      bodies[language] = text;
+      bodies[key] = text;
     }
   }
 

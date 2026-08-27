@@ -665,10 +665,16 @@
   font-size: 12px;
 }
 
+/* Подпись — короткий код (`ru`, `ru-2`), поэтому вкладке нужна своя ширина:
+   иначе двухбуквенные пилюли схлопываются и по ним трудно попасть. */
 .langTab button {
+  min-width: 26px;
   padding: 5px 0;
   color: inherit;
   font: inherit;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  text-transform: none;
 }
 
 .langTab[data-active="true"] {

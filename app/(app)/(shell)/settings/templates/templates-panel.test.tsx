@@ -84,10 +84,11 @@ describe("ReplyTemplatesPanel", () => {
     expect(screen.getByText("Шаблонов пока нет")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "+ Новый шаблон" }));
 
-    expect(screen.getByRole("tab", { name: "Deutsch" })).toBeTruthy();
+    // Вкладка подписана коротким кодом, доступное имя — полным названием.
+    expect(screen.getByRole("tab", { name: "Deutsch" }).textContent).toBe("de");
     expect(screen.queryByRole("tab", { name: "English" })).toBeNull();
-    // Единственный язык удалить нельзя — вкладке нужен хотя бы один.
-    expect(screen.queryByRole("button", { name: /Удалить язык/ })).toBeNull();
+    // Единственный текст удалить нельзя — вкладке нужен хотя бы один.
+    expect(screen.queryByRole("button", { name: /Удалить текст/ })).toBeNull();
   });
 
   it("добавляет язык вкладкой и сохраняет тексты обоих языков", async () => {
@@ -130,7 +131,7 @@ describe("ReplyTemplatesPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: "Сроки доставки" }));
 
     fireEvent.click(
-      screen.getByRole("button", { name: "Удалить язык: English" }),
+      screen.getByRole("button", { name: "Удалить текст: English" }),
     );
     // Текст на английском был непустым — подтверждения тут не мокаем, значит
     // jsdom вернёт false и язык останется.
@@ -138,7 +139,7 @@ describe("ReplyTemplatesPanel", () => {
 
     vi.spyOn(window, "confirm").mockReturnValue(true);
     fireEvent.click(
-      screen.getByRole("button", { name: "Удалить язык: English" }),
+      screen.getByRole("button", { name: "Удалить текст: English" }),
     );
     expect(screen.queryByRole("tab", { name: "English" })).toBeNull();
 
@@ -176,6 +177,63 @@ describe("ReplyTemplatesPanel", () => {
         }),
       );
     });
+  });
+
+  it("заводит второй вариант, когда язык выбран повторно", async () => {
+    renderPanel();
+    fireEvent.click(screen.getByRole("button", { name: "Спасибо за заказ" }));
+
+    // Список «+» не прячет уже добавленные языки и показывает номер варианта,
+    // который получится при выборе.
+    const add = screen.getByRole("combobox", { name: "Добавить язык" });
+    expect(
+      screen.getByRole("option", { name: "Deutsch — вариант 2" }),
+    ).toBeTruthy();
+
+    fireEvent.change(add, { target: { value: "de" } });
+
+    const secondTab = screen.getByRole("tab", { name: "Deutsch · 2" });
+    expect(secondTab.textContent).toBe("de-2");
+    expect(secondTab.getAttribute("aria-selected")).toBe("true");
+    // Новая вкладка пустая — прежний текст остался на первой.
+    expect((bodyField() as HTMLTextAreaElement).value).toBe("");
+
+    fireEvent.change(bodyField(), { target: { value: "Vielen Dank!" } });
+    fireEvent.click(screen.getByRole("button", { name: "Сохранить" }));
+
+    await waitFor(() => {
+      expect(updateReplyTemplateAction).toHaveBeenCalledWith(
+        expect.objectContaining({
+          bodies: { de: "Danke!", "de-2": "Vielen Dank!" },
+        }),
+      );
+    });
+  });
+
+  it("перенумеровывает варианты после удаления среднего", () => {
+    renderPanel([
+      {
+        ...templates[1]!,
+        bodies: { ru: "Первый", "ru-2": "Второй", "ru-3": "Третий" },
+      },
+    ]);
+    fireEvent.click(screen.getByRole("button", { name: "Спасибо за заказ" }));
+
+    expect(
+      screen.getAllByRole("tab").map((tab) => tab.textContent),
+    ).toEqual(["ru", "ru-2", "ru-3"]);
+
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    fireEvent.click(
+      screen.getByRole("button", { name: "Удалить текст: Русский · 2" }),
+    );
+
+    // Номера закрываются сразу, а не при сохранении: `ru-3` становится `ru-2`.
+    expect(
+      screen.getAllByRole("tab").map((tab) => tab.textContent),
+    ).toEqual(["ru", "ru-2"]);
+    fireEvent.click(screen.getByRole("tab", { name: "Русский · 2" }));
+    expect((bodyField() as HTMLTextAreaElement).value).toBe("Третий");
   });
 
   it("не отправляет шаблон без названия", () => {

@@ -15,8 +15,9 @@
 import { useEffect, useRef, useState } from "react";
 
 import {
-  sortTemplateLanguages,
-  templateLanguageLabel,
+  sortTemplateBodyKeys,
+  templateBodyKeyLabel,
+  templateBodyKeyShortLabel,
   type TemplateLanguage,
 } from "@/lib/i18n/template-languages";
 
@@ -26,9 +27,16 @@ import styles from "./template-picker.module.css";
 export type ReplyTemplateOption = {
   id: string;
   name: string;
-  /** Код языка → текст. Языков без текста здесь не бывает: их не хранит база. */
+  /**
+   * Ключ → текст, где ключ — язык плюс номер варианта (`ru`, `ru-2`): на одном
+   * языке у шаблона бывает несколько формулировок. Пустых текстов здесь не
+   * бывает — их не хранит база.
+   */
   bodies: Record<string, string>;
 };
+
+/** Сколько кодов помещается в подсказку рядом с названием шаблона. */
+const HINT_KEY_LIMIT = 3;
 
 export function TemplatePicker({
   templates,
@@ -120,22 +128,24 @@ export function TemplatePicker({
                 <span className={styles.panelTitle}>{openTemplate.name}</span>
               </div>
               <ul className={styles.list}>
-                {sortTemplateLanguages(
+                {sortTemplateBodyKeys(
                   Object.keys(openTemplate.bodies),
                   workspaceLanguage,
-                ).map((language) => (
-                  <li key={language}>
+                ).map((key) => (
+                  <li key={key}>
                     <button
                       type="button"
                       role="menuitem"
                       className={styles.option}
-                      onClick={() => pick(openTemplate.bodies[language] ?? "")}
+                      onClick={() => pick(openTemplate.bodies[key] ?? "")}
                     >
                       <span className={styles.optionLabel}>
-                        {templateLanguageLabel(language)}
+                        {templateBodyKeyLabel(key)}
                       </span>
+                      {/* Варианты одного языка различает именно текст, а не
+                          подпись, поэтому превью здесь несущее. */}
                       <span className={styles.optionPreview}>
-                        {openTemplate.bodies[language]}
+                        {openTemplate.bodies[key]}
                       </span>
                     </button>
                   </li>
@@ -145,7 +155,16 @@ export function TemplatePicker({
           ) : (
             <ul className={styles.list}>
               {templates.map((template) => {
-                const languages = Object.keys(template.bodies);
+                const keys = sortTemplateBodyKeys(
+                  Object.keys(template.bodies),
+                  workspaceLanguage,
+                );
+                // Считать языки нельзя — два из трёх текстов бывают на одном
+                // языке. Перечисляем сами коды, длинный список обрезаем.
+                const hint = keys
+                  .slice(0, HINT_KEY_LIMIT)
+                  .map(templateBodyKeyShortLabel)
+                  .join(" · ");
 
                 return (
                   <li key={template.id}>
@@ -154,9 +173,9 @@ export function TemplatePicker({
                       role="menuitem"
                       className={styles.option}
                       onClick={() => {
-                        // Единственный язык выбирать не из чего — вставляем сразу.
-                        if (languages.length === 1) {
-                          pick(template.bodies[languages[0]!] ?? "");
+                        // Единственный текст выбирать не из чего — вставляем сразу.
+                        if (keys.length === 1) {
+                          pick(template.bodies[keys[0]!] ?? "");
                           return;
                         }
 
@@ -165,9 +184,7 @@ export function TemplatePicker({
                     >
                       <span className={styles.optionLabel}>{template.name}</span>
                       <span className={styles.optionHint}>
-                        {languages.length === 1
-                          ? templateLanguageLabel(languages[0]!)
-                          : `${languages.length} яз.`}
+                        {keys.length > HINT_KEY_LIMIT ? `${hint} …` : hint}
                       </span>
                     </button>
                   </li>

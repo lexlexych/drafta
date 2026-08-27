@@ -21,8 +21,12 @@ import { useRouter } from "next/navigation";
 
 import {
   TEMPLATE_LANGUAGES,
-  sortTemplateLanguages,
-  templateLanguageLabel,
+  nextTemplateBodyKey,
+  parseTemplateBodyKey,
+  renumberTemplateBodyKeys,
+  sortTemplateBodyKeys,
+  templateBodyKeyLabel,
+  templateBodyKeyShortLabel,
   type TemplateLanguage,
 } from "@/lib/i18n/template-languages";
 import {
@@ -54,8 +58,9 @@ type EditorState = {
   id: string | null;
   name: string;
   bodies: TemplateBodies;
-  languages: string[];
-  activeLanguage: string;
+  /** Ключи `bodies` в порядке вкладок: это язык + номер варианта, не язык. */
+  bodyKeys: string[];
+  activeKey: string;
   isEnabledForMessages: boolean;
   isEnabledForComments: boolean;
 };
@@ -95,21 +100,21 @@ export function ReplyTemplatesPanel({
   }
 
   function openTemplate(template: ReplyTemplateListItem) {
-    const languages = sortTemplateLanguages(
+    const bodyKeys = sortTemplateBodyKeys(
       Object.keys(template.bodies),
       workspaceLanguage,
     );
-    // Шаблон без единого языка база не хранит, но пустой список сломал бы
+    // Шаблон без единого текста база не хранит, но пустой список сломал бы
     // вкладки — подставляем язык воркспейса.
-    const resolved = languages.length > 0 ? languages : [workspaceLanguage];
+    const resolved = bodyKeys.length > 0 ? bodyKeys : [workspaceLanguage];
 
     setError(null);
     setEditor({
       id: template.id,
       name: template.name,
       bodies: { ...template.bodies },
-      languages: resolved,
-      activeLanguage: resolved[0]!,
+      bodyKeys: resolved,
+      activeKey: resolved[0]!,
       isEnabledForMessages: template.isEnabledForMessages,
       isEnabledForComments: template.isEnabledForComments,
     });
@@ -121,8 +126,8 @@ export function ReplyTemplatesPanel({
       id: null,
       name: "",
       bodies: { [workspaceLanguage]: "" },
-      languages: [workspaceLanguage],
-      activeLanguage: workspaceLanguage,
+      bodyKeys: [workspaceLanguage],
+      activeKey: workspaceLanguage,
       isEnabledForMessages: true,
       isEnabledForComments: false,
     });
@@ -335,58 +340,70 @@ export function ReplyTemplatesPanel({
               </div>
 
               <LanguageTabs
-                languages={editor.languages}
-                activeLanguage={editor.activeLanguage}
+                bodyKeys={editor.bodyKeys}
+                activeKey={editor.activeKey}
                 disabled={isPending}
-                onSelect={(language) => patchEditor({ activeLanguage: language })}
-                onAdd={(language) =>
+                onSelect={(key) => patchEditor({ activeKey: key })}
+                onAdd={(language) => {
+                  // Язык, который уже есть, добавляется следующим вариантом:
+                  // `ru` → `ru-2`. Новая вкладка сразу активна — текст набирают
+                  // именно на ней.
+                  const key = nextTemplateBodyKey(language, editor.bodyKeys);
+
                   patchEditor({
-                    languages: [...editor.languages, language],
-                    bodies: { ...editor.bodies, [language]: "" },
-                    activeLanguage: language,
-                  })
-                }
-                onRemove={(language) => {
-                  if (editor.languages.length === 1) {
+                    bodyKeys: [...editor.bodyKeys, key],
+                    bodies: { ...editor.bodies, [key]: "" },
+                    activeKey: key,
+                  });
+                }}
+                onRemove={(key) => {
+                  if (editor.bodyKeys.length === 1) {
                     return;
                   }
                   if (
-                    editor.bodies[language]?.trim() &&
+                    editor.bodies[key]?.trim() &&
                     !window.confirm(
-                      `Удалить текст на языке «${templateLanguageLabel(language)}»?`,
+                      `Удалить текст «${templateBodyKeyLabel(key)}»?`,
                     )
                   ) {
                     return;
                   }
 
-                  const languages = editor.languages.filter(
-                    (entry) => entry !== language,
-                  );
-                  const bodies = { ...editor.bodies };
-                  delete bodies[language];
+                  const kept = editor.bodyKeys.filter((entry) => entry !== key);
+                  const bodies: TemplateBodies = {};
+                  for (const entry of kept) {
+                    bodies[entry] = editor.bodies[entry] ?? "";
+                  }
+
+                  // Номера закрываются сразу, а не при сохранении: иначе после
+                  // удаления `ru-2` из трёх на вкладках остался бы `ru-3` без
+                  // второго, и номер прыгнул бы уже после «Сохранить».
+                  const renumbered = renumberTemplateBodyKeys(bodies);
+                  const renumberedKeys = Object.keys(renumbered);
+                  const activeIndex = kept.indexOf(editor.activeKey);
 
                   patchEditor({
-                    languages,
-                    bodies,
-                    activeLanguage:
-                      editor.activeLanguage === language
-                        ? languages[0]!
-                        : editor.activeLanguage,
+                    bodyKeys: renumberedKeys,
+                    bodies: renumbered,
+                    activeKey:
+                      activeIndex === -1
+                        ? renumberedKeys[0]!
+                        : renumberedKeys[activeIndex]!,
                   });
                 }}
               />
 
               <label className={styles.templateBodyField}>
                 <span className={styles.visuallyHidden}>
-                  Текст шаблона: {templateLanguageLabel(editor.activeLanguage)}
+                  Текст шаблона: {templateBodyKeyLabel(editor.activeKey)}
                 </span>
                 <textarea
-                  value={editor.bodies[editor.activeLanguage] ?? ""}
+                  value={editor.bodies[editor.activeKey] ?? ""}
                   onChange={(event) =>
                     patchEditor({
                       bodies: {
                         ...editor.bodies,
-                        [editor.activeLanguage]: event.target.value,
+                        [editor.activeKey]: event.target.value,
                       },
                     })
                   }
@@ -471,55 +488,75 @@ function SurfaceToggle({
 }
 
 /**
- * Вкладки языков шаблона. Языки не выбираются заранее списком, а добавляются по
- * одному: у шаблона их обычно два-три, а двадцать вкладок сразу только прятали
- * бы те, что действительно заполнены.
+ * Вкладки текстов шаблона. Вкладка — это язык плюс номер варианта, поэтому в
+ * выпадающем списке остаются и уже добавленные языки: выбрать русский второй
+ * раз — значит завести ещё одну формулировку на русском (`ru-2`).
+ *
+ * Подпись вкладки — сам ключ (`ru`, `ru-2`): вкладок бывает с десяток, и полные
+ * названия съедали бы строку. Полное имя языка остаётся в выпадающем списке и в
+ * подсказке вкладки.
  */
 function LanguageTabs({
-  languages,
-  activeLanguage,
+  bodyKeys,
+  activeKey,
   disabled,
   onSelect,
   onAdd,
   onRemove,
 }: {
-  languages: string[];
-  activeLanguage: string;
+  bodyKeys: string[];
+  activeKey: string;
   disabled: boolean;
-  onSelect: (language: string) => void;
-  onAdd: (language: string) => void;
-  onRemove: (language: string) => void;
+  onSelect: (key: string) => void;
+  onAdd: (language: TemplateLanguage) => void;
+  onRemove: (key: string) => void;
 }) {
-  const available = useMemo(
-    () => TEMPLATE_LANGUAGES.filter((entry) => !languages.includes(entry.value)),
-    [languages],
+  // Список не фильтруется: у каждого языка показываем номер варианта, который
+  // получится при выборе, — чтобы было видно, что добавится ещё один текст, а
+  // не откроется существующий.
+  const options = useMemo(
+    () =>
+      TEMPLATE_LANGUAGES.map((entry) => {
+        const taken = bodyKeys.filter(
+          (key) => parseTemplateBodyKey(key)?.language === entry.value,
+        ).length;
+
+        return {
+          value: entry.value,
+          label: taken === 0 ? entry.label : `${entry.label} — вариант ${taken + 1}`,
+        };
+      }),
+    [bodyKeys],
   );
 
   return (
     <div className={styles.langTabs}>
-      <div role="tablist" aria-label="Языки шаблона" className={styles.langTabList}>
-        {languages.map((language) => {
-          const isActive = language === activeLanguage;
+      <div role="tablist" aria-label="Тексты шаблона" className={styles.langTabList}>
+        {bodyKeys.map((key) => {
+          const isActive = key === activeKey;
+          const label = templateBodyKeyLabel(key);
 
           return (
-            <span key={language} className={styles.langTab} data-active={isActive}>
+            <span key={key} className={styles.langTab} data-active={isActive}>
               <button
                 type="button"
                 role="tab"
                 aria-selected={isActive}
+                aria-label={label}
+                title={label}
                 disabled={disabled}
-                onClick={() => onSelect(language)}
+                onClick={() => onSelect(key)}
               >
-                {templateLanguageLabel(language)}
+                {templateBodyKeyShortLabel(key)}
               </button>
-              {languages.length > 1 ? (
+              {bodyKeys.length > 1 ? (
                 <button
                   type="button"
                   className={styles.langTabRemove}
-                  aria-label={`Удалить язык: ${templateLanguageLabel(language)}`}
-                  title="Удалить язык"
+                  aria-label={`Удалить текст: ${label}`}
+                  title="Удалить текст"
                   disabled={disabled}
-                  onClick={() => onRemove(language)}
+                  onClick={() => onRemove(key)}
                 >
                   ✕
                 </button>
@@ -529,31 +566,29 @@ function LanguageTabs({
         })}
       </div>
 
-      {available.length > 0 ? (
-        <label className={styles.langTabAdd}>
-          <span className={styles.langTabAddIcon} aria-hidden="true">
-            <PlusIcon size={14} />
-          </span>
-          <span className={styles.visuallyHidden}>Добавить язык</span>
-          <select
-            aria-label="Добавить язык"
-            value=""
-            disabled={disabled}
-            onChange={(event) => {
-              if (event.target.value) {
-                onAdd(event.target.value);
-              }
-            }}
-          >
-            <option value="">Добавить язык…</option>
-            {available.map((entry) => (
-              <option key={entry.value} value={entry.value}>
-                {entry.label}
-              </option>
-            ))}
-          </select>
-        </label>
-      ) : null}
+      <label className={styles.langTabAdd}>
+        <span className={styles.langTabAddIcon} aria-hidden="true">
+          <PlusIcon size={14} />
+        </span>
+        <span className={styles.visuallyHidden}>Добавить язык</span>
+        <select
+          aria-label="Добавить язык"
+          value=""
+          disabled={disabled}
+          onChange={(event) => {
+            if (event.target.value) {
+              onAdd(event.target.value as TemplateLanguage);
+            }
+          }}
+        >
+          <option value="">Добавить язык…</option>
+          {options.map((entry) => (
+            <option key={entry.value} value={entry.value}>
+              {entry.label}
+            </option>
+          ))}
+        </select>
+      </label>
     </div>
   );
 }

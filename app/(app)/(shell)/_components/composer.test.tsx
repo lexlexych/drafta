@@ -76,7 +76,11 @@ const TEMPLATES: ReplyTemplateOption[] = [
   {
     id: "template-1",
     name: "Сроки доставки",
-    bodies: { de: "Zwei Werktage.", en: "Two business days." },
+    bodies: {
+      de: "Zwei Werktage.",
+      "de-2": "Der Versand dauert zwei Werktage.",
+      en: "Two business days.",
+    },
   },
   {
     id: "template-2",
@@ -342,6 +346,23 @@ describe("Composer", () => {
 
     expect(field().value).toBe("Zwei Werktage.");
     expect(screen.queryByRole("menu")).toBeNull();
+  });
+
+  it("offers each variant of one language separately", () => {
+    renderComposer(null, TEMPLATES);
+
+    fireEvent.click(templateButton()!);
+    // Подсказка перечисляет коды, а не число языков: два текста тут немецкие.
+    expect(
+      screen.getByRole("menuitem", { name: /Сроки доставки/ }).textContent,
+    ).toContain("de · de-2 · en");
+
+    fireEvent.click(screen.getByRole("menuitem", { name: /Сроки доставки/ }));
+
+    const variant = screen.getByRole("menuitem", { name: /Deutsch · 2/ });
+    fireEvent.click(variant);
+
+    expect(field().value).toBe("Der Versand dauert zwei Werktage.");
   });
 
   it("skips the language step for a single-language template", () => {

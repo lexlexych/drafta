@@ -66,24 +66,160 @@ export function defaultTemplateLanguage(
     : FALLBACK_TEMPLATE_LANGUAGE;
 }
 
-/** Языки шаблона в порядке списка; язык воркспейса — всегда первым. */
-export function sortTemplateLanguages(
-  languages: readonly string[],
+/* -------------------------------------------------------------------------
+ * Ключи `reply_templates.bodies`: язык плюс номер варианта
+ * ---------------------------------------------------------------------- */
+
+/**
+ * У шаблона может быть несколько формулировок на одном языке — под постом
+ * десять одинаковых дословных ответов читаются как спам. Поэтому ключ текста —
+ * не просто код языка, а «язык + номер записи»: `ru` (первый вариант), `ru-2`,
+ * `ru-3`, …
+ *
+ * Первый вариант остаётся голым кодом языка: так все шаблоны, созданные до
+ * появления вариантов, остаются валидными без миграции данных. Ту же форму
+ * проверяет `private.is_language_text_map` в
+ * `supabase/migrations/20260827110000_reply_template_variants.sql`.
+ */
+export type TemplateBodyKey = {
+  language: TemplateLanguage;
+  /** 1 у голого кода языка, дальше — то, что стоит после дефиса. */
+  variant: number;
+};
+
+/** Номер второго варианта: первым считается сам код языка. */
+const FIRST_NUMBERED_VARIANT = 2;
+const MAX_TEMPLATE_VARIANT = 99;
+
+export function parseTemplateBodyKey(key: string): TemplateBodyKey | null {
+  const [language, suffix, ...rest] = key.split("-");
+
+  if (rest.length > 0 || !isTemplateLanguage(language)) {
+    return null;
+  }
+  if (suffix === undefined) {
+    return { language, variant: 1 };
+  }
+
+  // `ru-1` не бывает: первый вариант пишется голым кодом, иначе один и тот же
+  // текст имел бы два разных ключа.
+  if (!/^[0-9]{1,2}$/.test(suffix)) {
+    return null;
+  }
+
+  const variant = Number(suffix);
+
+  return variant >= FIRST_NUMBERED_VARIANT && variant <= MAX_TEMPLATE_VARIANT
+    ? { language, variant }
+    : null;
+}
+
+export function isTemplateBodyKey(value: unknown): value is string {
+  return typeof value === "string" && parseTemplateBodyKey(value) !== null;
+}
+
+export function buildTemplateBodyKey(
+  language: TemplateLanguage,
+  variant: number,
+): string {
+  return variant <= 1 ? language : `${language}-${variant}`;
+}
+
+/** Ключ для новой вкладки: первый свободный номер у этого языка. */
+export function nextTemplateBodyKey(
+  language: TemplateLanguage,
+  existingKeys: readonly string[],
+): string {
+  const taken = new Set(existingKeys);
+
+  for (let variant = 1; variant <= MAX_TEMPLATE_VARIANT; variant += 1) {
+    const key = buildTemplateBodyKey(language, variant);
+
+    if (!taken.has(key)) {
+      return key;
+    }
+  }
+
+  return buildTemplateBodyKey(language, MAX_TEMPLATE_VARIANT);
+}
+
+/** Полное название для поповера и aria-label: «Русский», «Русский · 2». */
+export function templateBodyKeyLabel(key: string): string {
+  const parsed = parseTemplateBodyKey(key);
+
+  if (!parsed) {
+    return key;
+  }
+
+  const label = templateLanguageLabel(parsed.language);
+
+  return parsed.variant === 1 ? label : `${label} · ${parsed.variant}`;
+}
+
+/**
+ * Подпись вкладки — сам ключ (`ru`, `ru-2`). Вкладок у шаблона может быть с
+ * десяток, и полные названия («Українська») съедали бы всю строку; полное имя
+ * остаётся в выпадающем списке и в подсказке вкладки.
+ */
+export function templateBodyKeyShortLabel(key: string): string {
+  return key;
+}
+
+/**
+ * Закрывает дырки в нумерации после удаления варианта: `ru`, `ru-3` →
+ * `ru`, `ru-2`. Порядок ключей сохраняется, тексты переезжают вместе с ними.
+ * Ключи ничем не адресуются извне, поэтому переписывать их безопасно.
+ */
+export function renumberTemplateBodyKeys(
+  bodies: Record<string, string>,
+): Record<string, string> {
+  const seen = new Map<string, number>();
+  const result: Record<string, string> = {};
+
+  for (const [key, text] of Object.entries(bodies)) {
+    const parsed = parseTemplateBodyKey(key);
+
+    if (!parsed) {
+      result[key] = text;
+      continue;
+    }
+
+    const variant = (seen.get(parsed.language) ?? 0) + 1;
+    seen.set(parsed.language, variant);
+    result[buildTemplateBodyKey(parsed.language, variant)] = text;
+  }
+
+  return result;
+}
+
+/**
+ * Ключи в порядке списка языков, внутри языка — по номеру варианта; язык
+ * воркспейса всегда первым.
+ */
+export function sortTemplateBodyKeys(
+  keys: readonly string[],
   preferred: TemplateLanguage,
 ): string[] {
   const order = TEMPLATE_LANGUAGES.map((language) => language.value) as string[];
-  // Неизвестный код (язык убрали из списка, а шаблон с ним остался) уезжает в
+  // Неизвестный ключ (язык убрали из списка, а шаблон с ним остался) уезжает в
   // конец, а не в начало, как дал бы сырой indexOf === -1.
-  const rank = (value: string) => {
-    const index = order.indexOf(value);
+  const rank = (key: string) => {
+    const parsed = parseTemplateBodyKey(key);
 
-    return index === -1 ? order.length : index;
+    if (!parsed) {
+      return { language: order.length, variant: Number.MAX_SAFE_INTEGER };
+    }
+
+    return {
+      language: parsed.language === preferred ? -1 : order.indexOf(parsed.language),
+      variant: parsed.variant,
+    };
   };
 
-  return [...languages].sort((a, b) => {
-    if (a === preferred) return -1;
-    if (b === preferred) return 1;
+  return [...keys].sort((a, b) => {
+    const left = rank(a);
+    const right = rank(b);
 
-    return rank(a) - rank(b);
+    return left.language - right.language || left.variant - right.variant;
   });
 }

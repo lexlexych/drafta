@@ -652,7 +652,10 @@ values
     'a0000000-0000-4000-8000-000000000802',
     'a0000000-0000-4000-8000-000000000001',
     'Danke für die Bestellung',
-    '{"de":"Vielen Dank für Ihre Bestellung!","en":"Thank you for your order!"}'::jsonb,
+    -- Шаблон для комментариев: три немецких варианта, чтобы под постом не шёл
+    -- десять раз один и тот же дословный ответ. `de` — первый вариант, дальше
+    -- нумерация (см. 20260827110000_reply_template_variants.sql).
+    '{"de":"Vielen Dank für Ihre Bestellung!","de-2":"Danke für die Bestellung — wir melden uns gleich.","de-3":"Herzlichen Dank für den Auftrag!","en":"Thank you for your order!"}'::jsonb,
     true,
     true,
     1
