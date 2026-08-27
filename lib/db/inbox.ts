@@ -15,6 +15,12 @@ import {
   listConversationTranslations,
   type MessageTranslationView,
 } from "@/lib/db/message-translations";
+import {
+  THREAD_PAGE_SIZE,
+  olderThan,
+  toThreadPage,
+  type ThreadCursor,
+} from "@/lib/db/thread-page";
 import { DEFAULT_WORKSPACE_LANGUAGE } from "@/lib/i18n/languages";
 import {
   avatarFor,
@@ -136,7 +142,19 @@ type MessageRow = {
   created_at: string;
 };
 
+const MESSAGE_COLUMNS =
+  "id, conversation_id, direction, text, attachments, delivery_status, created_at";
+
+/** Размер страницы треда: последние N сообщений и каждая подгрузка вверх. */
+export const MESSAGE_PAGE_SIZE = THREAD_PAGE_SIZE;
+
 export type InboxThreadMessageView = ThreadMessageView & {
+  /**
+   * Момент отправки в ISO — ключ сортировки окна треда на клиенте и курсор для
+   * подгрузки вверх. `time` рядом уже отформатирован под показ и для этого не
+   * годится.
+   */
+  createdAt: string;
   /** Failed outgoing message — the thread renders the retry button (stage 3). */
   canRetrySend: boolean;
   /**
@@ -150,7 +168,10 @@ export type InboxThreadMessageView = ThreadMessageView & {
 
 export type InboxThreadView = Omit<ThreadView, "draft" | "messages"> & {
   draft: ActiveDraftView | null;
+  /** Последняя страница переписки в хронологии, а не вся история. */
   messages: InboxThreadMessageView[];
+  /** Выше загруженной страницы есть ещё сообщения — тред подтянет их при скролле. */
+  hasMoreBefore: boolean;
   /**
    * Set when the platform's response window (channel capabilities) has
    * already closed — the composer warns but does not block
@@ -284,13 +305,13 @@ function identityAvatarKey(contactId: string, platform: string): string {
 }
 
 /**
- * Last message per conversation, for list previews. Fetches every message of
- * every given conversation and reduces client-side (ascending order, last
- * write per `conversation_id` wins) rather than a per-conversation `LIMIT 1`
- * query — same "small workspace, JS-side reduce" approach the mock layer
- * uses (`lib/mock/index.ts`'s `getDashboard`) and adequate at this stage's
- * scale ("сотни workspace'ов" — docs/architecture/01-overview.md), not
- * "millions of messages".
+ * Last message per conversation, for list previews.
+ *
+ * Читает вью `conversation_message_previews` (`distinct on (conversation_id)`,
+ * supabase/migrations/20260828130000_add_thread_preview_views.sql): по строке на
+ * диалог вместо «загрузить всю историю тридцати диалогов и свести в JS», как
+ * было раньше. Вью объявлено с `security_invoker`, поэтому RLS `messages`
+ * действует ровно так же, как при прямом запросе к таблице.
  */
 async function loadLastMessageByConversation(
   supabase: SupabaseClient,
@@ -304,11 +325,10 @@ async function loadLastMessageByConversation(
   }
 
   const { data, error } = await supabase
-    .from("messages")
-    .select("id, conversation_id, direction, text, attachments, delivery_status, created_at")
+    .from("conversation_message_previews")
+    .select(MESSAGE_COLUMNS)
     .eq("workspace_id", workspaceId)
-    .in("conversation_id", conversationIds)
-    .order("created_at", { ascending: true });
+    .in("conversation_id", conversationIds);
 
   if (error) {
     console.error("[inbox] failed to load last messages", error);
@@ -322,24 +342,33 @@ async function loadLastMessageByConversation(
   return map;
 }
 
+/**
+ * Страница переписки: последние `limit` сообщений, либо `limit` сообщений
+ * строго старше курсора. Наружу — в хронологии, как их рисует тред.
+ */
 async function listMessagesForConversation(
   supabase: SupabaseClient,
   workspaceId: string,
   conversationId: string,
-): Promise<MessageRow[]> {
-  const { data, error } = await supabase
+  { limit, before }: { limit: number; before: ThreadCursor | null },
+): Promise<{ rows: MessageRow[]; hasMoreBefore: boolean }> {
+  const query = supabase
     .from("messages")
-    .select("id, conversation_id, direction, text, attachments, delivery_status, created_at")
+    .select(MESSAGE_COLUMNS)
     .eq("workspace_id", workspaceId)
-    .eq("conversation_id", conversationId)
-    .order("created_at", { ascending: true });
+    .eq("conversation_id", conversationId);
+
+  const { data, error } = await olderThan(query, before)
+    .order("created_at", { ascending: false })
+    .order("id", { ascending: false })
+    .limit(limit + 1);
 
   if (error) {
     console.error("[inbox] failed to load conversation messages", error);
     throw new Error("Unable to load messages.");
   }
 
-  return (data ?? []) as MessageRow[];
+  return toThreadPage((data ?? []) as MessageRow[], limit);
 }
 
 /**
@@ -560,7 +589,37 @@ export async function getConversationListView(
   };
 }
 
-/** Thread: full message history of one conversation, chronological. */
+/**
+ * Одно сообщение треда в виде, который рисует пузырь. Общий шаг первой страницы
+ * (`getThreadView`) и подгрузки вверх (`getOlderThreadMessages`).
+ */
+function toMessageView(
+  message: MessageRow,
+  translations: Map<string, MessageTranslationView>,
+  nowIso: string,
+): InboxThreadMessageView {
+  return {
+    id: message.id,
+    direction: message.direction === "outgoing" ? ("out" as const) : ("in" as const),
+    text: message.text,
+    createdAt: message.created_at,
+    time: formatMessageTime(message.created_at, nowIso),
+    deliveryLabel: DELIVERY_LABELS[message.delivery_status] ?? null,
+    attachmentName: attachmentIndicatorLabel(message.attachments),
+    canRetrySend:
+      message.direction === "outgoing" && message.delivery_status === "failed",
+    translation: translations.get(message.id) ?? null,
+  };
+}
+
+/**
+ * Thread: последняя страница переписки в хронологии плюс всё, что рисуется
+ * вокруг неё (контакт, канал, черновик, окно ответа).
+ *
+ * Вся история разом не грузится: переписка может быть какой угодно длинной, а
+ * на экране всё равно виден только её хвост. Предыдущие страницы подтягивает
+ * `getOlderThreadMessages` при скролле вверх.
+ */
 export async function getThreadView(
   supabase: SupabaseClient,
   workspaceId: string,
@@ -607,28 +666,32 @@ export async function getThreadView(
     return null;
   }
 
-  const [contact, messages, draft, avatarByContactPlatform, translations] =
-    await Promise.all([
-      conversation.contact_id
-        ? loadContactById(supabase, workspaceId, conversation.contact_id)
-        : Promise.resolve(null),
-      listMessagesForConversation(supabase, workspaceId, conversation.id),
-      getActiveConversationDraft(supabase, workspaceId, conversation.id),
-      loadIdentityAvatars(
-        supabase,
-        workspaceId,
-        conversation.contact_id ? [conversation.contact_id] : [],
-      ),
-      // Все переводы треда разом, а не по сообщению: один запрос по тому же
-      // индексу вместо N штук, и значок на уже переведённом сообщении
-      // срабатывает без похода на сервер.
-      listConversationTranslations(
-        supabase,
-        workspaceId,
-        conversation.id,
-        targetLanguage,
-      ),
-    ]);
+  const [contact, page, draft, avatarByContactPlatform] = await Promise.all([
+    conversation.contact_id
+      ? loadContactById(supabase, workspaceId, conversation.contact_id)
+      : Promise.resolve(null),
+    listMessagesForConversation(supabase, workspaceId, conversation.id, {
+      limit: MESSAGE_PAGE_SIZE,
+      before: null,
+    }),
+    getActiveConversationDraft(supabase, workspaceId, conversation.id),
+    loadIdentityAvatars(
+      supabase,
+      workspaceId,
+      conversation.contact_id ? [conversation.contact_id] : [],
+    ),
+  ]);
+
+  // Переводы страницы разом, а не по сообщению: один запрос по тому же индексу
+  // вместо N штук, и значок на уже переведённом сообщении срабатывает без
+  // похода на сервер. Идут вторым шагом — нужны id страницы.
+  const translations = await listConversationTranslations(
+    supabase,
+    workspaceId,
+    conversation.id,
+    targetLanguage,
+    page.rows.map((message) => message.id),
+  );
 
   const name = contact?.display_name ?? "Без контакта";
   const nowIso = new Date().toISOString();
@@ -667,18 +730,54 @@ export async function getThreadView(
       hoursLeft !== null && hoursLeft <= 0
         ? `Окно ответа (${responseWindowHours} ч) истекло — доставка не гарантируется.`
         : null,
-    messages: messages.map((message) => ({
-      id: message.id,
-      direction: message.direction === "outgoing" ? ("out" as const) : ("in" as const),
-      text: message.text,
-      time: formatMessageTime(message.created_at, nowIso),
-      deliveryLabel: DELIVERY_LABELS[message.delivery_status] ?? null,
-      attachmentName: attachmentIndicatorLabel(message.attachments),
-      canRetrySend:
-        message.direction === "outgoing" && message.delivery_status === "failed",
-      translation: translations.get(message.id) ?? null,
-    })),
+    messages: page.rows.map((message) =>
+      toMessageView(message, translations, nowIso),
+    ),
+    hasMoreBefore: page.hasMoreBefore,
     draft,
+  };
+}
+
+/** Страница переписки выше уже загруженной — скролл треда вверх. */
+export type OlderThreadMessagesPage = {
+  items: InboxThreadMessageView[];
+  hasMoreBefore: boolean;
+};
+
+/**
+ * Предыдущая страница переписки: `MESSAGE_PAGE_SIZE` сообщений строго старше
+ * курсора. Курсор — самое старое из уже загруженных сообщений, поэтому новое
+ * сообщение, пришедшее снизу за время чтения, окно не сдвигает.
+ */
+export async function getOlderThreadMessages(
+  supabase: SupabaseClient,
+  workspaceId: string,
+  conversationId: string,
+  before: ThreadCursor,
+  targetLanguage: string = DEFAULT_WORKSPACE_LANGUAGE,
+): Promise<OlderThreadMessagesPage> {
+  const page = await listMessagesForConversation(
+    supabase,
+    workspaceId,
+    conversationId,
+    { limit: MESSAGE_PAGE_SIZE, before },
+  );
+
+  const translations = await listConversationTranslations(
+    supabase,
+    workspaceId,
+    conversationId,
+    targetLanguage,
+    page.rows.map((message) => message.id),
+  );
+
+  const nowIso = new Date().toISOString();
+
+  return {
+    items: page.rows.map((message) =>
+      toMessageView(message, translations, nowIso),
+    ),
+    hasMoreBefore: page.hasMoreBefore,
   };
 }
 

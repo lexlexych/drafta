@@ -38,8 +38,12 @@ type TranslationRow = {
 };
 
 /**
- * Все переводы треда на текущий язык одним запросом — их загружает
- * `getThreadView`, чтобы уже переведённое сообщение переключалось без сети.
+ * Переводы загруженной страницы треда одним запросом — их берёт `getThreadView`,
+ * чтобы уже переведённое сообщение переключалось без сети.
+ *
+ * `messageIds` — сообщения страницы: тред грузится окном
+ * (`lib/db/thread-page.ts`), и переводы не должны ехать за всю историю. Пустой
+ * массив — переводить нечего, запрос не нужен; `null` означает «весь тред».
  *
  * Кэш не критичен для показа переписки: если запрос упал, тред всё равно должен
  * открыться, а значок перевода просто сходит в действие. Поэтому здесь пустая
@@ -50,14 +54,26 @@ export async function listConversationTranslations(
   workspaceId: string,
   conversationId: string,
   targetLanguage: string,
+  messageIds: readonly string[] | null = null,
 ): Promise<Map<string, MessageTranslationView>> {
   const map = new Map<string, MessageTranslationView>();
-  const { data, error } = await supabase
+
+  if (messageIds !== null && messageIds.length === 0) {
+    return map;
+  }
+
+  let query = supabase
     .from("message_translations")
     .select("message_id, text, source_language")
     .eq("workspace_id", workspaceId)
     .eq("conversation_id", conversationId)
     .eq("target_language", targetLanguage);
+
+  if (messageIds !== null) {
+    query = query.in("message_id", [...messageIds]);
+  }
+
+  const { data, error } = await query;
 
   if (error) {
     console.error("[translation] failed to load cached translations", error);

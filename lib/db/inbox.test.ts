@@ -33,6 +33,8 @@ describe.skipIf(!hasLocalSupabaseConfig)("lib/db/inbox", () => {
   let getChannelFiltersView: typeof import("./inbox").getChannelFiltersView;
   let getConversationListView: typeof import("./inbox").getConversationListView;
   let getThreadView: typeof import("./inbox").getThreadView;
+  let getOlderThreadMessages: typeof import("./inbox").getOlderThreadMessages;
+  let MESSAGE_PAGE_SIZE: typeof import("./inbox").MESSAGE_PAGE_SIZE;
   let markConversationRead: typeof import("./inbox").markConversationRead;
   let listChannelConnections: typeof import("./channel-connections").listChannelConnections;
   const workspaceIdsToClean: string[] = [];
@@ -43,6 +45,8 @@ describe.skipIf(!hasLocalSupabaseConfig)("lib/db/inbox", () => {
       getChannelFiltersView,
       getConversationListView,
       getThreadView,
+      getOlderThreadMessages,
+      MESSAGE_PAGE_SIZE,
       markConversationRead,
     } = await import("./inbox"));
     ({ listChannelConnections } = await import("./channel-connections"));
@@ -118,7 +122,6 @@ describe.skipIf(!hasLocalSupabaseConfig)("lib/db/inbox", () => {
         workspace_id: workspaceId,
         channel_connection_id: channelId,
         contact_id: contactId,
-        kind: "dm",
         external_id: overrides.externalId ?? `conv-${randomUUID()}`,
         status: "open",
         last_incoming_at: overrides.lastIncomingAt ?? new Date().toISOString(),
@@ -282,6 +285,125 @@ describe.skipIf(!hasLocalSupabaseConfig)("lib/db/inbox", () => {
     // "Существенные факты" and lib/db/inbox.ts's module docstring.
     expect(thread?.categories).toEqual([]);
     expect(thread?.draft).toBeNull();
+  });
+
+  it("previews a conversation with its last message, not its first", async () => {
+    // Превью читается из вью `conversation_message_previews`: по строке на
+    // диалог вместо «загрузить всю историю и свести в JS».
+    const workspaceId = await createTestWorkspace();
+    const channelId = await createChannel(workspaceId);
+    const contactId = await createContact(workspaceId, "Petra Preview");
+    const conversationId = await createConversation(workspaceId, channelId, contactId);
+
+    await createMessage(workspaceId, conversationId, {
+      text: "Первый вопрос",
+      createdAt: new Date(Date.now() - 120_000).toISOString(),
+    });
+    await createMessage(workspaceId, conversationId, {
+      direction: "outgoing",
+      text: "Наш ответ",
+      createdAt: new Date().toISOString(),
+    });
+
+    const channels = await listChannelConnections(supabase, workspaceId);
+    const list = await getConversationListView(supabase, workspaceId, channels, {});
+    const item = list.items.find((entry) => entry.id === conversationId);
+
+    expect(item?.preview).toBe("Вы: Наш ответ");
+  });
+
+  /** Переписка длиннее страницы: `count` сообщений через минуту друг от друга. */
+  async function createLongThread(count: number) {
+    const workspaceId = await createTestWorkspace();
+    const channelId = await createChannel(workspaceId, { platform: "instagram" });
+    const contactId = await createContact(workspaceId, "Paula Page");
+    const conversationId = await createConversation(workspaceId, channelId, contactId);
+    const start = Date.now() - count * 60_000;
+
+    for (let index = 0; index < count; index += 1) {
+      await createMessage(workspaceId, conversationId, {
+        text: `Message ${index}`,
+        createdAt: new Date(start + index * 60_000).toISOString(),
+      });
+    }
+
+    return { workspaceId, conversationId };
+  }
+
+  it("opens a long thread on its last page, not on the whole history", async () => {
+    const total = MESSAGE_PAGE_SIZE + 5;
+    const { workspaceId, conversationId } = await createLongThread(total);
+
+    const channels = await listChannelConnections(supabase, workspaceId);
+    const thread = await getThreadView(supabase, workspaceId, channels, conversationId);
+
+    expect(thread?.messages).toHaveLength(MESSAGE_PAGE_SIZE);
+    // Хвост переписки в хронологии: последнее сообщение — последним.
+    expect(thread?.messages[0]?.text).toBe("Message 5");
+    expect(thread?.messages[MESSAGE_PAGE_SIZE - 1]?.text).toBe(
+      `Message ${total - 1}`,
+    );
+    expect(thread?.hasMoreBefore).toBe(true);
+  });
+
+  it("walks the thread upwards by cursor until it runs out", async () => {
+    const total = MESSAGE_PAGE_SIZE + 5;
+    const { workspaceId, conversationId } = await createLongThread(total);
+
+    const channels = await listChannelConnections(supabase, workspaceId);
+    const thread = await getThreadView(supabase, workspaceId, channels, conversationId);
+    const oldest = thread!.messages[0]!;
+
+    const older = await getOlderThreadMessages(supabase, workspaceId, conversationId, {
+      createdAt: oldest.createdAt,
+      id: oldest.id,
+    });
+
+    expect(older.items.map((message) => message.text)).toEqual([
+      "Message 0",
+      "Message 1",
+      "Message 2",
+      "Message 3",
+      "Message 4",
+    ]);
+    // Курсор исключающий: сообщение, от которого листали, повторно не приезжает.
+    expect(older.items.some((message) => message.id === oldest.id)).toBe(false);
+    expect(older.hasMoreBefore).toBe(false);
+  });
+
+  it("splits messages sharing a created_at deterministically, by id", async () => {
+    const workspaceId = await createTestWorkspace();
+    const channelId = await createChannel(workspaceId, { platform: "instagram" });
+    const contactId = await createContact(workspaceId, "Tie Break");
+    const conversationId = await createConversation(workspaceId, channelId, contactId);
+    // Все в одну отметку времени: без тай-брейка по id страница и подгрузка
+    // могли бы вернуть одно и то же сообщение дважды — или потерять его.
+    const sameMoment = new Date().toISOString();
+    const total = MESSAGE_PAGE_SIZE + 1;
+
+    for (let index = 0; index < total; index += 1) {
+      await createMessage(workspaceId, conversationId, {
+        text: `Same ${index}`,
+        createdAt: sameMoment,
+      });
+    }
+
+    const channels = await listChannelConnections(supabase, workspaceId);
+    const thread = await getThreadView(supabase, workspaceId, channels, conversationId);
+    const oldest = thread!.messages[0]!;
+    const older = await getOlderThreadMessages(supabase, workspaceId, conversationId, {
+      createdAt: oldest.createdAt,
+      id: oldest.id,
+    });
+
+    expect(thread?.messages).toHaveLength(MESSAGE_PAGE_SIZE);
+    expect(older.items).toHaveLength(1);
+    expect(older.hasMoreBefore).toBe(false);
+
+    const seen = new Set(
+      [...thread!.messages, ...older.items].map((message) => message.id),
+    );
+    expect(seen.size).toBe(total);
   });
 
   it("marks a conversation read, resetting unread_count to 0", async () => {

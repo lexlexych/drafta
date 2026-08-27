@@ -36,6 +36,16 @@ export const workspaceSeededTables = [
   { column: "workspace_id", name: "comment_private_replies" },
 ] as const;
 
+/**
+ * Вью превью списков: строк своих у них нет — они читаются из `messages` и
+ * `comments`, которые сид уже наполняет. Изоляция у них должна быть ровно та
+ * же: вью объявлены с `security_invoker`, и иначе стали бы дырой мимо RLS.
+ */
+export const workspaceScopedViews = [
+  { column: "workspace_id", name: "conversation_message_previews" },
+  { column: "workspace_id", name: "post_comment_previews" },
+] as const;
+
 export const publicClientTables = [
   "workspaces",
   "workspace_members",
@@ -60,4 +70,6 @@ export const publicClientTables = [
   "message_translations",
   "comment_translations",
   "comment_private_replies",
+  "conversation_message_previews",
+  "post_comment_previews",
 ] as const;

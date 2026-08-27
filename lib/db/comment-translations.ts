@@ -36,8 +36,12 @@ type TranslationRow = {
 };
 
 /**
- * Все переводы поста на текущий язык одним запросом — их загружает
+ * Переводы загруженной страницы комментариев одним запросом — их берёт
  * `getPostThreadView`, чтобы уже переведённый комментарий переключался без сети.
+ *
+ * `commentIds` — комментарии страницы: тред грузится окном
+ * (`lib/db/thread-page.ts`), и переводы не должны ехать за всю ленту поста.
+ * Пустой массив — переводить нечего; `null` означает «весь пост».
  *
  * Кэш не критичен для показа треда: если запрос упал, пост всё равно должен
  * открыться, а значок перевода просто сходит в действие. Поэтому пустая карта и
@@ -48,14 +52,26 @@ export async function listPostTranslations(
   workspaceId: string,
   postId: string,
   targetLanguage: string,
+  commentIds: readonly string[] | null = null,
 ): Promise<Map<string, CommentTranslationView>> {
   const map = new Map<string, CommentTranslationView>();
-  const { data, error } = await supabase
+
+  if (commentIds !== null && commentIds.length === 0) {
+    return map;
+  }
+
+  let query = supabase
     .from("comment_translations")
     .select("comment_id, text, source_language")
     .eq("workspace_id", workspaceId)
     .eq("post_id", postId)
     .eq("target_language", targetLanguage);
+
+  if (commentIds !== null) {
+    query = query.in("comment_id", [...commentIds]);
+  }
+
+  const { data, error } = await query;
 
   if (error) {
     console.error("[translation] failed to load cached comment translations", error);

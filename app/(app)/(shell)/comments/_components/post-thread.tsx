@@ -7,12 +7,15 @@ import { BackIcon, ExternalIcon } from "../../_components/icons";
 import type { ReplyTemplateOption } from "../../_components/template-picker";
 import paneStyles from "../../_components/panes.module.css";
 import styles from "../comments.module.css";
-import { CommentCard } from "./comment-card";
+import { CommentThread } from "./comment-thread";
 
 /**
  * The open post: its description in the header and the comments underneath.
- * Server-rendered: per-comment state (translation, the open reply field) lives
- * in `CommentCard`, so a `router.refresh()` from realtime never resets it.
+ *
+ * Шапка серверная, лента комментариев — клиентская (`CommentThread`): сервер
+ * отдаёт только последнюю страницу, остальное она подтягивает при скролле
+ * вверх. Состояние отдельного комментария (перевод, открытое поле ответа) живёт
+ * в `CommentCard`, поэтому `router.refresh()` от Realtime его не сбрасывает.
  *
  * AI drafts used to live here — a card under every comment plus the «Черновики»
  * brief dialog and an «Отправить все» bar. That whole surface is gone while the
@@ -65,22 +68,14 @@ export function PostThread({
         ) : null}
       </div>
 
-      <div className={`${paneStyles.messages} ${paneStyles.commentsList}`}>
-        {post.comments.length === 0 ? (
-          <div className={paneStyles.empty}>Пока нет комментариев.</div>
-        ) : null}
-        {post.comments.map((comment) => (
-          <CommentCard
-            key={comment.id}
-            postId={post.postId}
-            comment={comment}
-            replies={comment.replies}
-            commentTemplates={commentTemplates}
-            messageTemplates={messageTemplates}
-            templateLanguage={templateLanguage}
-          />
-        ))}
-      </div>
+      <CommentThread
+        postId={post.postId}
+        comments={post.comments}
+        hasMoreBefore={post.hasMoreBefore}
+        commentTemplates={commentTemplates}
+        messageTemplates={messageTemplates}
+        templateLanguage={templateLanguage}
+      />
     </>
   );
 }

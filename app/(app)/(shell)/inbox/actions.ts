@@ -6,10 +6,13 @@ import { listKnowledgeFiles } from "@/lib/db/knowledge-base";
 import {
   CONVERSATION_PAGE_SIZE,
   getConversationListView,
+  getOlderThreadMessages,
   listChannelConnections,
   markConversationRead,
+  type InboxThreadMessageView,
   type MarkConversationReadResult,
 } from "@/lib/db/inbox";
+import type { ThreadCursor } from "@/lib/db/thread-page";
 import type { ConversationListItemView } from "@/lib/mock";
 import {
   canGenerateConversationDraft,
@@ -144,6 +147,53 @@ export async function loadConversationsAction(input: {
   } catch (error) {
     console.error("[inbox] failed to load a conversation page", error);
     return { ok: false, error: "Не удалось загрузить список диалогов." };
+  }
+}
+
+/**
+ * Предыдущая страница переписки — скролл треда вверх.
+ *
+ * `before` — самое старое из уже загруженных сообщений: курсор, а не смещение,
+ * потому что снизу за время чтения могло приехать новое сообщение (почему так —
+ * `lib/db/thread-page.ts`). `revalidatePath` здесь нет: подгруженная история
+ * живёт в состоянии треда, а не в кэше страницы.
+ */
+export type OlderMessagesResult =
+  | { ok: true; items: InboxThreadMessageView[]; hasMore: boolean }
+  | { ok: false; error: string };
+
+export async function loadOlderMessagesAction(input: {
+  conversationId: string;
+  before: ThreadCursor;
+}): Promise<OlderMessagesResult> {
+  const user = await getAuthenticatedUser();
+
+  if (!user) {
+    return { ok: false, error: "Сессия истекла — войдите заново." };
+  }
+
+  const workspace = await getCurrentWorkspace(user.id);
+
+  if (!workspace) {
+    return { ok: false, error: "Рабочее пространство не найдено." };
+  }
+
+  const supabase = await createServerSupabaseClient();
+
+  try {
+    const language = await getWorkspaceLanguage(supabase, workspace.id);
+    const page = await getOlderThreadMessages(
+      supabase,
+      workspace.id,
+      input.conversationId,
+      input.before,
+      language,
+    );
+
+    return { ok: true, items: page.items, hasMore: page.hasMoreBefore };
+  } catch (error) {
+    console.error("[inbox] failed to load an older thread page", error);
+    return { ok: false, error: "Не удалось загрузить сообщения." };
   }
 }
 

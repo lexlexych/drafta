@@ -10,6 +10,7 @@ import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { ConversationListItemView } from "@/lib/mock";
+import { installIntersectionObserver } from "@/tests/support/intersection-observer";
 
 import { ConversationList } from "./conversation-list";
 
@@ -54,31 +55,6 @@ function item(id: string, title: string, channelId = "chc_ig"): ConversationList
 }
 
 const PAGE_ONE = [item("cnv_1", "Первый"), item("cnv_2", "Второй")];
-
-/**
- * jsdom не реализует IntersectionObserver. Заглушка сразу сообщает, что маячок
- * виден, — ровно тот случай, ради которого он и стоит в конце списка.
- */
-function installIntersectionObserver() {
-  class ImmediateIntersectionObserver {
-    constructor(private readonly callback: IntersectionObserverCallback) {}
-
-    observe(target: Element) {
-      this.callback(
-        [{ isIntersecting: true, target } as IntersectionObserverEntry],
-        this as unknown as IntersectionObserver,
-      );
-    }
-
-    unobserve() {}
-    disconnect() {}
-    takeRecords(): IntersectionObserverEntry[] {
-      return [];
-    }
-  }
-
-  vi.stubGlobal("IntersectionObserver", ImmediateIntersectionObserver);
-}
 
 function renderList(props: { hasMore: boolean }) {
   return render(

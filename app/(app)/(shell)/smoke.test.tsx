@@ -225,6 +225,7 @@ const INBOX_THREAD_MAXIM = {
       id: "msg_dm_maxim_ig_2",
       direction: "in",
       text: "Добрый день. Заказ получил, но одна чашка со сколом на ручке 😞",
+      createdAt: "2026-08-27T11:50:00+00:00",
       time: "11:50",
       deliveryLabel: null,
       attachmentName: null,
@@ -234,12 +235,14 @@ const INBOX_THREAD_MAXIM = {
       id: "msg_dm_maxim_ig_3",
       direction: "in",
       text: "Вот фото",
+      createdAt: "2026-08-27T11:52:00+00:00",
       time: "11:52",
       deliveryLabel: null,
       attachmentName: "IMG_2214.jpg",
       translation: null,
     },
   ],
+  hasMoreBefore: false,
   draft: null,
 };
 
@@ -254,6 +257,7 @@ const INBOX_THREAD_ANNA_IG = {
       id: "msg_dm_anna_ig_3",
       direction: "in",
       text: "И сколько будет доставка в Гамбург?",
+      createdAt: "2026-08-27T12:41:00+00:00",
       time: "12:41",
       deliveryLabel: null,
       attachmentName: null,
@@ -317,6 +321,7 @@ vi.mock("@/lib/db/inbox", () => ({
 }));
 
 vi.mock("./inbox/actions", () => ({
+  loadOlderMessagesAction: async () => ({ ok: true, items: [], hasMore: false }),
   markConversationReadAction: async () => ({ ok: true }),
   loadConversationsAction: async (input: { channelIds: string[] }) => {
     const items = filterByChannels(INBOX_LIST_ITEMS, input.channelIds);
@@ -364,12 +369,17 @@ const POST_THREAD = {
   postText: "Осенняя коллекция уже в продаже — заходите за новинками!",
   postUrl: "https://instagram.com/p/ig_post_autumn",
   postMeta: "2 комментария",
+  // Комментарии едут плоским списком: ветки собирает клиент (`CommentThread`),
+  // потому что родитель ответа может приехать только со следующей страницей.
   comments: [
     {
       id: "cmt_lena",
+      externalId: "ig_cmt_lena",
+      parentExternalId: null,
       authorName: "Lena Fischer",
       avatar: { initials: "LF", hue: 40 },
       text: "Сколько стоит доставка по Берлину?",
+      createdAt: "2026-08-27T10:12:00+00:00",
       time: "10:12",
       isOurs: false,
       deliveryLabel: null,
@@ -377,27 +387,31 @@ const POST_THREAD = {
       privateReply: null,
       canPrivateReply: true,
       dmHref: null,
-      replies: [
-        {
-          id: "cmt_lena_reply",
-          authorName: "Вы",
-          avatar: null,
-          text: "Доставка по Берлину — 4 евро.",
-          time: "10:15",
-          isOurs: true,
-          deliveryLabel: "Отправлено",
-          translation: null,
-          privateReply: null,
-          canPrivateReply: false,
-          dmHref: null,
-        },
-      ],
+    },
+    {
+      id: "cmt_lena_reply",
+      externalId: "ig_cmt_lena_reply",
+      parentExternalId: "ig_cmt_lena",
+      authorName: "Вы",
+      avatar: null,
+      text: "Доставка по Берлину — 4 евро.",
+      createdAt: "2026-08-27T10:15:00+00:00",
+      time: "10:15",
+      isOurs: true,
+      deliveryLabel: "Отправлено",
+      translation: null,
+      privateReply: null,
+      canPrivateReply: false,
+      dmHref: null,
     },
     {
       id: "cmt_marco",
+      externalId: "ig_cmt_marco",
+      parentExternalId: null,
       authorName: "Marco Bianchi",
       avatar: { initials: "MB", hue: 120 },
       text: "Che bella collezione!",
+      createdAt: "2026-08-27T10:20:00+00:00",
       time: "10:20",
       isOurs: false,
       deliveryLabel: null,
@@ -406,13 +420,14 @@ const POST_THREAD = {
       privateReply: { status: "sent" as const },
       canPrivateReply: false,
       dmHref: "/inbox?conversation=cnv_dm_marco_ig",
-      replies: [],
     },
   ],
+  hasMoreBefore: false,
 };
 
 vi.mock("@/lib/db/comments", () => ({
   POST_PAGE_SIZE: 30,
+  COMMENT_PAGE_SIZE: 20,
   listChannelConnections: async () => INBOX_CHANNELS,
   getCommentsChannelFiltersView: async () => [
     {
@@ -467,6 +482,7 @@ vi.mock("./comments/actions", () => ({
 
     return { ok: true, items, total: items.length, hasMore: false };
   },
+  loadOlderCommentsAction: async () => ({ ok: true, items: [], hasMore: false }),
 }));
 
 const CONTACT_LIST_ALL = [

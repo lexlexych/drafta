@@ -18,7 +18,7 @@ import { Avatar } from "../_components/avatar";
 import { ChannelChip } from "../_components/chips";
 import { Composer } from "../_components/composer";
 import { BackIcon, ClockIcon } from "../_components/icons";
-import { MessageBubble } from "../_components/message-bubble";
+import { MessageList } from "../_components/message-list";
 import { QUERY_KEYS, buildHref, firstParam } from "../_components/navigation";
 import styles from "../_components/panes.module.css";
 import uiStyles from "../_components/ui.module.css";
@@ -138,18 +138,13 @@ export default async function InboxPage({
               ) : null}
             </div>
 
-            <div className={styles.messages}>
-              {/* Пузырь — клиентский компонент ради значка перевода: он
-                  переключает текст на месте, и это состояние не должно
-                  сбрасываться при `router.refresh()` от Realtime. */}
-              {thread.messages.map((message) => (
-                <MessageBubble
-                  key={message.id}
-                  conversationId={thread.conversationId}
-                  message={message}
-                />
-              ))}
-            </div>
+            {/* Лента клиентская: сервер отдаёт последнюю страницу переписки,
+                остальное она подтягивает при скролле вверх. */}
+            <MessageList
+              conversationId={thread.conversationId}
+              messages={thread.messages}
+              hasMoreBefore={thread.hasMoreBefore}
+            />
 
             <div className={styles.draftWrap}>
               {/* Ключ только по диалогу: черновик приезжает в уже смонтированное

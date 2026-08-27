@@ -13,9 +13,19 @@ import type { AvatarView, ChannelBadgeView } from "@/lib/mock";
 /** Комментарий сам по себе, без своей ветки ответов. */
 export type CommentEntryView = {
   id: string;
+  /**
+   * Id комментария у провайдера и id того, кому он отвечает. По ним ветка
+   * собирается на клиенте (`lib/comments/thread.ts`) из накопленного окна
+   * страниц. `null` — комментарий верхнего уровня или наш ответ, которому
+   * провайдер ещё не выдал id.
+   */
+  externalId: string | null;
+  parentExternalId: string | null;
   authorName: string;
   avatar: AvatarView | null;
   text: string;
+  /** Момент публикации в ISO — ключ сортировки окна и курсор подгрузки вверх. */
+  createdAt: string;
   time: string;
   /** Our own published reply rather than someone's comment. */
   isOurs: boolean;
@@ -59,9 +69,19 @@ export type PostThreadView = {
   postText: string;
   /** Ссылка на публикацию в мессенджере; null, если провайдер её не сообщил. */
   postUrl: string | null;
-  /** Строка «N комментариев» под описанием в шапке треда. */
+  /**
+   * Строка «N комментариев» под описанием в шапке треда. Считается запросом по
+   * всей публикации, а не по загруженной странице.
+   */
   postMeta: string;
-  comments: CommentView[];
+  /**
+   * Последняя страница комментариев — плоским списком в хронологии. В ветки её
+   * раскладывает клиент (`lib/comments/thread.ts`), потому что родитель ответа
+   * может приехать только со следующей страницей вверх.
+   */
+  comments: CommentEntryView[];
+  /** Выше загруженной страницы есть ещё комментарии. */
+  hasMoreBefore: boolean;
 };
 
 export type PostListItemView = {

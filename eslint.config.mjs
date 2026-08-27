@@ -16,6 +16,10 @@ const eslintConfig = defineConfig([
     "public/sw.js",
     "public/sw.js.map",
     "public/swe-worker-*.js",
+    // Локальное состояние Supabase CLI (`supabase start`): чужой генерированный
+    // код под Deno, который иначе роняет `npm run lint` на каждой машине с
+    // поднятым локальным стеком. В git не попадает — supabase/.gitignore.
+    "supabase/.temp/**",
   ]),
 ]);
 

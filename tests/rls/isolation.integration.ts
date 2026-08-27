@@ -7,6 +7,7 @@ import { getRlsTestConfig } from "../../lib/rls-test-config";
 import {
   publicClientTables,
   rlsSeedFixtures,
+  workspaceScopedViews,
   workspaceSeededTables,
 } from "./fixtures";
 
@@ -56,7 +57,9 @@ async function assertWorkspaceIsVisibleOnlyToOwner(
   client: RlsClient,
   foreignWorkspaceId: string,
   ownWorkspaceId: string,
-  table: (typeof workspaceSeededTables)[number],
+  table:
+    | (typeof workspaceSeededTables)[number]
+    | (typeof workspaceScopedViews)[number],
 ): Promise<void> {
   const selectedColumn = table.column === "id" ? "id" : "workspace_id";
   const ownRows = await client
@@ -124,6 +127,24 @@ describe("workspace RLS isolation", () => {
         rlsSeedFixtures.ownerA.workspaceId,
         rlsSeedFixtures.ownerB.workspaceId,
         table,
+      );
+    },
+  );
+
+  it.each(workspaceScopedViews)(
+    "$name reads through the RLS of its base table, not around it",
+    async (view) => {
+      await assertWorkspaceIsVisibleOnlyToOwner(
+        ownerAClient,
+        rlsSeedFixtures.ownerB.workspaceId,
+        rlsSeedFixtures.ownerA.workspaceId,
+        view,
+      );
+      await assertWorkspaceIsVisibleOnlyToOwner(
+        ownerBClient,
+        rlsSeedFixtures.ownerA.workspaceId,
+        rlsSeedFixtures.ownerB.workspaceId,
+        view,
       );
     },
   );

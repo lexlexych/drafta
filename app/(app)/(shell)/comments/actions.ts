@@ -10,13 +10,15 @@ import {
 import {
   POST_PAGE_SIZE,
   acceptManualCommentReply,
+  getOlderPostComments,
   getPostListView,
   listChannelConnections,
   markCommentSendFailedAfterEmit,
   markPostRead,
   type CommentsMutationResult,
 } from "@/lib/db/comments";
-import type { PostListItemView } from "@/lib/comments/types";
+import type { CommentEntryView, PostListItemView } from "@/lib/comments/types";
+import type { ThreadCursor } from "@/lib/db/thread-page";
 import { createServerSupabaseClient } from "@/lib/db/server";
 import { getWorkspaceLanguage } from "@/lib/db/workspace-language";
 import {
@@ -89,6 +91,57 @@ export async function loadPostsAction(input: {
   } catch (error) {
     console.error("[comments] failed to load a post page", error);
     return { ok: false, error: "Не удалось загрузить список постов." };
+  }
+}
+
+/**
+ * Предыдущая страница комментариев — скролл ленты вверх. Курсор, а не смещение,
+ * по той же причине, что и в переписке (`../inbox/actions.ts`).
+ */
+export type OlderCommentsResult =
+  | { ok: true; items: CommentEntryView[]; hasMore: boolean }
+  | { ok: false; error: string };
+
+export async function loadOlderCommentsAction(input: {
+  postId: string;
+  before: ThreadCursor;
+}): Promise<OlderCommentsResult> {
+  const user = await getAuthenticatedUser();
+
+  if (!user) {
+    return { ok: false, error: "Сессия истекла — войдите заново." };
+  }
+
+  const workspace = await getCurrentWorkspace(user.id);
+
+  if (!workspace) {
+    return { ok: false, error: "Рабочее пространство не найдено." };
+  }
+
+  const supabase = await createServerSupabaseClient();
+
+  try {
+    const [channels, language] = await Promise.all([
+      listChannelConnections(supabase, workspace.id),
+      getWorkspaceLanguage(supabase, workspace.id),
+    ]);
+    const page = await getOlderPostComments(
+      supabase,
+      workspace.id,
+      channels,
+      input.postId,
+      input.before,
+      language,
+    );
+
+    if (!page) {
+      return { ok: false, error: "Публикация не найдена." };
+    }
+
+    return { ok: true, items: page.items, hasMore: page.hasMoreBefore };
+  } catch (error) {
+    console.error("[comments] failed to load an older comment page", error);
+    return { ok: false, error: "Не удалось загрузить комментарии." };
   }
 }
 

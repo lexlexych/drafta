@@ -19,9 +19,10 @@
  * ради того, что уже известно в момент клика.
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useState } from "react";
 
 import { useActivityTransition } from "./activity";
+import { useSentinelObserver } from "./use-sentinel-observer";
 
 export type PageResult<T> =
   | { ok: true; items: T[]; total: number; hasMore: boolean }
@@ -104,7 +105,8 @@ export function usePagedList<T, F>({
     });
   }, [filter, items, loadPage, startTransition]);
 
-  const { listRef, sentinelRef } = useEndOfListObserver({
+  // Маячок стоит в конце списка: подгрузка идёт вниз, к более старым записям.
+  const { rootRef: listRef, sentinelRef } = useSentinelObserver({
     enabled: hasMore && !isPending && error === null,
     onReached: loadMore,
   });
@@ -120,43 +122,4 @@ export function usePagedList<T, F>({
     listRef,
     sentinelRef,
   };
-}
-
-/**
- * Следит за маячком в конце списка. Корнем берётся сам скроллящийся список
- * (`listRef`), а не окно: только у него можно осмысленно задать `rootMargin` и
- * начинать подгрузку заранее, не дожидаясь самого низа.
- */
-function useEndOfListObserver({
-  enabled,
-  onReached,
-}: {
-  enabled: boolean;
-  onReached: () => void;
-}) {
-  const listRef = useRef<HTMLDivElement | null>(null);
-  const sentinelRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    const sentinel = sentinelRef.current;
-
-    if (!enabled || !sentinel || typeof IntersectionObserver === "undefined") {
-      return;
-    }
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries.some((entry) => entry.isIntersecting)) {
-          onReached();
-        }
-      },
-      { root: listRef.current, rootMargin: "300px 0px" },
-    );
-
-    observer.observe(sentinel);
-
-    return () => observer.disconnect();
-  }, [enabled, onReached]);
-
-  return { listRef, sentinelRef };
 }

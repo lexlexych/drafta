@@ -30,18 +30,34 @@ function isPrivateReplyStatus(value: string): value is PrivateReplyStatus {
   return value === "pending" || value === "sent" || value === "failed";
 }
 
-/** Все ЛС этого поста одним запросом — их грузит `getPostThreadView`. */
+/**
+ * ЛС по загруженной странице комментариев одним запросом — их грузит
+ * `getPostThreadView`. `commentIds` ограничивает выборку страницей треда;
+ * `null` — весь пост.
+ */
 export async function listPostPrivateReplies(
   supabase: SupabaseClient,
   workspaceId: string,
   postId: string,
+  commentIds: readonly string[] | null = null,
 ): Promise<Map<string, CommentPrivateReplyView>> {
   const map = new Map<string, CommentPrivateReplyView>();
-  const { data, error } = await supabase
+
+  if (commentIds !== null && commentIds.length === 0) {
+    return map;
+  }
+
+  let query = supabase
     .from("comment_private_replies")
     .select("id, comment_id, status")
     .eq("workspace_id", workspaceId)
     .eq("post_id", postId);
+
+  if (commentIds !== null) {
+    query = query.in("comment_id", [...commentIds]);
+  }
+
+  const { data, error } = await query;
 
   if (error) {
     // Тред должен открыться и без этого: непоказанная пометка «Отвечено в ЛС»
