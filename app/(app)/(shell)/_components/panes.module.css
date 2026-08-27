@@ -470,21 +470,11 @@
   align-items: center;
 }
 
-.commentTarget .commentBody {
-  border-left: 3px solid var(--draft-ink);
-  padding-left: 9px;
-  margin-left: -12px;
-}
-
-/* A comment and its own draft reply stacked together (stage 5). */
+/* Комментарий вместе со всем, что к нему относится, одним блоком. */
 .commentRow {
   display: flex;
   flex-direction: column;
   gap: 8px;
-}
-
-.commentDraft {
-  margin-left: 40px;
 }
 
 .commentMuted .commentText,

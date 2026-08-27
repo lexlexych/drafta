@@ -364,8 +364,6 @@ const POST_THREAD = {
   postText: "Осенняя коллекция уже в продаже — заходите за новинками!",
   postUrl: "https://instagram.com/p/ig_post_autumn",
   postMeta: "2 комментария",
-  draftBrief: { description: "", instruction: "", isConfigured: false },
-  sendableDraftCount: 0,
   comments: [
     {
       id: "cmt_lena",
@@ -376,8 +374,6 @@ const POST_THREAD = {
       isOurs: false,
       isReply: false,
       deliveryLabel: null,
-      isAnswered: false,
-      draft: null,
     },
   ],
 };
@@ -423,12 +419,6 @@ vi.mock("@/lib/db/comments", () => ({
 
 vi.mock("./comments/actions", () => ({
   markPostReadAction: async () => ({ ok: true }),
-  configureCommentDraftsAction: async () => ({ ok: true }),
-  generateCommentDraftAction: async () => ({ ok: true }),
-  editCommentDraftAction: async () => ({ ok: true }),
-  discardCommentDraftAction: async () => ({ ok: true }),
-  sendCommentDraftAction: async () => ({ ok: true }),
-  sendAllCommentDraftsAction: async () => ({ ok: true, sent: 0, failed: 0 }),
   loadPostsAction: async (input: { channelIds: string[] }) => {
     const items = filterByChannels(POST_LIST_ITEMS, input.channelIds);
 
@@ -739,7 +729,7 @@ describe("comments page", () => {
     expect(screen.getByText(/Выберите пост слева/)).toBeDefined();
   });
 
-  it("opens a post with its comments and the draft controls", async () => {
+  it("opens a post with its comments", async () => {
     render(
       await CommentsPage({
         searchParams: searchParams({ post: "post_autumn_ig" }),
@@ -754,24 +744,11 @@ describe("comments page", () => {
     expect(screen.getByRole("link", { name: /Открыть пост/ }).getAttribute("href")).toBe(
       "https://instagram.com/p/ig_post_autumn",
     );
-    expect(screen.getByRole("button", { name: "Черновики" })).toBeDefined();
     expect(screen.getByText("Lena Fischer")).toBeDefined();
-    // Черновик не создаётся при получении комментария — его запускает кнопка.
-    expect(screen.getByRole("button", { name: "Создать черновик" })).toBeDefined();
-    expect(screen.getByRole("button", { name: "Отправить все" })).toBeDefined();
-  });
-
-  it("asks for the draft brief before generating for a single comment", async () => {
-    render(
-      await CommentsPage({
-        searchParams: searchParams({ post: "post_autumn_ig" }),
-      }),
-    );
-
-    fireEvent.click(screen.getByRole("button", { name: "Создать черновик" }));
-
-    expect(screen.getByRole("dialog")).toBeDefined();
-    expect(screen.getByText("Черновики к комментариям")).toBeDefined();
+    // Интерфейс AI-черновиков снят с экрана до переработки этой логики.
+    expect(screen.queryByRole("button", { name: "Черновики" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Создать черновик" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Отправить все" })).toBeNull();
   });
 });
 

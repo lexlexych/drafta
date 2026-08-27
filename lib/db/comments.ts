@@ -4,8 +4,6 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { ChannelPlatform } from "@/lib/channels/types";
 import type {
-  ActiveCommentDraftStatus,
-  CommentDraftView,
   CommentView,
   PostListView,
   PostThreadView,
@@ -19,10 +17,14 @@ import { avatarFor, countWithNoun, type ChannelBadgeView } from "@/lib/mock";
 import { formatListTime, formatMessageTime } from "@/lib/mock/time";
 
 /**
- * Typed data access behind the «Комментарии» screen and the shell's comment
+ * Typed data access behind the «Публикации» screen and the shell's comment
  * navigation counters. The comment domain has its own tables (`posts`,
- * `comments`, `comment_drafts`) — nothing here touches `conversations`,
- * `messages` or `drafts`, and nothing in `lib/db/inbox.ts` touches these.
+ * `comments`) — nothing here touches `conversations`, `messages` or `drafts`,
+ * and nothing in `lib/db/inbox.ts` touches these.
+ *
+ * `comment_drafts` is deliberately absent: the AI-draft surface was removed from
+ * the screen while that flow is redesigned, and its pipeline lives entirely in
+ * `lib/inngest/functions/comment-draft-pipeline.ts`.
  *
  * Every function takes an already-constructed `SupabaseClient` + `workspaceId`;
  * RLS (`posts_member_access` / `comments_member_access` /
@@ -66,21 +68,6 @@ export type CommentsMutationResult =
   | { ok: true }
   | { ok: false; error: string };
 
-export type CommentDraftMutationResult =
-  | { ok: true; draft: CommentDraftView }
-  | { ok: false; error: string };
-
-const ACTIVE_DRAFT_STATUSES: ActiveCommentDraftStatus[] = [
-  "generating",
-  "ready",
-  "edited",
-];
-
-const SENDABLE_DRAFT_STATUSES = ["ready", "edited"] as const;
-
-const DRAFT_COLUMNS =
-  "id, workspace_id, post_id, comment_id, status, text, model, kb_file_ids, created_at, updated_at";
-
 const DELIVERY_LABELS: Record<string, string | null> = {
   received: null,
   pending: "Отправляется…",
@@ -97,15 +84,12 @@ type PostRow = {
   permalink: string | null;
   thumbnail_url: string | null;
   published_at: string | null;
-  draft_description: string;
-  draft_instruction: string;
-  draft_brief_set_at: string | null;
   last_comment_at: string | null;
   unread_count: number;
 };
 
 const POST_COLUMNS =
-  "id, channel_connection_id, external_id, text, permalink, thumbnail_url, published_at, draft_description, draft_instruction, draft_brief_set_at, last_comment_at, unread_count";
+  "id, channel_connection_id, external_id, text, permalink, thumbnail_url, published_at, last_comment_at, unread_count";
 
 type CommentRow = {
   id: string;
@@ -121,19 +105,6 @@ type CommentRow = {
 
 const COMMENT_COLUMNS =
   "id, post_id, contact_identity_id, external_id, parent_external_id, direction, text, delivery_status, created_at";
-
-type CommentDraftRow = {
-  id: string;
-  workspace_id: string;
-  post_id: string;
-  comment_id: string;
-  status: string;
-  text: string;
-  model: string | null;
-  kb_file_ids: string[] | null;
-  created_at: string;
-  updated_at: string;
-};
 
 type ContactIdentityRow = {
   id: string;
@@ -157,62 +128,6 @@ function postTitle(post: PostRow): string {
   }
 
   return text.length > 60 ? `${text.slice(0, 57)}…` : text;
-}
-
-function isActiveDraftStatus(
-  status: string,
-): status is ActiveCommentDraftStatus {
-  return ACTIVE_DRAFT_STATUSES.includes(status as ActiveCommentDraftStatus);
-}
-
-async function mapDraftRow(
-  supabase: SupabaseClient,
-  row: CommentDraftRow,
-): Promise<CommentDraftView> {
-  if (!isActiveDraftStatus(row.status)) {
-    throw new Error(`Cannot map inactive comment draft status: ${row.status}`);
-  }
-
-  const kbFileIds = row.kb_file_ids ?? [];
-  let kbFileNames: string[] = [];
-
-  if (kbFileIds.length > 0) {
-    const { data, error } = await supabase
-      .from("kb_files")
-      .select("id, name")
-      .eq("workspace_id", row.workspace_id)
-      .in("id", kbFileIds);
-
-    if (error) {
-      console.error("[comments] failed to load draft knowledge-base names", error);
-      throw new Error("Unable to load draft knowledge-base references.");
-    }
-
-    const namesById = new Map(
-      ((data ?? []) as { id: string; name: string }[]).map((file) => [
-        file.id,
-        file.name,
-      ]),
-    );
-    kbFileNames = kbFileIds.flatMap((id) => {
-      const name = namesById.get(id);
-      return name ? [name] : [];
-    });
-  }
-
-  return {
-    id: row.id,
-    workspaceId: row.workspace_id,
-    postId: row.post_id,
-    commentId: row.comment_id,
-    status: row.status,
-    text: row.text,
-    model: row.model,
-    kbFileIds,
-    kbFileNames,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
-  };
 }
 
 async function loadComments(
@@ -500,10 +415,7 @@ export async function getPostThreadView(
     return null;
   }
 
-  const [comments, drafts] = await Promise.all([
-    loadComments(supabase, workspaceId, post.id),
-    listActivePostDrafts(supabase, workspaceId, post.id),
-  ]);
+  const comments = await loadComments(supabase, workspaceId, post.id);
 
   const identityIds = [
     ...new Set(
@@ -513,20 +425,6 @@ export async function getPostThreadView(
     ),
   ];
   const identitiesById = await loadIdentitiesById(supabase, workspaceId, identityIds);
-
-  const draftByComment = new Map(
-    drafts.map((draft) => [draft.commentId, draft] as const),
-  );
-  // A comment counts as answered once one of our replies points at it. Our
-  // replies carry the answered comment's provider id in `parent_external_id`.
-  const answeredExternalIds = new Set(
-    comments
-      .filter(
-        (comment) =>
-          comment.direction === "outgoing" && comment.parent_external_id,
-      )
-      .map((comment) => comment.parent_external_id!),
-  );
 
   const nowIso = new Date().toISOString();
 
@@ -562,12 +460,6 @@ export async function getPostThreadView(
       deliveryLabel: isOurs
         ? (DELIVERY_LABELS[comment.delivery_status] ?? null)
         : null,
-      isAnswered:
-        !isOurs &&
-        comment.external_id !== null &&
-        answeredExternalIds.has(comment.external_id),
-      // Our own replies never carry a draft.
-      draft: isOurs ? null : (draftByComment.get(comment.id) ?? null),
     };
   });
 
@@ -584,65 +476,8 @@ export async function getPostThreadView(
       "комментария",
       "комментариев",
     ]),
-    draftBrief: {
-      description: post.draft_description,
-      instruction: post.draft_instruction,
-      isConfigured: post.draft_brief_set_at !== null,
-    },
     comments: commentViews,
-    sendableDraftCount: drafts.filter(
-      (draft) => draft.status === "ready" || draft.status === "edited",
-    ).length,
   };
-}
-
-/** Every live draft of one post, one per comment. */
-export async function listActivePostDrafts(
-  supabase: SupabaseClient,
-  workspaceId: string,
-  postId: string,
-): Promise<CommentDraftView[]> {
-  const { data, error } = await supabase
-    .from("comment_drafts")
-    .select(DRAFT_COLUMNS)
-    .eq("workspace_id", workspaceId)
-    .eq("post_id", postId)
-    .in("status", ACTIVE_DRAFT_STATUSES)
-    .order("created_at", { ascending: true });
-
-  if (error) {
-    console.error("[comments] failed to load post drafts", error);
-    throw new Error("Unable to load the drafts.");
-  }
-
-  return Promise.all(
-    ((data ?? []) as CommentDraftRow[]).map((row) => mapDraftRow(supabase, row)),
-  );
-}
-
-/** «Отправить все»: the ready/edited drafts of a post, oldest comment first. */
-export async function listSendablePostDrafts(
-  supabase: SupabaseClient,
-  workspaceId: string,
-  postId: string,
-): Promise<Array<{ draftId: string; commentId: string }>> {
-  const { data, error } = await supabase
-    .from("comment_drafts")
-    .select("id, comment_id, created_at")
-    .eq("workspace_id", workspaceId)
-    .eq("post_id", postId)
-    .in("status", SENDABLE_DRAFT_STATUSES)
-    .order("created_at", { ascending: true });
-
-  if (error) {
-    console.error("[comments] failed to load sendable drafts", error);
-    throw new Error("Unable to load the drafts.");
-  }
-
-  return ((data ?? []) as Array<{ id: string; comment_id: string }>).map((row) => ({
-    draftId: row.id,
-    commentId: row.comment_id,
-  }));
 }
 
 /** Opening a post resets its unread counter, same contract as a DM thread. */
@@ -667,152 +502,6 @@ export async function markPostRead(
   return data ? { ok: true } : { ok: false, error: "Пост не найден." };
 }
 
-/**
- * Stores the «Черновики» brief. Setting `draft_brief_set_at` is what flips
- * «Создать черновик» from "open the dialog" to "generate right away".
- */
-export async function savePostDraftBrief(
-  supabase: SupabaseClient,
-  workspaceId: string,
-  postId: string,
-  brief: { description: string; instruction: string },
-): Promise<CommentsMutationResult> {
-  const { data, error } = await supabase
-    .from("posts")
-    .update({
-      draft_description: brief.description.trim(),
-      draft_instruction: brief.instruction.trim(),
-      draft_brief_set_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    })
-    .eq("workspace_id", workspaceId)
-    .eq("id", postId)
-    .select("id")
-    .maybeSingle();
-
-  if (error) {
-    console.error("[comments] failed to save the post draft brief", error);
-    return { ok: false, error: "Не удалось сохранить настройки черновиков." };
-  }
-
-  return data ? { ok: true } : { ok: false, error: "Пост не найден." };
-}
-
-/** RLS-scoped ownership check before emitting an asynchronous generation. */
-export async function findPostForGeneration(
-  supabase: SupabaseClient,
-  workspaceId: string,
-  postId: string,
-): Promise<{ isBriefConfigured: boolean } | null> {
-  const { data, error } = await supabase
-    .from("posts")
-    .select("id, draft_brief_set_at")
-    .eq("workspace_id", workspaceId)
-    .eq("id", postId)
-    .maybeSingle();
-
-  if (error) {
-    console.error("[comments] failed to validate the post", error);
-    return null;
-  }
-
-  return data ? { isBriefConfigured: data.draft_brief_set_at !== null } : null;
-}
-
-export async function editCommentDraft(
-  supabase: SupabaseClient,
-  workspaceId: string,
-  draftId: string,
-  text: string,
-): Promise<CommentDraftMutationResult> {
-  const normalizedText = text.trim();
-
-  if (!normalizedText) {
-    return { ok: false, error: "Текст черновика не может быть пустым." };
-  }
-
-  const { data, error } = await supabase
-    .from("comment_drafts")
-    .update({
-      text: normalizedText,
-      status: "edited",
-      updated_at: new Date().toISOString(),
-    })
-    .eq("workspace_id", workspaceId)
-    .eq("id", draftId)
-    .in("status", ["ready", "edited"])
-    .select(DRAFT_COLUMNS)
-    .maybeSingle();
-
-  if (error) {
-    console.error("[comments] failed to edit a comment draft", error);
-    return { ok: false, error: "Не удалось сохранить черновик." };
-  }
-
-  if (!data) {
-    return { ok: false, error: "Черновик уже изменился — обновите страницу." };
-  }
-
-  return { ok: true, draft: await mapDraftRow(supabase, data as CommentDraftRow) };
-}
-
-export async function discardCommentDraft(
-  supabase: SupabaseClient,
-  workspaceId: string,
-  draftId: string,
-): Promise<CommentsMutationResult> {
-  const { data, error } = await supabase
-    .from("comment_drafts")
-    .update({ status: "discarded", updated_at: new Date().toISOString() })
-    .eq("workspace_id", workspaceId)
-    .eq("id", draftId)
-    .in("status", ["ready", "edited"])
-    .select("id")
-    .maybeSingle();
-
-  if (error) {
-    console.error("[comments] failed to discard a comment draft", error);
-    return { ok: false, error: "Не удалось отклонить черновик." };
-  }
-
-  return data
-    ? { ok: true }
-    : { ok: false, error: "Черновик уже изменился — обновите страницу." };
-}
-
-/**
- * Accepts one comment draft: draft → `sent`, an outgoing `pending` comment
- * inserted against the comment it answers — one transaction (see
- * `accept_comment_draft_for_send`). The caller emits `comment/send` afterwards.
- */
-export async function acceptCommentDraftForSend(
-  supabase: SupabaseClient,
-  workspaceId: string,
-  commentId: string,
-  draftId: string,
-): Promise<{ ok: true; replyCommentId: string } | { ok: false; error: string }> {
-  const { data, error } = await supabase.rpc("accept_comment_draft_for_send", {
-    target_workspace_id: workspaceId,
-    target_comment_id: commentId,
-    target_draft_id: draftId,
-  });
-
-  if (error) {
-    console.error("[comments] accept_comment_draft_for_send failed", error);
-    return { ok: false, error: "Не удалось подготовить отправку." };
-  }
-
-  if (typeof data !== "string" || data.length === 0) {
-    return { ok: false, error: "Черновик уже изменился — обновите страницу." };
-  }
-
-  return { ok: true, replyCommentId: data };
-}
-
-/**
- * Compensation when emitting `comment/send` throws after the reply was already
- * persisted `pending`: without the event nothing will ever publish it.
- */
 export async function markCommentSendFailedAfterEmit(
   supabase: SupabaseClient,
   workspaceId: string,
