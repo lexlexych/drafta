@@ -5,6 +5,7 @@ import { generateDraft } from "./generate-draft";
 import { postThumbnail } from "./post-thumbnail";
 import { pushDigest } from "./push-digest";
 import { sendComment } from "./send-comment";
+import { sendCommentPrivateReply } from "./send-comment-private-reply";
 import { sendMessage } from "./send-message";
 import { sendPush } from "./send-push";
 
@@ -15,6 +16,7 @@ export { generateDraft } from "./generate-draft";
 export { postThumbnail } from "./post-thumbnail";
 export { pushDigest } from "./push-digest";
 export { sendComment } from "./send-comment";
+export { sendCommentPrivateReply } from "./send-comment-private-reply";
 export { sendMessage } from "./send-message";
 export { sendPush } from "./send-push";
 
@@ -24,6 +26,7 @@ export const inngestFunctions = [
   generateCommentDrafts,
   sendMessage,
   sendComment,
+  sendCommentPrivateReply,
   sendPush,
   pushDigest,
   cleanupAiRequestLog,

@@ -1,3 +1,4 @@
+import type { PrivateReplyStatus } from "@/lib/db/comment-private-replies";
 import type { CommentTranslationView } from "@/lib/db/comment-translations";
 import type { AvatarView, ChannelBadgeView } from "@/lib/mock";
 
@@ -25,6 +26,22 @@ export type CommentEntryView = {
    * перевода сходит за ним в server action при первом нажатии.
    */
   translation: CommentTranslationView | null;
+  /**
+   * Состояние личного сообщения автору этого комментария, если его уже
+   * отправляли. `null` — не отправляли ни разу.
+   */
+  privateReply: { status: PrivateReplyStatus } | null;
+  /**
+   * Можно ли написать автору в ЛС: платформа поддерживает private reply,
+   * комментарий не старше окна платформы и ЛС по нему ещё не заводили.
+   */
+  canPrivateReply: boolean;
+  /**
+   * Куда ведёт «Отвечено в ЛС»: в переписку контакта, если она уже есть в
+   * drafta, иначе в его карточку. `null`, если комментатор не сопоставлен с
+   * контактом.
+   */
+  dmHref: string | null;
 };
 
 export type CommentView = CommentEntryView & {

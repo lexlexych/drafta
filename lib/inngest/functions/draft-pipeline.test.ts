@@ -67,6 +67,8 @@ function context(
       maxMessageLength: 4096,
       threadingStyle: "flat",
       supportsComments: false,
+      supportsPrivateReply: false,
+      privateReplyWindowHours: null,
     },
     knowledgeFiles: [
       {

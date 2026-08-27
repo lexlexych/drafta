@@ -22,6 +22,8 @@ import type { ChannelPlatform } from "../types";
  *       -> 200 { success, data: { messageId } }        (id at data.messageId)
  *   - POST /v1/inbox/comments/{commentId}/replies  { accountId, message }
  *       -> 200 { success, data: { commentId } }         (id at data.commentId)
+ *   - POST /v1/inbox/comments/{postId}/{commentId}/private-reply  { accountId, message }
+ *       -> 200 { status, messageId, commentId, platform } (id at top level)
  *   - GET  /v1/inbox/conversations  ?accountId&limit&cursor
  *       -> 200 { data: Conversation[], pagination }     (participantPicture per row)
  * Both authenticate with `Authorization: Bearer <ZERNIO_API_KEY>`. A Zernio
@@ -456,6 +458,59 @@ export async function sendZernioCommentReply(
   }
 
   return commentId;
+}
+
+/**
+ * Sends a private message to the author of a comment (`sendPrivateReplyToComment`
+ * — "Send a private message to the author of a comment. Supported on Instagram
+ * and Facebook only. One reply per comment, must be sent within 7 days").
+ *
+ * This is Meta's «private reply», the one path that opens a DM thread with
+ * someone who has never written to us: it is addressed to a comment, not to a
+ * conversation. The thread itself reaches drafta afterwards through the
+ * `conversation.started` / `message.sent` webhooks.
+ *
+ * Unlike the other send endpoints, the id comes back at the top level
+ * (`messageId`), not under `data`. `quickReplies`/`buttons` from the spec are
+ * deliberately not used: a plain text DM is what the operator wrote.
+ */
+export async function sendZernioCommentPrivateReply(
+  config: ZernioApiConfig,
+  input: {
+    accountId: string;
+    postExternalId: string;
+    commentExternalId: string;
+    text: string;
+  },
+): Promise<string> {
+  const response = await fetch(
+    joinUrl(
+      config.apiBaseUrl,
+      `inbox/comments/${encodeURIComponent(input.postExternalId)}/${encodeURIComponent(input.commentExternalId)}/private-reply`,
+    ),
+    {
+      method: "POST",
+      headers: { ...authHeaders(config), "Content-Type": "application/json" },
+      body: JSON.stringify({ accountId: input.accountId, message: input.text }),
+    },
+  );
+
+  if (!response.ok) {
+    // A 400 here is a permanent outcome, not a hiccup: the 7-day window has
+    // closed, the comment already got its one private reply, or the platform
+    // does not support them. The caller turns 4xx into a non-retriable failure.
+    throw await zernioHttpError(response, "Zernio private reply failed");
+  }
+
+  const body = (await readJson(response)) as { messageId?: unknown } | null;
+  const messageId = body?.messageId;
+  if (typeof messageId !== "string" || messageId.length === 0) {
+    throw new ZernioApiError(
+      "Zernio private reply response is missing `messageId`.",
+    );
+  }
+
+  return messageId;
 }
 
 /**

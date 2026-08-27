@@ -24,11 +24,13 @@ export function PostThread({
   post,
   backHref,
   commentTemplates,
+  messageTemplates,
   templateLanguage,
 }: {
   post: PostThreadView;
   backHref: string;
   commentTemplates: readonly ReplyTemplateOption[];
+  messageTemplates: readonly ReplyTemplateOption[];
   templateLanguage: TemplateLanguage;
 }) {
   return (
@@ -74,6 +76,7 @@ export function PostThread({
             comment={comment}
             replies={comment.replies}
             commentTemplates={commentTemplates}
+            messageTemplates={messageTemplates}
             templateLanguage={templateLanguage}
           />
         ))}

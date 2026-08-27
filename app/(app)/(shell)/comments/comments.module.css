@@ -66,3 +66,14 @@
   flex-direction: column;
   gap: 12px;
 }
+
+/* Статус в строке действий: не кнопка, а подпись («Отправляется в ЛС…»). */
+.commentActionNote {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--ink3);
+  min-height: 20px;
+}

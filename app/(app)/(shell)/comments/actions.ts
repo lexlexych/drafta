@@ -3,6 +3,11 @@
 import { revalidatePath } from "next/cache";
 
 import {
+  createCommentPrivateReply,
+  markPrivateReplyFailedAfterEmit,
+  retryCommentPrivateReply,
+} from "@/lib/db/comment-private-replies";
+import {
   POST_PAGE_SIZE,
   acceptManualCommentReply,
   getPostListView,
@@ -23,7 +28,10 @@ import {
   getCurrentWorkspace,
   type CurrentWorkspace,
 } from "@/lib/db/workspace";
-import { emitCommentSendRequested } from "@/lib/inngest/events";
+import {
+  emitCommentPrivateReplySendRequested,
+  emitCommentSendRequested,
+} from "@/lib/inngest/events";
 /**
  * Server actions of the «Публикации» screen. Nothing here is shared with
  * `/inbox`: comments have their own tables and their own send path.
@@ -211,5 +219,113 @@ export async function replyToCommentAction(input: {
     );
     revalidateCommentsView();
     return { ok: false, error: "Не удалось отправить ответ — попробуйте ещё раз." };
+  }
+}
+
+/**
+ * «Написать в ЛС»: личное сообщение автору комментария (Meta private reply).
+ *
+ * Правило платформы — одно сообщение на комментарий и только в течение 7 дней
+ * после него — держит уникальный ключ `comment_private_replies`, поэтому
+ * повторное нажатие в двух вкладках не превращается в два сообщения у клиента.
+ *
+ * Наружу отправляет Inngest-функция с ретраями (правило 8); если событие не
+ * ушло, строка помечается `failed`, иначе она осталась бы «отправляющейся»
+ * навсегда.
+ */
+export async function sendCommentPrivateReplyAction(input: {
+  postId: string;
+  commentId: string;
+  text: string;
+}): Promise<CommentsMutationResult> {
+  const context = await getActionContext();
+
+  if ("error" in context) {
+    return { ok: false, error: context.error };
+  }
+
+  const text = input.text.trim();
+
+  if (!text) {
+    return { ok: false, error: "Текст сообщения не может быть пустым." };
+  }
+
+  const created = await createCommentPrivateReply(context.supabase, {
+    workspaceId: context.workspace.id,
+    postId: input.postId,
+    commentId: input.commentId,
+    text,
+  });
+
+  if (!created.ok) {
+    return created;
+  }
+
+  revalidateCommentsView();
+
+  try {
+    await emitCommentPrivateReplySendRequested({
+      workspaceId: context.workspace.id,
+      postId: input.postId,
+      privateReplyId: created.privateReplyId,
+    });
+    return { ok: true };
+  } catch (error) {
+    console.error("[comments] failed to emit comment/private-reply.send", error);
+    await markPrivateReplyFailedAfterEmit(
+      context.supabase,
+      context.workspace.id,
+      created.privateReplyId,
+    );
+    revalidateCommentsView();
+    return {
+      ok: false,
+      error: "Не удалось отправить сообщение — попробуйте ещё раз.",
+    };
+  }
+}
+
+/** Повторная отправка ЛС после неудачи — тот же текст, тот же ряд. */
+export async function retryCommentPrivateReplyAction(input: {
+  postId: string;
+  commentId: string;
+}): Promise<CommentsMutationResult> {
+  const context = await getActionContext();
+
+  if ("error" in context) {
+    return { ok: false, error: context.error };
+  }
+
+  const retried = await retryCommentPrivateReply(
+    context.supabase,
+    context.workspace.id,
+    input.commentId,
+  );
+
+  if (!retried.ok) {
+    return retried;
+  }
+
+  revalidateCommentsView();
+
+  try {
+    await emitCommentPrivateReplySendRequested({
+      workspaceId: context.workspace.id,
+      postId: input.postId,
+      privateReplyId: retried.privateReplyId,
+    });
+    return { ok: true };
+  } catch (error) {
+    console.error("[comments] failed to emit comment/private-reply.send", error);
+    await markPrivateReplyFailedAfterEmit(
+      context.supabase,
+      context.workspace.id,
+      retried.privateReplyId,
+    );
+    revalidateCommentsView();
+    return {
+      ok: false,
+      error: "Не удалось отправить сообщение — попробуйте ещё раз.",
+    };
   }
 }

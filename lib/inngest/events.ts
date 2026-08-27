@@ -81,6 +81,18 @@ export type CommentSendRequestedEvent = {
 };
 
 /**
+ * Payload for the `comment/private-reply.send` Inngest event — the private
+ * message to a commenter is already persisted as `pending`; the event carries
+ * IDs only (vibecoding rule 7) and the function reloads the text itself.
+ */
+export type CommentPrivateReplySendRequestedEvent = {
+  workspaceId: string;
+  postId: string;
+  /** The `comment_private_replies` row to deliver. */
+  privateReplyId: string;
+};
+
+/**
  * Payload for the `push/notify.requested` Inngest event
  * (docs/architecture/11-realtime-pwa.md#web-push) — emitted by the webhook
  * pipeline as soon as an incoming direct message is persisted. IDs only
@@ -141,6 +153,13 @@ export const commentDraftsRequestedEvent = eventType(
 export const commentSendRequestedEvent = eventType("comment/send", {
   schema: staticSchema<CommentSendRequestedEvent>(),
 });
+
+export const commentPrivateReplySendRequestedEvent = eventType(
+  "comment/private-reply.send",
+  {
+    schema: staticSchema<CommentPrivateReplySendRequestedEvent>(),
+  },
+);
 
 /**
  * Requests a provider lookup after the webhook data is safely persisted.
@@ -243,6 +262,18 @@ export async function emitCommentSendRequested(
   payload: CommentSendRequestedEvent,
 ): Promise<void> {
   await inngest.send(commentSendRequestedEvent.create(payload));
+}
+
+/**
+ * Emits `comment/private-reply.send`. Deliberately throwing, same as the
+ * comment send above: the row is already persisted `pending`, so a failed emit
+ * has to be compensated to `failed` by the caller rather than leaving the
+ * operator with a message that never goes anywhere.
+ */
+export async function emitCommentPrivateReplySendRequested(
+  payload: CommentPrivateReplySendRequestedEvent,
+): Promise<void> {
+  await inngest.send(commentPrivateReplySendRequestedEvent.create(payload));
 }
 
 /**

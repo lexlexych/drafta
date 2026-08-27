@@ -374,6 +374,9 @@ const POST_THREAD = {
       isOurs: false,
       deliveryLabel: null,
       translation: null,
+      privateReply: null,
+      canPrivateReply: true,
+      dmHref: null,
       replies: [
         {
           id: "cmt_lena_reply",
@@ -384,6 +387,9 @@ const POST_THREAD = {
           isOurs: true,
           deliveryLabel: "Отправлено",
           translation: null,
+          privateReply: null,
+          canPrivateReply: false,
+          dmHref: null,
         },
       ],
     },
@@ -397,6 +403,9 @@ const POST_THREAD = {
       deliveryLabel: null,
       // Перевод из кэша едет вместе с тредом — клик не ходит в LLM.
       translation: { text: "Какая красивая коллекция!", sourceLanguage: "it" },
+      privateReply: { status: "sent" as const },
+      canPrivateReply: false,
+      dmHref: "/inbox?conversation=cnv_dm_marco_ig",
       replies: [],
     },
   ],
@@ -450,6 +459,9 @@ vi.mock("./comments/actions", () => ({
   }),
   replyToCommentAction: async (input: { text: string }) =>
     input.text.trim() ? { ok: true } : { ok: false, error: "Пустой ответ." },
+  sendCommentPrivateReplyAction: async (input: { text: string }) =>
+    input.text.trim() ? { ok: true } : { ok: false, error: "Пустое сообщение." },
+  retryCommentPrivateReplyAction: async () => ({ ok: true }),
   loadPostsAction: async (input: { channelIds: string[] }) => {
     const items = filterByChannels(POST_LIST_ITEMS, input.channelIds);
 
@@ -839,6 +851,36 @@ describe("comments page", () => {
     await waitFor(() =>
       expect(
         screen.queryByRole("textbox", { name: "Ответить на комментарий…" }),
+      ).toBeNull(),
+    );
+  });
+
+  it("writes to the commenter privately and links to the conversation once sent", async () => {
+    render(
+      await CommentsPage({
+        searchParams: searchParams({ post: "post_autumn_ig" }),
+      }),
+    );
+
+    // У комментария, которому уже писали, кнопки нет — только ссылка в переписку.
+    expect(
+      screen.getByRole("link", { name: /Отвечено в ЛС/ }).getAttribute("href"),
+    ).toBe("/inbox?conversation=cnv_dm_marco_ig");
+    expect(screen.getAllByRole("button", { name: "Написать в ЛС" })).toHaveLength(
+      1,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Написать в ЛС" }));
+
+    const field = screen.getByRole("textbox", {
+      name: "Написать в личные сообщения…",
+    });
+    fireEvent.change(field, { target: { value: "Ответили вам в личку." } });
+    fireEvent.click(screen.getByRole("button", { name: "Отправить" }));
+
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("textbox", { name: "Написать в личные сообщения…" }),
       ).toBeNull(),
     );
   });

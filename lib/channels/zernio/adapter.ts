@@ -6,6 +6,8 @@ import type {
   FetchParticipantAvatarResult,
   FetchPostThumbnailInput,
   FetchPostThumbnailResult,
+  SendCommentPrivateReplyInput,
+  SendCommentPrivateReplyResult,
   GetConnectUrlInput,
   GetConnectUrlResult,
   NormalizedEvent,
@@ -22,6 +24,7 @@ import {
   getZernioConnectAuthUrl,
   listZernioConversationParticipants,
   listZernioPostThumbnails,
+  sendZernioCommentPrivateReply,
   sendZernioCommentReply,
   sendZernioInboxMessage,
   ZernioApiError,
@@ -195,6 +198,22 @@ export function createZernioAdapter(
       }
 
       return { avatarUrl: null, found: participantFoundDirectly };
+    };
+
+    adapter.sendCommentPrivateReply = async (
+      input: SendCommentPrivateReplyInput,
+    ): Promise<SendCommentPrivateReplyResult> => {
+      const providerMessageId = await sendZernioCommentPrivateReply(
+        getApiConfig(),
+        {
+          accountId: input.externalAccountId,
+          postExternalId: input.postExternalId,
+          commentExternalId: input.commentExternalId,
+          text: input.text,
+        },
+      );
+
+      return { providerMessageId };
     };
 
     adapter.fetchPostThumbnail = async (

@@ -196,7 +196,7 @@ values
     'zernio',
     'telegram',
     'seed-a-telegram',
-    '{"responseWindowHours":null,"supportsAttachments":true,"supportsReadReceipts":true,"maxMessageLength":4096,"threadingStyle":"flat","supportsComments":false}'::jsonb,
+    '{"responseWindowHours":null,"supportsAttachments":true,"supportsReadReceipts":true,"maxMessageLength":4096,"threadingStyle":"flat","supportsComments":false,"supportsPrivateReply":false,"privateReplyWindowHours":null}'::jsonb,
     'active'
   ),
   (
@@ -206,7 +206,7 @@ values
     'zernio',
     'instagram',
     'seed-a-instagram',
-    '{"responseWindowHours":24,"supportsAttachments":true,"supportsReadReceipts":true,"maxMessageLength":1000,"threadingStyle":"parent","supportsComments":true}'::jsonb,
+    '{"responseWindowHours":24,"supportsAttachments":true,"supportsReadReceipts":true,"maxMessageLength":1000,"threadingStyle":"parent","supportsComments":true,"supportsPrivateReply":true,"privateReplyWindowHours":168}'::jsonb,
     'active'
   ),
   (
@@ -220,7 +220,7 @@ values
     'zernio',
     'telegram',
     'seed-a-telegram-support',
-    '{"responseWindowHours":null,"supportsAttachments":true,"supportsReadReceipts":true,"maxMessageLength":4096,"threadingStyle":"flat","supportsComments":false}'::jsonb,
+    '{"responseWindowHours":null,"supportsAttachments":true,"supportsReadReceipts":true,"maxMessageLength":4096,"threadingStyle":"flat","supportsComments":false,"supportsPrivateReply":false,"privateReplyWindowHours":null}'::jsonb,
     'active'
   ),
   (
@@ -230,7 +230,7 @@ values
     'zernio',
     'telegram',
     'seed-b-telegram',
-    '{"responseWindowHours":null,"supportsAttachments":true,"supportsReadReceipts":true,"maxMessageLength":4096,"threadingStyle":"flat","supportsComments":false}'::jsonb,
+    '{"responseWindowHours":null,"supportsAttachments":true,"supportsReadReceipts":true,"maxMessageLength":4096,"threadingStyle":"flat","supportsComments":false,"supportsPrivateReply":false,"privateReplyWindowHours":null}'::jsonb,
     'active'
   ),
   (
@@ -240,7 +240,7 @@ values
     'zernio',
     'instagram',
     'seed-b-instagram',
-    '{"responseWindowHours":24,"supportsAttachments":true,"supportsReadReceipts":true,"maxMessageLength":1000,"threadingStyle":"parent","supportsComments":true}'::jsonb,
+    '{"responseWindowHours":24,"supportsAttachments":true,"supportsReadReceipts":true,"maxMessageLength":1000,"threadingStyle":"parent","supportsComments":true,"supportsPrivateReply":true,"privateReplyWindowHours":168}'::jsonb,
     'active'
   )
 on conflict (id) do update
@@ -1006,3 +1006,62 @@ set
   source_language = excluded.source_language,
   provider = excluded.provider,
   model = excluded.model;
+
+-- ---------------------------------------------------------------------------
+-- переводы комментариев (кэш) и личные сообщения авторам комментариев
+-- ---------------------------------------------------------------------------
+
+insert into public.comment_translations (
+  id,
+  workspace_id,
+  post_id,
+  comment_id,
+  target_language,
+  source_language,
+  text,
+  provider,
+  model
+)
+values
+  (
+    'a0000000-0000-4000-8000-000000000910',
+    'a0000000-0000-4000-8000-000000000001',
+    'a0000000-0000-4000-8000-000000000410',
+    'a0000000-0000-4000-8000-000000000510',
+    'de',
+    'ru',
+    'Wie viel kostet die Lieferung nach Berlin?',
+    'mistral',
+    'mistral-small-latest'
+  )
+on conflict (id) do update
+set
+  text = excluded.text,
+  source_language = excluded.source_language,
+  provider = excluded.provider,
+  model = excluded.model;
+
+insert into public.comment_private_replies (
+  id,
+  workspace_id,
+  post_id,
+  comment_id,
+  text,
+  status,
+  external_id
+)
+values
+  (
+    'a0000000-0000-4000-8000-000000000920',
+    'a0000000-0000-4000-8000-000000000001',
+    'a0000000-0000-4000-8000-000000000410',
+    'a0000000-0000-4000-8000-000000000511',
+    'Синий свитер есть в наличии — написали вам в личные сообщения.',
+    'sent',
+    'ig_dm_marco_1'
+  )
+on conflict (id) do update
+set
+  text = excluded.text,
+  status = excluded.status,
+  external_id = excluded.external_id;

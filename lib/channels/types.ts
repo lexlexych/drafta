@@ -272,6 +272,27 @@ export interface FetchParticipantAvatarResult {
   found: boolean;
 }
 
+/**
+ * Input to the optional private reply — a DM to the author of a comment.
+ *
+ * Meta's «private reply» is not an ordinary DM: it is addressed to a comment,
+ * not to a thread, which is exactly why it can open a conversation that does
+ * not exist yet. The platform allows one per comment, within 7 days of it.
+ */
+export interface SendCommentPrivateReplyInput {
+  externalAccountId: string;
+  /** Provider-side post ID stored in `posts.external_id`. */
+  postExternalId: string;
+  /** Provider-side ID of the comment whose author is being written to. */
+  commentExternalId: string;
+  text: string;
+}
+
+export interface SendCommentPrivateReplyResult {
+  /** External ID the provider assigned to the sent direct message. */
+  providerMessageId: string;
+}
+
 /** Input to the optional provider lookup for one post's preview image. */
 export interface FetchPostThumbnailInput {
   externalAccountId: string;
@@ -374,6 +395,15 @@ export interface ChannelAdapter {
   fetchPostThumbnail?(
     input: FetchPostThumbnailInput,
   ): Promise<FetchPostThumbnailResult>;
+
+  /**
+   * Sends a private message to the author of a comment, where the platform
+   * supports it (`ChannelCapabilities.supportsPrivateReply`). Optional: a
+   * provider without the concept simply does not implement it.
+   */
+  sendCommentPrivateReply?(
+    input: SendCommentPrivateReplyInput,
+  ): Promise<SendCommentPrivateReplyResult>;
 }
 
 /**

@@ -13,7 +13,9 @@ import {
   listChannelConnections,
   type ChannelConnectionRow,
 } from "@/lib/db/channel-connections";
+import { resolveChannelCapabilities } from "@/lib/channels/capabilities";
 import { avatarProxyUrl } from "@/lib/avatars";
+import { listPostPrivateReplies } from "@/lib/db/comment-private-replies";
 import { listPostTranslations } from "@/lib/db/comment-translations";
 import { DEFAULT_WORKSPACE_LANGUAGE } from "@/lib/i18n/languages";
 import { avatarFor, countWithNoun, type ChannelBadgeView } from "@/lib/mock";
@@ -111,6 +113,7 @@ const COMMENT_COLUMNS =
 
 type ContactIdentityRow = {
   id: string;
+  contact_id: string | null;
   display_name: string | null;
   platform: string;
   external_id: string;
@@ -167,7 +170,7 @@ async function loadIdentitiesById(
   const { data, error } = await supabase
     .from("contact_identities")
     .select(
-      "id, display_name, platform, external_id, avatar_url, avatar_fetched_at",
+      "id, contact_id, display_name, platform, external_id, avatar_url, avatar_fetched_at",
     )
     .eq("workspace_id", workspaceId)
     .in("id", identityIds);
@@ -179,6 +182,50 @@ async function loadIdentitiesById(
 
   for (const row of (data ?? []) as ContactIdentityRow[]) {
     map.set(row.id, row);
+  }
+
+  return map;
+}
+
+/**
+ * Переписки этих контактов в канале поста — чтобы «Отвечено в ЛС» вело сразу в
+ * тред, а не в карточку контакта.
+ *
+ * Тред может ещё не существовать: private reply создаёт его на стороне Meta, а
+ * в drafta он появляется вебхуком `conversation.started`, который приходит
+ * отдельно. Пустая карта — нормальный промежуточный случай, а не ошибка.
+ */
+async function loadContactConversations(
+  supabase: SupabaseClient,
+  workspaceId: string,
+  channelConnectionId: string,
+  contactIds: string[],
+): Promise<Map<string, string>> {
+  const map = new Map<string, string>();
+
+  if (contactIds.length === 0) {
+    return map;
+  }
+
+  const { data, error } = await supabase
+    .from("conversations")
+    .select("id, contact_id")
+    .eq("workspace_id", workspaceId)
+    .eq("channel_connection_id", channelConnectionId)
+    .in("contact_id", [...new Set(contactIds)]);
+
+  if (error) {
+    console.error("[comments] failed to load contact conversations", error);
+    return map;
+  }
+
+  for (const row of (data ?? []) as Array<{
+    id: string;
+    contact_id: string | null;
+  }>) {
+    if (row.contact_id && !map.has(row.contact_id)) {
+      map.set(row.contact_id, row.id);
+    }
   }
 
   return map;
@@ -488,9 +535,10 @@ export async function getPostThreadView(
     return null;
   }
 
-  const [comments, translations] = await Promise.all([
+  const [comments, translations, privateReplies] = await Promise.all([
     loadComments(supabase, workspaceId, post.id),
     listPostTranslations(supabase, workspaceId, post.id, targetLanguage),
+    listPostPrivateReplies(supabase, workspaceId, post.id),
   ]);
 
   const identityIds = [
@@ -501,6 +549,25 @@ export async function getPostThreadView(
     ),
   ];
   const identitiesById = await loadIdentitiesById(supabase, workspaceId, identityIds);
+  const conversationByContact = await loadContactConversations(
+    supabase,
+    workspaceId,
+    post.channel_connection_id,
+    [...identitiesById.values()]
+      .map((identity) => identity.contact_id)
+      .filter((id): id is string => Boolean(id)),
+  );
+
+  // Окно private reply — правило платформы, а не наше: Meta разрешает написать
+  // автору комментария только в течение недели после него.
+  const capabilities = resolveChannelCapabilities(
+    channel.platform,
+    channel.capabilities,
+  );
+  const privateReplyWindowMs =
+    capabilities.supportsPrivateReply && capabilities.privateReplyWindowHours
+      ? capabilities.privateReplyWindowHours * 60 * 60 * 1000
+      : null;
 
   const nowIso = new Date().toISOString();
 
@@ -538,6 +605,22 @@ export async function getPostThreadView(
         ? (DELIVERY_LABELS[comment.delivery_status] ?? null)
         : null,
       translation: translations.get(comment.id) ?? null,
+      privateReply: privateReplies.get(comment.id) ?? null,
+      canPrivateReply:
+        !isOurs &&
+        privateReplyWindowMs !== null &&
+        !privateReplies.has(comment.id) &&
+        Date.parse(comment.created_at) + privateReplyWindowMs > Date.now(),
+      dmHref: identity?.contact_id
+        ? (() => {
+            const conversationId = conversationByContact.get(
+              identity.contact_id,
+            );
+            return conversationId
+              ? `/inbox?conversation=${conversationId}`
+              : `/contacts?contact=${identity.contact_id}`;
+          })()
+        : null,
     });
   }
 

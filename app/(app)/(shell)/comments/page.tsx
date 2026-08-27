@@ -49,15 +49,23 @@ export default async function CommentsPage({
   // Первая страница без фильтра — дальше список дозагружает себя сам.
   // Шаблоны для значка в поле ответа: список маленький и меняется редко —
   // едет пропом вместе с тредом, без отдельного клиентского запроса.
-  const [list, filterChannels, workspaceLanguage, commentTemplates] =
-    await Promise.all([
-      getPostListView(supabase, workspace.id, channels, {
-        limit: POST_PAGE_SIZE,
-      }),
-      getCommentsChannelFiltersView(supabase, workspace.id, channels),
-      getWorkspaceLanguage(supabase, workspace.id),
-      listActiveReplyTemplates(supabase, workspace.id, "comment"),
-    ]);
+  // «Ответить» подставляет шаблоны комментариев, «Написать в ЛС» — шаблоны
+  // сообщений: это разные поверхности и разные тексты (20260826110000).
+  const [
+    list,
+    filterChannels,
+    workspaceLanguage,
+    commentTemplates,
+    messageTemplates,
+  ] = await Promise.all([
+    getPostListView(supabase, workspace.id, channels, {
+      limit: POST_PAGE_SIZE,
+    }),
+    getCommentsChannelFiltersView(supabase, workspace.id, channels),
+    getWorkspaceLanguage(supabase, workspace.id),
+    listActiveReplyTemplates(supabase, workspace.id, "comment"),
+    listActiveReplyTemplates(supabase, workspace.id, "message"),
+  ]);
 
   // Пост открывается только явным выбором пользователя — см. `../inbox/page.tsx`.
   const post = postId
@@ -90,6 +98,7 @@ export default async function CommentsPage({
               post={post}
               backHref={PATHNAME}
               commentTemplates={commentTemplates}
+              messageTemplates={messageTemplates}
               templateLanguage={defaultTemplateLanguage(workspaceLanguage)}
             />
           </>

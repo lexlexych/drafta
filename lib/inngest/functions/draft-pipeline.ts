@@ -18,10 +18,9 @@ import {
   type KnowledgeFileForPrompt,
 } from "@/lib/ai/knowledge-base";
 import {
-  getDefaultChannelCapabilities,
+  resolveChannelCapabilities,
   type ChannelCapabilities,
 } from "@/lib/channels/capabilities";
-import type { ChannelPlatform } from "@/lib/channels/types";
 import { createAdminSupabaseClient } from "@/lib/db/admin";
 import { recordAiRequest } from "@/lib/db/ai-request-log";
 import { recordAiUsage } from "@/lib/db/ai-usage";
@@ -130,61 +129,6 @@ function assertQuerySucceeded(error: QueryError, operation: string): void {
 
   const code = error.code ? ` (${error.code})` : "";
   throw new Error(`${operation} failed${code}.`);
-}
-
-function isChannelPlatform(value: unknown): value is ChannelPlatform {
-  return (
-    value === "telegram" ||
-    value === "whatsapp" ||
-    value === "instagram" ||
-    value === "facebook"
-  );
-}
-
-function channelCapabilities(
-  platformValue: unknown,
-  storedValue: unknown,
-): ChannelCapabilities {
-  if (!isChannelPlatform(platformValue)) {
-    throw new Error("Conversation channel platform is unsupported.");
-  }
-
-  const defaults = getDefaultChannelCapabilities(platformValue);
-  if (typeof storedValue !== "object" || storedValue === null) {
-    return defaults;
-  }
-
-  const stored = storedValue as Partial<ChannelCapabilities>;
-  return {
-    responseWindowHours:
-      stored.responseWindowHours === null ||
-      typeof stored.responseWindowHours === "number"
-        ? stored.responseWindowHours
-        : defaults.responseWindowHours,
-    supportsAttachments:
-      typeof stored.supportsAttachments === "boolean"
-        ? stored.supportsAttachments
-        : defaults.supportsAttachments,
-    supportsReadReceipts:
-      typeof stored.supportsReadReceipts === "boolean"
-        ? stored.supportsReadReceipts
-        : defaults.supportsReadReceipts,
-    maxMessageLength:
-      stored.maxMessageLength === null ||
-      typeof stored.maxMessageLength === "number"
-        ? stored.maxMessageLength
-        : defaults.maxMessageLength,
-    threadingStyle:
-      stored.threadingStyle === "flat" ||
-      stored.threadingStyle === "parent" ||
-      stored.threadingStyle === "email-headers"
-        ? stored.threadingStyle
-        : defaults.threadingStyle,
-    supportsComments:
-      typeof stored.supportsComments === "boolean"
-        ? stored.supportsComments
-        : defaults.supportsComments,
-  };
 }
 
 function normalizeAiSettings(row: Record<string, unknown>): PipelineAiSettings {
@@ -369,7 +313,7 @@ async function loadContext(
     aiSettings: normalizeAiSettings(settings as Record<string, unknown>),
     messages,
     batchMessages,
-    channelCapabilities: channelCapabilities(
+    channelCapabilities: resolveChannelCapabilities(
       connection.platform,
       connection.capabilities,
     ),
