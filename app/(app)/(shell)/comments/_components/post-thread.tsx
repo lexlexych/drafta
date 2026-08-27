@@ -1,8 +1,10 @@
 import Link from "next/link";
 
 import type { PostThreadView } from "@/lib/comments/types";
+import type { TemplateLanguage } from "@/lib/i18n/template-languages";
 
 import { BackIcon, ExternalIcon } from "../../_components/icons";
+import type { ReplyTemplateOption } from "../../_components/template-picker";
 import paneStyles from "../../_components/panes.module.css";
 import styles from "../comments.module.css";
 import { CommentCard } from "./comment-card";
@@ -21,9 +23,13 @@ import { CommentCard } from "./comment-card";
 export function PostThread({
   post,
   backHref,
+  commentTemplates,
+  templateLanguage,
 }: {
   post: PostThreadView;
   backHref: string;
+  commentTemplates: readonly ReplyTemplateOption[];
+  templateLanguage: TemplateLanguage;
 }) {
   return (
     <>
@@ -66,6 +72,9 @@ export function PostThread({
             key={comment.id}
             postId={post.postId}
             comment={comment}
+            replies={comment.replies}
+            commentTemplates={commentTemplates}
+            templateLanguage={templateLanguage}
           />
         ))}
       </div>

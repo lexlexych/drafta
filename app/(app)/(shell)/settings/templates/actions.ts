@@ -34,12 +34,13 @@ async function requireCurrentWorkspaceId(): Promise<
 }
 
 /**
- * Шаблоны видны не только в настройках, но и поповером в треде, поэтому
- * обновляем обе поверхности.
+ * Шаблоны видны не только в настройках, но и поповером в поле ответа — и в
+ * переписке, и под комментарием, — поэтому обновляем все три поверхности.
  */
 function refreshTemplates() {
   revalidatePath(SETTINGS_PATH);
   revalidatePath("/inbox");
+  revalidatePath("/comments");
 }
 
 export async function createReplyTemplateAction(

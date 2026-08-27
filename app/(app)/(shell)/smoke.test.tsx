@@ -372,9 +372,20 @@ const POST_THREAD = {
       text: "Сколько стоит доставка по Берлину?",
       time: "10:12",
       isOurs: false,
-      isReply: false,
       deliveryLabel: null,
       translation: null,
+      replies: [
+        {
+          id: "cmt_lena_reply",
+          authorName: "Вы",
+          avatar: null,
+          text: "Доставка по Берлину — 4 евро.",
+          time: "10:15",
+          isOurs: true,
+          deliveryLabel: "Отправлено",
+          translation: null,
+        },
+      ],
     },
     {
       id: "cmt_marco",
@@ -383,10 +394,10 @@ const POST_THREAD = {
       text: "Che bella collezione!",
       time: "10:20",
       isOurs: false,
-      isReply: false,
       deliveryLabel: null,
       // Перевод из кэша едет вместе с тредом — клик не ходит в LLM.
       translation: { text: "Какая красивая коллекция!", sourceLanguage: "it" },
+      replies: [],
     },
   ],
 };
@@ -437,6 +448,8 @@ vi.mock("./comments/actions", () => ({
     text: "Wie viel kostet die Lieferung nach Berlin?",
     sourceLanguage: "ru",
   }),
+  replyToCommentAction: async (input: { text: string }) =>
+    input.text.trim() ? { ok: true } : { ok: false, error: "Пустой ответ." },
   loadPostsAction: async (input: { channelIds: string[] }) => {
     const items = filterByChannels(POST_LIST_ITEMS, input.channelIds);
 
@@ -791,6 +804,43 @@ describe("comments page", () => {
     );
 
     expect(screen.getAllByText(/Сколько стоит доставка/)).toHaveLength(2);
+  });
+
+  it("threads our published reply under the comment it answers", async () => {
+    render(
+      await CommentsPage({
+        searchParams: searchParams({ post: "post_autumn_ig" }),
+      }),
+    );
+
+    expect(screen.getByText("Доставка по Берлину — 4 евро.")).toBeDefined();
+    expect(screen.getByText(/Отправлено/)).toBeDefined();
+  });
+
+  it("opens a reply field under the comment and hides the action row", async () => {
+    render(
+      await CommentsPage({
+        searchParams: searchParams({ post: "post_autumn_ig" }),
+      }),
+    );
+
+    fireEvent.click(screen.getAllByRole("button", { name: "Ответить" })[0]!);
+
+    const field = screen.getByRole("textbox", {
+      name: "Ответить на комментарий…",
+    });
+    expect(field).toBeDefined();
+    // Пока поле открыто, строка действий этого комментария скрыта.
+    expect(screen.getAllByRole("button", { name: "Ответить" })).toHaveLength(1);
+
+    fireEvent.change(field, { target: { value: "Уже отправили!" } });
+    fireEvent.click(screen.getByRole("button", { name: "Отправить" }));
+
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("textbox", { name: "Ответить на комментарий…" }),
+      ).toBeNull(),
+    );
   });
 
   it("shows a cached comment translation without calling the action", async () => {

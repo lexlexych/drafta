@@ -1,40 +1,53 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 
-import type { CommentView } from "@/lib/comments/types";
+import type { CommentEntryView } from "@/lib/comments/types";
 import type { CommentTranslationView } from "@/lib/db/comment-translations";
 import {
   isTemplateLanguage,
   templateLanguageLabel,
+  type TemplateLanguage,
 } from "@/lib/i18n/template-languages";
 
 import { Spinner } from "../../_components/activity";
 import { Avatar } from "../../_components/avatar";
 import { TranslateIcon, UndoIcon } from "../../_components/icons";
 import { showToast } from "../../_components/stub";
+import type { ReplyTemplateOption } from "../../_components/template-picker";
 import paneStyles from "../../_components/panes.module.css";
 import uiStyles from "../../_components/ui.module.css";
-import { translateCommentAction } from "../actions";
+import { replyToCommentAction, translateCommentAction } from "../actions";
 import styles from "../comments.module.css";
+import { InlineComposer } from "./inline-composer";
 
 /**
- * Один комментарий и строка действий под ним.
+ * Один комментарий, строка действий под ним и его ветка ответов.
  *
- * Клиентский, потому что и перевод, и (дальше) поле ответа — локальное состояние
- * одного комментария: `router.refresh()` от realtime-подписки не должен его
- * сбрасывать. Ровно та же причина, по которой клиентский `MessageBubble`.
+ * Клиентский, потому что и перевод, и поле ответа — локальное состояние одного
+ * комментария: `router.refresh()` от realtime-подписки не должен его сбрасывать.
+ * Ровно та же причина, по которой клиентский `MessageBubble`.
  */
 export function CommentCard({
   postId,
   comment,
+  commentTemplates,
+  templateLanguage,
+  replies = [],
 }: {
   postId: string;
-  comment: CommentView;
+  comment: CommentEntryView;
+  commentTemplates: readonly ReplyTemplateOption[];
+  templateLanguage: TemplateLanguage;
+  /** Ветка под комментарием; у самих ответов её нет. */
+  replies?: readonly CommentEntryView[];
 }) {
+  const router = useRouter();
   const [fetched, setFetched] = useState<CommentTranslationView | null>(null);
   const [isTranslated, setIsTranslated] = useState(false);
   const [isTranslating, setIsTranslating] = useState(false);
+  const [isReplyOpen, setIsReplyOpen] = useState(false);
 
   // Свежий перевод перекрывает предзагруженный из кэша.
   const translation = fetched ?? comment.translation;
@@ -76,12 +89,30 @@ export function CommentCard({
     setIsTranslated(true);
   };
 
+  const submitReply = async (text: string): Promise<boolean> => {
+    const result = await replyToCommentAction({
+      postId,
+      commentId: comment.id,
+      text,
+    });
+
+    if (!result.ok) {
+      showToast(result.error);
+      return false;
+    }
+
+    setIsReplyOpen(false);
+    // `revalidatePath` в действии обновил серверную разметку; refresh подтягивает
+    // её, чтобы ответ появился в треде ещё до realtime.
+    router.refresh();
+    return true;
+  };
+
   return (
     <div className={paneStyles.commentRow}>
       <div
         className={[
           paneStyles.comment,
-          comment.isReply ? paneStyles.commentReply : "",
           comment.isOurs ? paneStyles.commentOurs : "",
         ]
           .filter(Boolean)
@@ -111,7 +142,15 @@ export function CommentCard({
         </div>
       </div>
 
-      {comment.isOurs ? null : (
+      {comment.isOurs ? null : isReplyOpen ? (
+        <InlineComposer
+          placeholder="Ответить на комментарий…"
+          templates={commentTemplates}
+          workspaceLanguage={templateLanguage}
+          onSubmit={submitReply}
+          onCancel={() => setIsReplyOpen(false)}
+        />
+      ) : (
         <div className={styles.commentActions}>
           {canTranslate ? (
             <button
@@ -133,8 +172,29 @@ export function CommentCard({
               {isTranslated ? <span>{originLabel}</span> : null}
             </button>
           ) : null}
+          <button
+            type="button"
+            className={styles.commentAction}
+            onClick={() => setIsReplyOpen(true)}
+          >
+            Ответить
+          </button>
         </div>
       )}
+
+      {replies.length > 0 ? (
+        <div className={styles.commentReplies}>
+          {replies.map((reply) => (
+            <CommentCard
+              key={reply.id}
+              postId={postId}
+              comment={reply}
+              commentTemplates={commentTemplates}
+              templateLanguage={templateLanguage}
+            />
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }

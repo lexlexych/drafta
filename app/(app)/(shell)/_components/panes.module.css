@@ -432,10 +432,6 @@
   padding: 2px 0;
 }
 
-.commentReply {
-  margin-left: 40px;
-}
-
 .commentBody {
   min-width: 0;
   flex: 1;

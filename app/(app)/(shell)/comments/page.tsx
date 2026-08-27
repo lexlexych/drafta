@@ -5,8 +5,10 @@ import {
   getPostThreadView,
   listChannelConnections,
 } from "@/lib/db/comments";
+import { listActiveReplyTemplates } from "@/lib/db/reply-templates";
 import { createServerSupabaseClient } from "@/lib/db/server";
 import { getWorkspaceLanguage } from "@/lib/db/workspace-language";
+import { defaultTemplateLanguage } from "@/lib/i18n/template-languages";
 import { getAuthenticatedUser, getCurrentWorkspace } from "@/lib/db/workspace";
 
 import { QUERY_KEYS, firstParam } from "../_components/navigation";
@@ -45,11 +47,17 @@ export default async function CommentsPage({
   const hasCommentChannels = commentCapableChannels.length > 0;
 
   // Первая страница без фильтра — дальше список дозагружает себя сам.
-  const [list, filterChannels, workspaceLanguage] = await Promise.all([
-    getPostListView(supabase, workspace.id, channels, { limit: POST_PAGE_SIZE }),
-    getCommentsChannelFiltersView(supabase, workspace.id, channels),
-    getWorkspaceLanguage(supabase, workspace.id),
-  ]);
+  // Шаблоны для значка в поле ответа: список маленький и меняется редко —
+  // едет пропом вместе с тредом, без отдельного клиентского запроса.
+  const [list, filterChannels, workspaceLanguage, commentTemplates] =
+    await Promise.all([
+      getPostListView(supabase, workspace.id, channels, {
+        limit: POST_PAGE_SIZE,
+      }),
+      getCommentsChannelFiltersView(supabase, workspace.id, channels),
+      getWorkspaceLanguage(supabase, workspace.id),
+      listActiveReplyTemplates(supabase, workspace.id, "comment"),
+    ]);
 
   // Пост открывается только явным выбором пользователя — см. `../inbox/page.tsx`.
   const post = postId
@@ -78,7 +86,12 @@ export default async function CommentsPage({
         {post ? (
           <>
             <MarkPostRead postId={post.postId} />
-            <PostThread post={post} backHref={PATHNAME} />
+            <PostThread
+              post={post}
+              backHref={PATHNAME}
+              commentTemplates={commentTemplates}
+              templateLanguage={defaultTemplateLanguage(workspaceLanguage)}
+            />
           </>
         ) : (
           <div className={styles.paneEmpty}>

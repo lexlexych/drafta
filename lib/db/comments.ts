@@ -4,6 +4,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { ChannelPlatform } from "@/lib/channels/types";
 import type {
+  CommentEntryView,
   CommentView,
   PostListView,
   PostThreadView,
@@ -384,6 +385,75 @@ async function loadListPreviews(
   return map;
 }
 
+/**
+ * Раскладывает плоский список комментариев в два уровня: сверху комментарии
+ * под постом, под каждым — его ветка (наши ответы и ответы других людей).
+ *
+ * Родство идёт по провайдерским id: у ответа `parent_external_id` равен
+ * `external_id` того, кому отвечают. Instagram укладывает ветку в два уровня —
+ * ответ на ответ виден в той же ветке, — поэтому ответ поднимается к своему
+ * верхнему предку, а не создаёт третий уровень. Ответ, чьего родителя в посте
+ * нет (родитель удалён или ещё не доехал), остаётся верхним уровнем: потерять
+ * его хуже, чем показать не с тем отступом.
+ */
+function buildCommentThread(
+  comments: CommentRow[],
+  entries: Map<string, CommentEntryView>,
+): CommentView[] {
+  const byExternalId = new Map<string, CommentRow>();
+
+  for (const comment of comments) {
+    if (comment.external_id) {
+      byExternalId.set(comment.external_id, comment);
+    }
+  }
+
+  const topLevelAncestor = (comment: CommentRow): CommentRow => {
+    let current = comment;
+    const visited = new Set<string>([comment.id]);
+
+    while (current.parent_external_id) {
+      const parent = byExternalId.get(current.parent_external_id);
+      // Неизвестный или зациклившийся родитель — дальше подниматься некуда.
+      if (!parent || visited.has(parent.id)) break;
+      visited.add(parent.id);
+      current = parent;
+    }
+
+    return current;
+  };
+
+  const threads: CommentView[] = [];
+  const threadById = new Map<string, CommentView>();
+
+  for (const comment of comments) {
+    const entry = entries.get(comment.id);
+    if (!entry) continue;
+
+    const ancestor = topLevelAncestor(comment);
+
+    if (ancestor.id === comment.id) {
+      const thread: CommentView = { ...entry, replies: [] };
+      threads.push(thread);
+      threadById.set(comment.id, thread);
+      continue;
+    }
+
+    const thread = threadById.get(ancestor.id);
+    if (thread) {
+      thread.replies.push(entry);
+    } else {
+      // Предок есть в посте, но ещё не разобран — такого при хронологическом
+      // порядке не бывает, и всё же лучше показать комментарий, чем потерять.
+      const orphan: CommentView = { ...entry, replies: [] };
+      threads.push(orphan);
+      threadById.set(comment.id, orphan);
+    }
+  }
+
+  return threads;
+}
+
 /** Post thread: the post, its comments (chronological) and each comment's draft. */
 export async function getPostThreadView(
   supabase: SupabaseClient,
@@ -434,7 +504,9 @@ export async function getPostThreadView(
 
   const nowIso = new Date().toISOString();
 
-  const commentViews: CommentView[] = comments.map((comment) => {
+  const entries = new Map<string, CommentEntryView>();
+
+  for (const comment of comments) {
     const identity = comment.contact_identity_id
       ? identitiesById.get(comment.contact_identity_id)
       : undefined;
@@ -443,7 +515,7 @@ export async function getPostThreadView(
       ? "Вы"
       : (identity?.display_name?.trim() || identity?.external_id || "Комментатор");
 
-    return {
+    entries.set(comment.id, {
       id: comment.id,
       authorName,
       avatar: isOurs
@@ -462,13 +534,14 @@ export async function getPostThreadView(
       text: comment.text,
       time: formatMessageTime(comment.created_at, nowIso),
       isOurs,
-      isReply: comment.parent_external_id !== null,
       deliveryLabel: isOurs
         ? (DELIVERY_LABELS[comment.delivery_status] ?? null)
         : null,
       translation: translations.get(comment.id) ?? null,
-    };
-  });
+    });
+  }
+
+  const commentViews = buildCommentThread(comments, entries);
 
   const incomingCount = comments.filter(
     (comment) => comment.direction === "incoming",
@@ -507,6 +580,40 @@ export async function markPostRead(
   }
 
   return data ? { ok: true } : { ok: false, error: "Пост не найден." };
+}
+
+/**
+ * Ручной ответ на комментарий: строка `comments` в статусе `pending`, готовая к
+ * отправке через Inngest. Текст приходит из поля под комментарием — сам набран
+ * или подставлен шаблоном.
+ *
+ * Вся проверка внутри RPC (`accept_manual_comment_reply`): комментарий должен
+ * существовать в этом workspace и быть входящим, а пост блокируется на время
+ * вставки. `null` в ответе означает, что одно из условий не выполнено, — от
+ * пустого текста до чужого id.
+ */
+export async function acceptManualCommentReply(
+  supabase: SupabaseClient,
+  workspaceId: string,
+  commentId: string,
+  text: string,
+): Promise<{ ok: true; replyCommentId: string } | { ok: false; error: string }> {
+  const { data, error } = await supabase.rpc("accept_manual_comment_reply", {
+    target_workspace_id: workspaceId,
+    target_comment_id: commentId,
+    reply_text: text,
+  });
+
+  if (error) {
+    console.error("[comments] accept_manual_comment_reply failed", error);
+    return { ok: false, error: "Не удалось подготовить отправку." };
+  }
+
+  if (typeof data !== "string" || data.length === 0) {
+    return { ok: false, error: "Комментарий не найден." };
+  }
+
+  return { ok: true, replyCommentId: data };
 }
 
 export async function markCommentSendFailedAfterEmit(

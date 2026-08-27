@@ -9,7 +9,8 @@ import type { AvatarView, ChannelBadgeView } from "@/lib/mock";
  * badge, avatar).
  */
 
-export type CommentView = {
+/** Комментарий сам по себе, без своей ветки ответов. */
+export type CommentEntryView = {
   id: string;
   authorName: string;
   avatar: AvatarView | null;
@@ -17,8 +18,6 @@ export type CommentView = {
   time: string;
   /** Our own published reply rather than someone's comment. */
   isOurs: boolean;
-  /** A reply to another comment rather than a top-level comment. */
-  isReply: boolean;
   /** Delivery status of our own reply; null for incoming comments. */
   deliveryLabel: string | null;
   /**
@@ -26,6 +25,15 @@ export type CommentView = {
    * перевода сходит за ним в server action при первом нажатии.
    */
   translation: CommentTranslationView | null;
+};
+
+export type CommentView = CommentEntryView & {
+  /**
+   * Ветка под комментарием в хронологии: наши ответы и ответы других людей.
+   * Instagram укладывает всё в два уровня — ответ на ответ попадает в ту же
+   * ветку, поэтому здесь ровно один уровень вложенности, а не дерево.
+   */
+  replies: CommentEntryView[];
 };
 
 export type PostThreadView = {

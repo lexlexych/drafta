@@ -4,8 +4,10 @@ import { revalidatePath } from "next/cache";
 
 import {
   POST_PAGE_SIZE,
+  acceptManualCommentReply,
   getPostListView,
   listChannelConnections,
+  markCommentSendFailedAfterEmit,
   markPostRead,
   type CommentsMutationResult,
 } from "@/lib/db/comments";
@@ -21,6 +23,7 @@ import {
   getCurrentWorkspace,
   type CurrentWorkspace,
 } from "@/lib/db/workspace";
+import { emitCommentSendRequested } from "@/lib/inngest/events";
 /**
  * Server actions of the «Публикации» screen. Nothing here is shared with
  * `/inbox`: comments have their own tables and their own send path.
@@ -156,4 +159,57 @@ export async function translateCommentAction(
     commentId,
     targetLanguage,
   );
+}
+
+/**
+ * «Ответить»: публичный ответ на конкретный комментарий, набранный оператором
+ * или подставленный шаблоном.
+ *
+ * Строка `comments` появляется сразу в статусе `pending` — она и есть то, что
+ * пользователь видит в треде как «Отправляется…». Наружу ответ уходит
+ * Inngest-функцией `send-comment` с ретраями (правило 8), а не из этого
+ * запроса; если событие не удалось отправить, ответ помечается `failed`, иначе
+ * он остался бы «отправляющимся» навсегда.
+ */
+export async function replyToCommentAction(input: {
+  postId: string;
+  commentId: string;
+  text: string;
+}): Promise<CommentsMutationResult> {
+  const context = await getActionContext();
+
+  if ("error" in context) {
+    return { ok: false, error: context.error };
+  }
+
+  const accepted = await acceptManualCommentReply(
+    context.supabase,
+    context.workspace.id,
+    input.commentId,
+    input.text,
+  );
+
+  if (!accepted.ok) {
+    return accepted;
+  }
+
+  revalidateCommentsView();
+
+  try {
+    await emitCommentSendRequested({
+      workspaceId: context.workspace.id,
+      postId: input.postId,
+      replyCommentId: accepted.replyCommentId,
+    });
+    return { ok: true };
+  } catch (error) {
+    console.error("[comments] failed to emit comment/send", error);
+    await markCommentSendFailedAfterEmit(
+      context.supabase,
+      context.workspace.id,
+      accepted.replyCommentId,
+    );
+    revalidateCommentsView();
+    return { ok: false, error: "Не удалось отправить ответ — попробуйте ещё раз." };
+  }
 }
