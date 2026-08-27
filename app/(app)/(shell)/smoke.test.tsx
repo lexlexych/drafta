@@ -374,6 +374,19 @@ const POST_THREAD = {
       isOurs: false,
       isReply: false,
       deliveryLabel: null,
+      translation: null,
+    },
+    {
+      id: "cmt_marco",
+      authorName: "Marco Bianchi",
+      avatar: { initials: "MB", hue: 120 },
+      text: "Che bella collezione!",
+      time: "10:20",
+      isOurs: false,
+      isReply: false,
+      deliveryLabel: null,
+      // Перевод из кэша едет вместе с тредом — клик не ходит в LLM.
+      translation: { text: "Какая красивая коллекция!", sourceLanguage: "it" },
     },
   ],
 };
@@ -419,6 +432,11 @@ vi.mock("@/lib/db/comments", () => ({
 
 vi.mock("./comments/actions", () => ({
   markPostReadAction: async () => ({ ok: true }),
+  translateCommentAction: async () => ({
+    ok: true,
+    text: "Wie viel kostet die Lieferung nach Berlin?",
+    sourceLanguage: "ru",
+  }),
   loadPostsAction: async (input: { channelIds: string[] }) => {
     const items = filterByChannels(POST_LIST_ITEMS, input.channelIds);
 
@@ -749,6 +767,43 @@ describe("comments page", () => {
     expect(screen.queryByRole("button", { name: "Черновики" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Создать черновик" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Отправить все" })).toBeNull();
+  });
+
+  it("translates a comment in place and switches back to the original", async () => {
+    render(
+      await CommentsPage({
+        searchParams: searchParams({ post: "post_autumn_ig" }),
+      }),
+    );
+
+    fireEvent.click(screen.getAllByRole("button", { name: "Перевести" })[0]!);
+
+    expect(
+      await screen.findByText(/Wie viel kostet die Lieferung/),
+    ).toBeDefined();
+    // Тот же текст стоит превью в списке слева, поэтому считаем вхождения:
+    // в треде оригинал уступил место переводу, в списке остался.
+    expect(screen.getAllByText(/Сколько стоит доставка/)).toHaveLength(1);
+
+    // Кнопка возврата называет язык оригинала, а не просто «назад».
+    fireEvent.click(
+      screen.getByRole("button", { name: "Показать оригинал — Русский" }),
+    );
+
+    expect(screen.getAllByText(/Сколько стоит доставка/)).toHaveLength(2);
+  });
+
+  it("shows a cached comment translation without calling the action", async () => {
+    render(
+      await CommentsPage({
+        searchParams: searchParams({ post: "post_autumn_ig" }),
+      }),
+    );
+
+    // У второго комментария перевод уже в кэше — он и должен показаться.
+    fireEvent.click(screen.getAllByRole("button", { name: "Перевести" })[1]!);
+
+    expect(await screen.findByText("Какая красивая коллекция!")).toBeDefined();
   });
 });
 

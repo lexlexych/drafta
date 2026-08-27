@@ -1,3 +1,4 @@
+import type { CommentTranslationView } from "@/lib/db/comment-translations";
 import type { AvatarView, ChannelBadgeView } from "@/lib/mock";
 
 /**
@@ -20,6 +21,11 @@ export type CommentView = {
   isReply: boolean;
   /** Delivery status of our own reply; null for incoming comments. */
   deliveryLabel: string | null;
+  /**
+   * Готовый перевод на язык workspace, если он уже в кэше. `null` — значок
+   * перевода сходит за ним в server action при первом нажатии.
+   */
+  translation: CommentTranslationView | null;
 };
 
 export type PostThreadView = {

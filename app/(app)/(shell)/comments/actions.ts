@@ -11,6 +11,11 @@ import {
 } from "@/lib/db/comments";
 import type { PostListItemView } from "@/lib/comments/types";
 import { createServerSupabaseClient } from "@/lib/db/server";
+import { getWorkspaceLanguage } from "@/lib/db/workspace-language";
+import {
+  translateComment,
+  type TranslateCommentResult,
+} from "@/lib/translation/translate-comment";
 import {
   getAuthenticatedUser,
   getCurrentWorkspace,
@@ -120,4 +125,35 @@ export async function markPostReadAction(
   }
 
   return result;
+}
+
+/**
+ * Перевод одного комментария на язык workspace — зеркало
+ * `translateMessageAction` из `../inbox/actions.ts`.
+ *
+ * `revalidatePath` намеренно нет: перевод живёт в состоянии клиентского
+ * компонента, а не в серверной разметке треда, и рефреш только сбросил бы его.
+ */
+export async function translateCommentAction(
+  postId: string,
+  commentId: string,
+): Promise<TranslateCommentResult> {
+  const context = await getActionContext();
+
+  if ("error" in context) {
+    return { ok: false, error: context.error };
+  }
+
+  const targetLanguage = await getWorkspaceLanguage(
+    context.supabase,
+    context.workspace.id,
+  );
+
+  return translateComment(
+    context.supabase,
+    context.workspace.id,
+    postId,
+    commentId,
+    targetLanguage,
+  );
 }

@@ -13,6 +13,8 @@ import {
   type ChannelConnectionRow,
 } from "@/lib/db/channel-connections";
 import { avatarProxyUrl } from "@/lib/avatars";
+import { listPostTranslations } from "@/lib/db/comment-translations";
+import { DEFAULT_WORKSPACE_LANGUAGE } from "@/lib/i18n/languages";
 import { avatarFor, countWithNoun, type ChannelBadgeView } from "@/lib/mock";
 import { formatListTime, formatMessageTime } from "@/lib/mock/time";
 
@@ -388,6 +390,7 @@ export async function getPostThreadView(
   workspaceId: string,
   channels: ChannelConnectionRow[],
   postId: string,
+  targetLanguage: string = DEFAULT_WORKSPACE_LANGUAGE,
 ): Promise<PostThreadView | null> {
   const { data: postRow, error: postError } = await supabase
     .from("posts")
@@ -415,7 +418,10 @@ export async function getPostThreadView(
     return null;
   }
 
-  const comments = await loadComments(supabase, workspaceId, post.id);
+  const [comments, translations] = await Promise.all([
+    loadComments(supabase, workspaceId, post.id),
+    listPostTranslations(supabase, workspaceId, post.id, targetLanguage),
+  ]);
 
   const identityIds = [
     ...new Set(
@@ -460,6 +466,7 @@ export async function getPostThreadView(
       deliveryLabel: isOurs
         ? (DELIVERY_LABELS[comment.delivery_status] ?? null)
         : null,
+      translation: translations.get(comment.id) ?? null,
     };
   });
 

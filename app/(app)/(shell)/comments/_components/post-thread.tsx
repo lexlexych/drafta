@@ -1,17 +1,16 @@
-"use client";
-
 import Link from "next/link";
 
 import type { PostThreadView } from "@/lib/comments/types";
 
-import { Avatar } from "../../_components/avatar";
 import { BackIcon, ExternalIcon } from "../../_components/icons";
 import paneStyles from "../../_components/panes.module.css";
-import uiStyles from "../../_components/ui.module.css";
 import styles from "../comments.module.css";
+import { CommentCard } from "./comment-card";
 
 /**
  * The open post: its description in the header and the comments underneath.
+ * Server-rendered: per-comment state (translation, the open reply field) lives
+ * in `CommentCard`, so a `router.refresh()` from realtime never resets it.
  *
  * AI drafts used to live here — a card under every comment plus the «Черновики»
  * brief dialog and an «Отправить все» bar. That whole surface is gone while the
@@ -63,40 +62,11 @@ export function PostThread({
           <div className={paneStyles.empty}>Пока нет комментариев.</div>
         ) : null}
         {post.comments.map((comment) => (
-          <div key={comment.id} className={paneStyles.commentRow}>
-            <div
-              className={[
-                paneStyles.comment,
-                comment.isReply ? paneStyles.commentReply : "",
-                comment.isOurs ? paneStyles.commentOurs : "",
-              ]
-                .filter(Boolean)
-                .join(" ")}
-            >
-              {comment.isOurs ? (
-                <span
-                  className={`${uiStyles.avatar} ${uiStyles.avatarSm} ${paneStyles.ourAvatar}`}
-                  aria-hidden="true"
-                >
-                  {comment.authorName.slice(0, 1)}
-                </span>
-              ) : comment.avatar ? (
-                <Avatar avatar={comment.avatar} size="sm" />
-              ) : null}
-              <div className={paneStyles.commentBody}>
-                <div className={paneStyles.commentHead}>
-                  <b>{comment.authorName}</b>
-                  <span
-                    className={`${paneStyles.commentHandle} ${uiStyles.num}`}
-                  >
-                    {comment.time}
-                    {comment.deliveryLabel ? ` · ${comment.deliveryLabel}` : ""}
-                  </span>
-                </div>
-                <div className={paneStyles.commentText}>{comment.text}</div>
-              </div>
-            </div>
-          </div>
+          <CommentCard
+            key={comment.id}
+            postId={post.postId}
+            comment={comment}
+          />
         ))}
       </div>
     </>

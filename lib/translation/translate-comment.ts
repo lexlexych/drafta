@@ -14,92 +14,85 @@ import {
 import { recordAiRequest } from "@/lib/db/ai-request-log";
 import { recordAiUsage } from "@/lib/db/ai-usage";
 import {
-  getMessageTranslation,
-  saveMessageTranslation,
-  type MessageTranslationView,
-} from "@/lib/db/message-translations";
+  getCommentTranslation,
+  saveCommentTranslation,
+  type CommentTranslationView,
+} from "@/lib/db/comment-translations";
 import { templateLanguageLabel } from "@/lib/i18n/template-languages";
 
 import { TRANSLATION_MAX_SOURCE_LENGTH, completionBudget } from "./budget";
 
 /**
- * Перевод одного сообщения на язык workspace: кэш → маскирование → LLM →
+ * Перевод одного комментария на язык workspace: кэш → маскирование → LLM →
  * размаскирование → кэш.
  *
- * Живёт отдельным модулем, потому что не помещается ни в `lib/ai` (тот чист от
- * БД и логирования), ни в тонкую обёртку server action. В отличие от черновиков
- * это единственный вызов LLM вне Inngest: перевод — короткая интерактивная
- * операция, пользователь ждёт её с открытым спиннером, и очередь с ретраями
- * превратила бы секунду ожидания в неопределённость. Цена решения — ретраев
- * нет: неудача возвращается пользователю как «попробуйте ещё раз».
+ * Зеркало `./translate-message.ts` со всеми его решениями: синхронный вызов вне
+ * Inngest (пользователь ждёт со спиннером, и очередь с ретраями превратила бы
+ * секунду ожидания в неопределённость), ценой отсутствия ретраев. Отличается
+ * только хранилищем кэша и `surface: "comment"` в журналах AI.
  */
 
-export type TranslateMessageResult =
-  | ({ ok: true } & MessageTranslationView)
+export type TranslateCommentResult =
+  | ({ ok: true } & CommentTranslationView)
   | { ok: false; error: string };
 
-type MessageRow = {
+type CommentRow = {
   id: string;
-  conversation_id: string;
+  post_id: string;
   text: string;
 };
 
-async function loadMessage(
+async function loadComment(
   supabase: SupabaseClient,
   workspaceId: string,
-  conversationId: string,
-  messageId: string,
-): Promise<MessageRow | null> {
-  // Диалог в условии наравне с сообщением: id приходит от клиента, и совпасть
-  // должны оба — RLS отсекает чужой workspace, это отсекает чужой тред.
+  postId: string,
+  commentId: string,
+): Promise<CommentRow | null> {
+  // Пост в условии наравне с комментарием: id приходит от клиента, и совпасть
+  // должны оба — RLS отсекает чужой workspace, это отсекает чужой пост.
   const { data, error } = await supabase
-    .from("messages")
-    .select("id, conversation_id, text")
+    .from("comments")
+    .select("id, post_id, text")
     .eq("workspace_id", workspaceId)
-    .eq("conversation_id", conversationId)
-    .eq("id", messageId)
+    .eq("post_id", postId)
+    .eq("id", commentId)
     .maybeSingle();
 
   if (error) {
-    console.error("[translation] failed to load the message", error);
+    console.error("[translation] failed to load the comment", error);
     return null;
   }
 
-  return (data as MessageRow | null) ?? null;
+  return (data as CommentRow | null) ?? null;
 }
 
-export async function translateMessage(
+export async function translateComment(
   supabase: SupabaseClient,
   workspaceId: string,
-  conversationId: string,
-  messageId: string,
+  postId: string,
+  commentId: string,
   targetLanguage: string,
-): Promise<TranslateMessageResult> {
-  const message = await loadMessage(
-    supabase,
-    workspaceId,
-    conversationId,
-    messageId,
-  );
+): Promise<TranslateCommentResult> {
+  const comment = await loadComment(supabase, workspaceId, postId, commentId);
 
-  if (!message) {
-    return { ok: false, error: "Сообщение не найдено." };
+  if (!comment) {
+    return { ok: false, error: "Комментарий не найден." };
   }
 
-  const source = message.text.trim();
+  const source = comment.text.trim();
 
   if (source.length === 0) {
-    return { ok: false, error: "В сообщении нет текста для перевода." };
+    return { ok: false, error: "В комментарии нет текста для перевода." };
   }
 
   if (source.length > TRANSLATION_MAX_SOURCE_LENGTH) {
-    return { ok: false, error: "Сообщение слишком длинное для перевода." };
+    return { ok: false, error: "Комментарий слишком длинный для перевода." };
   }
 
-  const cached = await getMessageTranslation(
+  const cached = await getCommentTranslation(
     supabase,
     workspaceId,
-    messageId,
+    commentId,
     targetLanguage,
   );
 
@@ -120,13 +113,8 @@ export async function translateMessage(
 
   try {
     completion = await generateCompletionWithUsage(prompt, {
-      // Перевод — механическая задача: разброс здесь означает только то, что
-      // одно и то же сообщение переведётся по-разному.
       temperature: 0,
       maxTokens: completionBudget(source.length),
-      // Модель не задаём: `selectProviderModel` возьмёт провайдерский дефолт.
-      // Модель из настроек workspace выбрана под генерацию черновиков, а
-      // перевод — дешёвая операция, которой незачем ехать на дорогой модели.
     });
   } catch (error) {
     if (error instanceof AiConfigurationError) {
@@ -140,7 +128,7 @@ export async function translateMessage(
       await recordAiRequest({
         workspaceId,
         operation: "translation",
-        surface: "message",
+        surface: "comment",
         provider: error.provider,
         model: error.model ?? "unknown",
         exchange: error.exchange ?? null,
@@ -159,7 +147,7 @@ export async function translateMessage(
     recordAiUsage({
       workspaceId,
       operation: "translation",
-      surface: "message",
+      surface: "comment",
       provider: completion.provider,
       model: completion.model,
       usage: completion.usage,
@@ -167,7 +155,7 @@ export async function translateMessage(
     recordAiRequest({
       workspaceId,
       operation: "translation",
-      surface: "message",
+      surface: "comment",
       provider: completion.provider,
       model: completion.model,
       exchange: completion.exchange,
@@ -179,16 +167,15 @@ export async function translateMessage(
   const text = unmaskText(parsed.text, masked.entities).trim();
 
   if (text.length === 0) {
-    // Модель прислала один заголовок `SOURCE:` и ничего под ним. Пустой пузырь
-    // выглядел бы как удалённое сообщение, поэтому это ошибка, а не результат.
+    // Модель прислала один заголовок `SOURCE:` и ничего под ним.
     console.error("[translation] completion carried no translated text");
     return { ok: false, error: "Не удалось перевести — попробуйте ещё раз." };
   }
 
-  await saveMessageTranslation(supabase, {
+  await saveCommentTranslation(supabase, {
     workspaceId,
-    conversationId,
-    messageId,
+    postId,
+    commentId,
     targetLanguage,
     sourceLanguage: parsed.sourceLanguage,
     text,

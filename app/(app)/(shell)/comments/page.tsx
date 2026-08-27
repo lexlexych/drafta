@@ -6,6 +6,7 @@ import {
   listChannelConnections,
 } from "@/lib/db/comments";
 import { createServerSupabaseClient } from "@/lib/db/server";
+import { getWorkspaceLanguage } from "@/lib/db/workspace-language";
 import { getAuthenticatedUser, getCurrentWorkspace } from "@/lib/db/workspace";
 
 import { QUERY_KEYS, firstParam } from "../_components/navigation";
@@ -44,14 +45,21 @@ export default async function CommentsPage({
   const hasCommentChannels = commentCapableChannels.length > 0;
 
   // Первая страница без фильтра — дальше список дозагружает себя сам.
-  const [list, filterChannels] = await Promise.all([
+  const [list, filterChannels, workspaceLanguage] = await Promise.all([
     getPostListView(supabase, workspace.id, channels, { limit: POST_PAGE_SIZE }),
     getCommentsChannelFiltersView(supabase, workspace.id, channels),
+    getWorkspaceLanguage(supabase, workspace.id),
   ]);
 
   // Пост открывается только явным выбором пользователя — см. `../inbox/page.tsx`.
   const post = postId
-    ? await getPostThreadView(supabase, workspace.id, channels, postId)
+    ? await getPostThreadView(
+        supabase,
+        workspace.id,
+        channels,
+        postId,
+        workspaceLanguage,
+      )
     : null;
   const isDetail = postId !== null;
 
