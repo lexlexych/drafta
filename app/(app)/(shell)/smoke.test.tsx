@@ -855,6 +855,30 @@ describe("comments page", () => {
     );
   });
 
+  it("closes the reply field on the cross and brings the actions back", async () => {
+    render(
+      await CommentsPage({
+        searchParams: searchParams({ post: "post_autumn_ig" }),
+      }),
+    );
+
+    fireEvent.click(screen.getAllByRole("button", { name: "Ответить" })[0]!);
+    // Передумать можно и над набранным текстом — крестик виден в обоих случаях.
+    fireEvent.change(
+      screen.getByRole("textbox", { name: "Ответить на комментарий…" }),
+      { target: { value: "Не буду отправлять" } },
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Закрыть поле ответа" }),
+    );
+
+    expect(
+      screen.queryByRole("textbox", { name: "Ответить на комментарий…" }),
+    ).toBeNull();
+    expect(screen.getAllByRole("button", { name: "Ответить" })).toHaveLength(2);
+  });
+
   it("writes to the commenter privately and links to the conversation once sent", async () => {
     render(
       await CommentsPage({

@@ -77,3 +77,26 @@
   color: var(--ink3);
   min-height: 20px;
 }
+
+/* Крестик слева в поле ответа: те же размеры, что у соседних значков поля. */
+.closeButton {
+  flex: none;
+  width: 30px;
+  height: 34px;
+  border-radius: 9px;
+  color: var(--ink3);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.closeButton:hover:not(:disabled),
+.closeButton:focus-visible {
+  color: var(--ink);
+  background: var(--hover);
+}
+
+.closeButton:disabled {
+  cursor: default;
+  opacity: 0.55;
+}

@@ -302,6 +302,21 @@ export function CheckIcon(props: IconProps) {
   );
 }
 
+/** Закрыть — крестик у поля ответа под комментарием. */
+export function CloseIcon(props: IconProps) {
+  return (
+    <Icon
+      size={14}
+      {...stroke}
+      strokeWidth={2}
+      strokeLinecap="round"
+      {...props}
+    >
+      <path d="M6 6l12 12M18 6 6 18" />
+    </Icon>
+  );
+}
+
 export function PlusIcon(props: IconProps) {
   return (
     <Icon

@@ -8,7 +8,7 @@ import {
   type KeyboardEvent,
 } from "react";
 
-import { SendIcon } from "../../_components/icons";
+import { CloseIcon, SendIcon } from "../../_components/icons";
 import {
   TemplatePicker,
   type ReplyTemplateOption,
@@ -95,6 +95,18 @@ export function InlineComposer({
       className={`${paneStyles.composer} ${styles.inlineComposer}`}
       onSubmit={(event) => void submit(event)}
     >
+      {/* Крестик, в отличие от значка шаблонов, виден всегда: передумать можно и
+          над набранным текстом, а Escape — подсказка не для всех. */}
+      <button
+        type="button"
+        className={styles.closeButton}
+        aria-label="Закрыть поле ответа"
+        title="Закрыть поле ответа"
+        disabled={isSending}
+        onClick={onCancel}
+      >
+        <CloseIcon />
+      </button>
       {/* Значок шаблонов — помощник для пустого поля; над набранным текстом
           он только мешал бы, ровно как в переписке. */}
       {!text.trim() && !isSending ? (
