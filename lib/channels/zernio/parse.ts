@@ -4,6 +4,7 @@ import type {
   NormalizedDirectMessageEvent,
   NormalizedEvent,
   NormalizedPostRef,
+  NormalizedSender,
   ParseWebhookInput,
 } from "../types";
 
@@ -42,6 +43,13 @@ import type {
  * carries `comment.parentCommentId`. Its `post` block carries the post's own
  * `content` (the caption), `imageUrl` and `permalink` — from Zernio's synced
  * copy, no platform call on the comment path. See `buildCommentEvent`.
+ *
+ * `conversation.started` (`WebhookPayloadConversationStarted`) and
+ * `message.sent` (`WebhookPayloadMessageSent`) are the outbound half of the DM
+ * lifecycle. Both carry the envelope's `conversation` block — including
+ * `participantId`, the only place the contact is named on an event whose sender
+ * is the business itself. drafta needs them because a thread can begin without
+ * any inbound message: a private reply to a comment opens one.
  *
  * `post.external.created` / `post.external.updated` (`WebhookPayloadExternalPost`)
  * are what put a post published *natively* — from the Instagram app, not through
@@ -93,6 +101,15 @@ interface ZernioRawConversation {
   /** Zernio's internal conversation ID — see `parseSingleEnvelope` for why this, not `platformConversationId`, is used as the normalized conversation's `externalId`. */
   id: string;
   platformConversationId?: string;
+  /**
+   * The contact on the other side. Present on every inbox envelope, and the
+   * only way to name them on events whose sender is the business itself
+   * (`message.sent`) or which carry no message at all
+   * (`conversation.started`).
+   */
+  participantId?: string;
+  participantName?: string | null;
+  participantUsername?: string | null;
   participantPicture?: string | null;
 }
 
@@ -235,6 +252,21 @@ const DM_EVENT_TYPES: Readonly<
  * sets `comment.parentCommentId`.
  */
 const COMMENT_EVENT = "comment.received" as const;
+
+/**
+ * A DM thread appearing for the first time, in either direction. drafta creates
+ * `conversations` rows from inbound messages, which leaves out exactly the
+ * thread a private reply to a comment opens — this event covers it.
+ */
+const CONVERSATION_STARTED_EVENT = "conversation.started" as const;
+
+/**
+ * A message the connected account sent — from drafta, from Zernio's own
+ * dashboard, or as a private reply. Ours are already in `messages` and get
+ * deduplicated downstream; the rest are how the operator sees what was sent
+ * outside drafta.
+ */
+const OUTGOING_MESSAGE_EVENT = "message.sent" as const;
 
 /**
  * Publication of a post on the connected account — no comment yet, by
@@ -394,6 +426,14 @@ function parseSingleEnvelope(raw: unknown): NormalizedEvent | null {
     return buildCommentEvent(raw, raw.account.platform);
   }
 
+  if (raw.event === CONVERSATION_STARTED_EVENT) {
+    return buildConversationStartedEvent(raw, raw.account.platform);
+  }
+
+  if (raw.event === OUTGOING_MESSAGE_EVENT) {
+    return buildOutgoingMessageEvent(raw, raw.account.platform);
+  }
+
   if (EXTERNAL_POST_EVENTS.has(raw.event)) {
     return buildExternalPostEvent(raw, raw.account.platform);
   }
@@ -413,6 +453,93 @@ function parseSingleEnvelope(raw: unknown): NormalizedEvent | null {
     `[zernio] skipping unsupported event type "${raw.event}" (event id: ${raw.id})`,
   );
   return null;
+}
+
+/**
+ * The contact on the other side of a thread, from the envelope's `conversation`
+ * block. Undefined when the provider did not name them — the thread is still
+ * worth creating, it just has no contact attached yet.
+ */
+function conversationParticipant(
+  conversation: ZernioRawConversation,
+): NormalizedSender | undefined {
+  const externalId = nonEmptyString(conversation.participantId);
+  if (!externalId) {
+    return undefined;
+  }
+
+  return {
+    externalId,
+    displayName:
+      nonEmptyString(conversation.participantName) ??
+      nonEmptyString(conversation.participantUsername) ??
+      undefined,
+    avatarUrl: nonEmptyString(conversation.participantPicture) ?? undefined,
+  };
+}
+
+function buildConversationStartedEvent(
+  raw: ZernioWebhookEnvelope,
+  platform: ChannelPlatform,
+): NormalizedEvent | null {
+  if (!isZernioConversation(raw.conversation)) {
+    console.warn(
+      `[zernio] skipping "${raw.event}" event with no usable conversation payload (event id: ${raw.id})`,
+    );
+    return null;
+  }
+
+  const participant = conversationParticipant(raw.conversation);
+
+  return {
+    type: "conversation.started",
+    providerEventId: raw.id,
+    provider: "zernio",
+    platform,
+    externalAccountId: envelopeAccountId(raw),
+    conversation: { externalId: raw.conversation.id },
+    ...(participant ? { participant } : {}),
+    rawMetadata: raw as unknown as Record<string, unknown>,
+  };
+}
+
+function buildOutgoingMessageEvent(
+  raw: ZernioWebhookEnvelope,
+  platform: ChannelPlatform,
+): NormalizedEvent | null {
+  if (!isZernioMessage(raw.message)) {
+    console.warn(
+      `[zernio] skipping "${raw.event}" event with no usable message payload (event id: ${raw.id})`,
+    );
+    return null;
+  }
+
+  if (!isZernioConversation(raw.conversation)) {
+    console.warn(
+      `[zernio] skipping "${raw.event}" event with no usable conversation payload (event id: ${raw.id})`,
+    );
+    return null;
+  }
+
+  const participant = conversationParticipant(raw.conversation);
+
+  return {
+    type: "message.sent",
+    providerEventId: raw.id,
+    provider: "zernio",
+    platform,
+    externalAccountId: envelopeAccountId(raw),
+    conversation: { externalId: raw.conversation.id },
+    // `message.sender` here is the business account, not a contact — the person
+    // on the other side comes from the conversation block instead.
+    ...(participant ? { participant } : {}),
+    message: {
+      externalId: raw.message.id,
+      text: raw.message.text ?? "",
+      attachments: (raw.message.attachments ?? []).map(mapAttachment),
+    },
+    rawMetadata: raw as unknown as Record<string, unknown>,
+  };
 }
 
 function buildDmEvent(

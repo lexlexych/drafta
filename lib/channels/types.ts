@@ -20,9 +20,11 @@ export type ChannelPlatform = "telegram" | "whatsapp" | "instagram" | "facebook"
 /** Normalized event type — see docs/architecture/05-channels.md#нормализованное-событие. */
 export type NormalizedEventType =
   | "message.received"
+  | "message.sent"
   | "message.delivered"
   | "message.read"
   | "message.failed"
+  | "conversation.started"
   | "comment.received"
   | "post.published";
 
@@ -74,6 +76,19 @@ export interface NormalizedMessage {
 export interface NormalizedConversationRef {
   /** External ID of the DM thread. */
   externalId: string;
+}
+
+/**
+ * A message *we* sent, as the provider reports it back.
+ *
+ * Deliberately without a `sender`: the sender is the connected account, not a
+ * contact, and treating it like one would mint a contact for our own business.
+ */
+export interface NormalizedOutgoingMessage {
+  /** External ID of the message at the provider — the idempotency key. */
+  externalId: string;
+  text: string;
+  attachments: NormalizedAttachment[];
 }
 
 /**
@@ -153,6 +168,33 @@ export interface NormalizedCommentEvent extends NormalizedEventBase {
 }
 
 /**
+ * A DM thread appearing for the first time, in either direction.
+ *
+ * drafta needs it because a thread can start without an inbound message: a
+ * private reply to a comment opens one, and until this event arrives that
+ * conversation exists at the provider but nowhere in «Сообщения».
+ */
+export interface NormalizedConversationStartedEvent extends NormalizedEventBase {
+  type: "conversation.started";
+  conversation: NormalizedConversationRef;
+  /** The contact on the other side, when the provider names them. */
+  participant?: NormalizedSender;
+}
+
+/**
+ * A message the connected account sent — through drafta, through the provider's
+ * own dashboard, or as a private reply to a comment. Ours already sit in
+ * `messages`, so the handler's job is mostly to notice the ones that are not.
+ */
+export interface NormalizedOutgoingMessageEvent extends NormalizedEventBase {
+  type: "message.sent";
+  conversation: NormalizedConversationRef;
+  message: NormalizedOutgoingMessage;
+  /** The contact on the other side, when the provider names them. */
+  participant?: NormalizedSender;
+}
+
+/**
  * A post published on the connected account. It creates the `posts` row right
  * away, so the post shows up under «Комментарии» before anyone has commented.
  */
@@ -169,6 +211,8 @@ export interface NormalizedPostPublishedEvent extends NormalizedEventBase {
  */
 export type NormalizedEvent =
   | NormalizedDirectMessageEvent
+  | NormalizedConversationStartedEvent
+  | NormalizedOutgoingMessageEvent
   | NormalizedCommentEvent
   | NormalizedPostPublishedEvent;
 

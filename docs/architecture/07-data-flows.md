@@ -42,6 +42,8 @@ updated: 2026-07-19
 |---|---|---|
 | `message.received` | contact_identity (+contact и доступный аватар), conversation, message | `push/notify.requested` → мгновенный push; при устаревшем/отсутствующем аватаре — `contact/avatar.sync-requested`. Черновик **не** генерируется |
 | `comment.received` | contact_identity (+contact), post (лениво, с описанием и ссылкой из блока `post`), comment | `post/thumbnail.sync-requested` → запрос миниатюры, только если её ещё нет |
+| `conversation.started` | conversation (+contact_identity участника) | — |
+| `message.sent` | conversation, исходящее message — если его ещё нет по `external_id` | — |
 | `post.published` (у Zernio — `post.external.*` и `post.platform.published`) | post | `post/thumbnail.sync-requested` → первая попытка получить миниатюру |
 
 Комментарий не порождает события генерации: черновик к комментарию создаётся
@@ -236,6 +238,7 @@ SPF/DKIM/DMARC к этому моменту уже настроены (они н
 | `generate-comment-drafts` | черновики к комментариям поста — по запросу пользователя ([6.4](#64-черновики-к-комментариям)) |
 | `send-message` | исходящие через адаптер |
 | `send-comment` | публикация ответа на конкретный комментарий |
+| `send-comment-private-reply` | личное сообщение автору комментария (Meta private reply); отказ платформы (окно 7 дней, повтор) приходит как 4xx и ретраям не подлежит |
 | `send-push` | Web Push на каждое входящее — для пользователей в режиме «каждое входящее» ([11. PWA](11-realtime-pwa.md#web-push)); событие эмитит вебхук-пайплайн сразу после записи сообщения |
 | `contact-avatar` | фоновая загрузка фото одного участника через API адаптера; событие содержит только IDs |
 | `post-thumbnail` | получает миниатюру одного поста через API адаптера; повторные события ничего не делают после заполнения `thumbnail_url` |

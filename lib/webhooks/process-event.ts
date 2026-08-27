@@ -2,8 +2,10 @@
 
 import type {
   NormalizedCommentEvent,
+  NormalizedConversationStartedEvent,
   NormalizedDirectMessageEvent,
   NormalizedEvent,
+  NormalizedOutgoingMessageEvent,
   NormalizedPostPublishedEvent,
   NormalizedPostRef,
   NormalizedSender,
@@ -29,7 +31,11 @@ import {
  *     which it usually is, since the comment payload brings the preview along).
  *     A comment draft is never generated on arrival;
  *   * `post.published` → the post row alone, so a freshly published post is
- *     listed with zero comments.
+ *     listed with zero comments;
+ *   * `conversation.started` / `message.sent` → the outbound half of a DM
+ *     thread. Both exist for the same reason: a conversation can begin without
+ *     any inbound message — a private reply to a comment opens one — and until
+ *     these arrive it exists at the provider but nowhere in «Сообщения».
  *
  * Delivery statuses update an existing message; anything else is journaled and
  * skipped. Called once per event returned by the adapter's `parseWebhook` — see
@@ -170,6 +176,30 @@ export async function processInboundEvent(
 
   if (event.type === "comment.received") {
     await processIncomingComment({
+      supabase,
+      event,
+      channelConnectionId: channelConnection.id,
+      workspaceId: channelConnection.workspace_id,
+      markProcessed,
+      markUnprocessedWithError,
+    });
+    return;
+  }
+
+  if (event.type === "conversation.started") {
+    await processConversationStarted({
+      supabase,
+      event,
+      channelConnectionId: channelConnection.id,
+      workspaceId: channelConnection.workspace_id,
+      markProcessed,
+      markUnprocessedWithError,
+    });
+    return;
+  }
+
+  if (event.type === "message.sent") {
+    await processOutgoingMessage({
       supabase,
       event,
       channelConnectionId: channelConnection.id,
@@ -348,6 +378,217 @@ async function processIncomingComment(params: {
   }
 }
 
+/**
+ * Resolves the contact behind a thread's participant, when the provider named
+ * one. Reuses the same identity key as the inbound path, so the person who
+ * commented and the person we then DM'd stay one contact.
+ */
+async function resolveParticipantContactId(
+  supabase: SupabaseClient,
+  workspaceId: string,
+  platform: string,
+  participant: NormalizedSender | undefined,
+): Promise<string | null> {
+  if (!participant) {
+    return null;
+  }
+
+  const { contactId } = await upsertContactIdentity(
+    supabase,
+    workspaceId,
+    platform,
+    participant,
+  );
+
+  return contactId;
+}
+
+/**
+ * Attaches a contact to a thread that was created without one. The two events
+ * can arrive in either order, and `message.sent` may not name the participant
+ * at all, so whichever event knows the contact fills the gap.
+ */
+async function linkConversationContact(
+  supabase: SupabaseClient,
+  workspaceId: string,
+  conversationId: string,
+  contactId: string | null,
+): Promise<void> {
+  if (!contactId) {
+    return;
+  }
+
+  const { error } = await supabase
+    .from("conversations")
+    .update({ contact_id: contactId })
+    .eq("workspace_id", workspaceId)
+    .eq("id", conversationId)
+    .is("contact_id", null);
+
+  if (error) {
+    console.error("[webhooks] failed to link a conversation contact", error);
+  }
+}
+
+/**
+ * A DM thread appears for the first time. Nothing to insert beyond the
+ * conversation itself: the messages arrive as their own events.
+ */
+async function processConversationStarted(params: {
+  supabase: SupabaseClient;
+  event: NormalizedConversationStartedEvent;
+  channelConnectionId: string;
+  workspaceId: string;
+  markProcessed: MarkProcessed;
+  markUnprocessedWithError: MarkUnprocessedWithError;
+}): Promise<void> {
+  const {
+    supabase,
+    event,
+    channelConnectionId,
+    workspaceId,
+    markProcessed,
+    markUnprocessedWithError,
+  } = params;
+
+  try {
+    const contactId = await resolveParticipantContactId(
+      supabase,
+      workspaceId,
+      event.platform,
+      event.participant,
+    );
+
+    const conversationId = await upsertConversation(
+      supabase,
+      workspaceId,
+      channelConnectionId,
+      contactId,
+      event.conversation.externalId,
+    );
+
+    await linkConversationContact(
+      supabase,
+      workspaceId,
+      conversationId,
+      contactId,
+    );
+    await markProcessed(null);
+  } catch (error) {
+    console.error("[webhooks] failed to process a started conversation", error);
+    await markUnprocessedWithError(describeError(error));
+  }
+}
+
+/**
+ * A message we sent, reported back by the provider.
+ *
+ * Most of these are ours and already sit in `messages` with the same
+ * `external_id` — the insert below no-ops on them. The ones that are not are
+ * exactly what makes this worth handling: a private reply to a comment, or a
+ * reply typed in the provider's own dashboard, neither of which drafta would
+ * otherwise show in the thread.
+ */
+async function processOutgoingMessage(params: {
+  supabase: SupabaseClient;
+  event: NormalizedOutgoingMessageEvent;
+  channelConnectionId: string;
+  workspaceId: string;
+  markProcessed: MarkProcessed;
+  markUnprocessedWithError: MarkUnprocessedWithError;
+}): Promise<void> {
+  const {
+    supabase,
+    event,
+    channelConnectionId,
+    workspaceId,
+    markProcessed,
+    markUnprocessedWithError,
+  } = params;
+
+  try {
+    const contactId = await resolveParticipantContactId(
+      supabase,
+      workspaceId,
+      event.platform,
+      event.participant,
+    );
+
+    const conversationId = await upsertConversation(
+      supabase,
+      workspaceId,
+      channelConnectionId,
+      contactId,
+      event.conversation.externalId,
+    );
+
+    await linkConversationContact(
+      supabase,
+      workspaceId,
+      conversationId,
+      contactId,
+    );
+    await insertOutgoingMessageFromProvider(
+      supabase,
+      workspaceId,
+      conversationId,
+      event,
+    );
+    await markProcessed(null);
+  } catch (error) {
+    console.error("[webhooks] failed to process an outgoing message", error);
+    await markUnprocessedWithError(describeError(error));
+  }
+}
+
+/**
+ * Records a provider-reported outgoing message, unless it is one drafta sent.
+ *
+ * The send path writes `messages.external_id` from the provider's own id the
+ * moment it accepts the message, so the same id arriving here means the row
+ * already exists. Checking first (rather than relying on the unique index) also
+ * keeps the row's own `delivery_status` — `delivered`/`read` may already have
+ * overtaken this event.
+ */
+async function insertOutgoingMessageFromProvider(
+  supabase: SupabaseClient,
+  workspaceId: string,
+  conversationId: string,
+  event: NormalizedOutgoingMessageEvent,
+): Promise<void> {
+  const { data: existing, error: selectError } = await supabase
+    .from("messages")
+    .select("id")
+    .eq("workspace_id", workspaceId)
+    .eq("conversation_id", conversationId)
+    .eq("external_id", event.message.externalId)
+    .maybeSingle();
+  if (selectError) throw selectError;
+
+  if (existing) {
+    return;
+  }
+
+  const { error: insertError } = await supabase.from("messages").insert({
+    workspace_id: workspaceId,
+    conversation_id: conversationId,
+    external_id: event.message.externalId,
+    direction: "outgoing",
+    text: event.message.text,
+    attachments: event.message.attachments,
+    delivery_status: "sent",
+    provider_metadata: event.rawMetadata,
+    sent_at: new Date().toISOString(),
+  });
+
+  if (insertError) {
+    // Someone else won the race with the same external id — the row we wanted
+    // exists, which is the outcome this function is after.
+    if (isUniqueViolation(insertError)) return;
+    throw insertError;
+  }
+}
+
 /** A post goes live: it appears in «Комментарии» right away, with no comments. */
 async function processPublishedPost(params: {
   supabase: SupabaseClient;
@@ -517,7 +758,10 @@ async function upsertConversation(
   supabase: SupabaseClient,
   workspaceId: string,
   channelConnectionId: string,
-  contactId: string,
+  // Nullable, unlike the inbound path: `message.sent` may not name the
+  // participant, and the schema allows a thread without a contact. Whichever
+  // event does know them attaches the contact afterwards.
+  contactId: string | null,
   externalId: string,
 ): Promise<string> {
   const { data: existing, error: selectError } = await supabase

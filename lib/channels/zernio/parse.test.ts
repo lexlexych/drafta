@@ -154,6 +154,73 @@ describe("parseZernioWebhook", () => {
     ).toBe("ig_comment_66120");
   });
 
+  it("maps a conversation.started fixture: the thread plus who is on the other side", () => {
+    const rawBody = readFixture("instagram-conversation-started.json");
+
+    const events = parseZernioWebhook({ rawBody, headers: {} });
+
+    expect(events).toHaveLength(1);
+    expect(events[0]).toEqual({
+      type: "conversation.started",
+      providerEventId: "wh_evt_01HZXINSTAGRAMCONV01",
+      provider: "zernio",
+      platform: "instagram",
+      externalAccountId: "acct_ig_55014",
+      conversation: { externalId: "zc_conv_77120" },
+      participant: {
+        externalId: "ig_user_31220",
+        displayName: "Lena Fischer",
+        avatarUrl: "https://cdn.zernio.com/ig/ig_user_31220.jpg",
+      },
+      rawMetadata: JSON.parse(rawBody),
+    });
+  });
+
+  it("names the participant from the conversation block on message.sent, not from the sender", () => {
+    // Отправитель здесь — сам бизнес-аккаунт; принять его за контакт значило бы
+    // завести контакт на самих себя.
+    const rawBody = readFixture("instagram-message-sent.json");
+
+    const [event] = parseZernioWebhook({ rawBody, headers: {} });
+
+    expect(event).toEqual({
+      type: "message.sent",
+      providerEventId: "wh_evt_01HZXINSTAGRAMSENT01",
+      provider: "zernio",
+      platform: "instagram",
+      externalAccountId: "acct_ig_55014",
+      conversation: { externalId: "zc_conv_77120" },
+      participant: {
+        externalId: "ig_user_31220",
+        displayName: "Lena Fischer",
+        avatarUrl: "https://cdn.zernio.com/ig/ig_user_31220.jpg",
+      },
+      message: {
+        externalId: "zm_msg_88250",
+        text: "Здравствуйте! Доставка по Берлину — 4 евро.",
+        attachments: [],
+      },
+      rawMetadata: JSON.parse(rawBody),
+    });
+  });
+
+  it("keeps a thread whose participant the provider did not name", () => {
+    // Тред всё равно нужен: без него отправленное сообщение некуда положить.
+    const rawBody = JSON.stringify({
+      id: "wh_evt_conv_2",
+      event: "conversation.started",
+      conversation: { id: "zc_conv_77121", status: "active" },
+      account: { id: "acct_ig_55014", platform: "instagram" },
+    });
+
+    const [event] = parseZernioWebhook({ rawBody, headers: {} });
+
+    expect(event?.type).toBe("conversation.started");
+    expect(
+      event?.type === "conversation.started" && event.participant,
+    ).toBeUndefined();
+  });
+
   it("maps a post.external.created fixture to a post event — a natively published post before anyone comments", () => {
     const rawBody = readFixture("instagram-external-post.json");
 

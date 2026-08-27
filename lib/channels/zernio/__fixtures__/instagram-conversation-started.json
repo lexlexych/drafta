@@ -1,0 +1,22 @@
+{
+  "id": "wh_evt_01HZXINSTAGRAMCONV01",
+  "event": "conversation.started",
+  "timestamp": "2026-07-21T11:05:12.402Z",
+  "conversation": {
+    "id": "zc_conv_77120",
+    "platform": "instagram",
+    "platformConversationId": "ig_thread_77120",
+    "participantId": "ig_user_31220",
+    "participantName": "Lena Fischer",
+    "participantUsername": "lena.fischer",
+    "participantPicture": "https://cdn.zernio.com/ig/ig_user_31220.jpg",
+    "status": "active"
+  },
+  "account": {
+    "id": "acct_ig_55014",
+    "accountId": "acct_ig_55014",
+    "platform": "instagram",
+    "username": "tonwerk.keramik"
+  },
+  "startedAt": "2026-07-21T11:05:12.000Z"
+}
