@@ -78,6 +78,7 @@ describe("parseZernioWebhook", () => {
       conversation: { externalId: "tg_chat_77120" },
       message: {
         externalId: "tg_msg_55210",
+        platformExternalId: "55210",
         text: "Здравствуйте! Подскажите, пожалуйста, режим работы сегодня?",
         attachments: [],
         sender: { externalId: "tg_user_44310", displayName: "Anna Keller" },
@@ -197,6 +198,9 @@ describe("parseZernioWebhook", () => {
       },
       message: {
         externalId: "zm_msg_88250",
+        // Ключ, по которому эхо узнаёт нашу же отправку: send-эндпоинт Zernio
+        // возвращает именно платформенный ID, он и лежит в `messages.external_id`.
+        platformExternalId: "ig_msg_88250",
         text: "Здравствуйте! Доставка по Берлину — 4 евро.",
         attachments: [],
       },
@@ -369,6 +373,7 @@ describe("parseZernioWebhook", () => {
       conversation: { externalId: "wa_chat_12938" },
       message: {
         externalId: "wa_msg_88421",
+        platformExternalId: "wamid.HBgLNDkxNTEyMzQ1Njc4FQIAEhg",
         text: "Добрый день! Можно узнать статус заказа №4521?",
         attachments: [],
         sender: {

@@ -200,7 +200,19 @@ interface ZernioRawSender {
 }
 
 interface ZernioRawMessage {
+  /** Zernio's own message ID — what every inbox webhook identifies a message by. */
   id: string;
+  /**
+   * The platform's ID for the same message (Instagram mid, WhatsApp wamid).
+   *
+   * Zernio reports both, and the two are not interchangeable: `sendInboxMessage`
+   * answers with *this* one (`data.messageId`), so a message drafta sent sits in
+   * `messages.external_id` under the platform ID while its `message.sent` echo
+   * arrives under `id`. Dropping this field is what made every echo of our own
+   * send look like a message from outside — see `messageExternalIds` in
+   * lib/webhooks/process-event.ts.
+   */
+  platformMessageId?: string | null;
   text?: string | null;
   attachments?: ZernioRawAttachment[];
   sender: ZernioRawSender;
@@ -522,6 +534,7 @@ function buildOutgoingMessageEvent(
   }
 
   const participant = conversationParticipant(raw.conversation);
+  const platformMessageId = nonEmptyString(raw.message.platformMessageId);
 
   return {
     type: "message.sent",
@@ -535,6 +548,9 @@ function buildOutgoingMessageEvent(
     ...(participant ? { participant } : {}),
     message: {
       externalId: raw.message.id,
+      // The key an echo of our own send is recognized by: `messages.external_id`
+      // holds this ID for anything drafta sent (see ZernioRawMessage above).
+      ...(platformMessageId ? { platformExternalId: platformMessageId } : {}),
       text: raw.message.text ?? "",
       attachments: (raw.message.attachments ?? []).map(mapAttachment),
     },
@@ -561,6 +577,8 @@ function buildDmEvent(
     return null;
   }
 
+  const platformMessageId = nonEmptyString(raw.message.platformMessageId);
+
   return {
     type,
     providerEventId: raw.id,
@@ -574,6 +592,9 @@ function buildDmEvent(
     conversation: { externalId: raw.conversation.id },
     message: {
       externalId: raw.message.id,
+      // Carried on delivery statuses too: they have to find a row drafta sent,
+      // which is keyed by the platform ID rather than Zernio's own.
+      ...(platformMessageId ? { platformExternalId: platformMessageId } : {}),
       text: raw.message.text ?? "",
       attachments: (raw.message.attachments ?? []).map(mapAttachment),
       sender: {

@@ -15,7 +15,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { NormalizedEvent } from "@/lib/channels/types";
 
 type Row = Record<string, unknown>;
-type Filter = { column: string; value: unknown; op: "eq" | "is" | "in" };
+type Filter = { column: string; value: unknown; op: "eq" | "is" | "in" | "gte" };
+type Order = { column: string; ascending: boolean };
 
 /**
  * Достаточно Postgres, чтобы прогнать эти сценарии: таблицы в памяти, цепочка
@@ -34,6 +35,9 @@ function createSupabaseStub(tables: Record<string, Row[]>) {
       const value = row[filter.column];
       if (filter.op === "is") return value === filter.value;
       if (filter.op === "in") return (filter.value as unknown[]).includes(value);
+      // Хватает строкового сравнения: единственное, что фильтруется по «не
+      // раньше чем», — ISO-8601 отметки времени, а они сортируются лексически.
+      if (filter.op === "gte") return String(value) >= String(filter.value);
       return value === filter.value;
     });
 
@@ -43,13 +47,29 @@ function createSupabaseStub(tables: Record<string, Row[]>) {
     let mode: "select" | "insert" | "update" | "delete" = "select";
     let payload: Row = {};
     let inserted: Row[] = [];
+    let order: Order | null = null;
+    let take: number | null = null;
 
     const result = () => {
       if (mode === "insert") {
         return { data: inserted, error: null };
       }
 
-      const selected = rows.filter((row) => matches(row, filters));
+      let selected = rows.filter((row) => matches(row, filters));
+
+      if (order) {
+        const { column, ascending } = order;
+        selected = [...selected].sort((a, b) => {
+          const left = String(a[column]);
+          const right = String(b[column]);
+          const compared = left < right ? -1 : left > right ? 1 : 0;
+          return ascending ? compared : -compared;
+        });
+      }
+
+      if (take !== null) {
+        selected = selected.slice(0, take);
+      }
 
       if (mode === "update") {
         for (const row of selected) Object.assign(row, payload);
@@ -86,6 +106,18 @@ function createSupabaseStub(tables: Record<string, Row[]>) {
       },
       in(column: string, value: unknown[]) {
         filters.push({ column, value, op: "in" });
+        return chain;
+      },
+      gte(column: string, value: unknown) {
+        filters.push({ column, value, op: "gte" });
+        return chain;
+      },
+      order(column: string, options?: { ascending?: boolean }) {
+        order = { column, ascending: options?.ascending !== false };
+        return chain;
+      },
+      limit(count: number) {
+        take = count;
         return chain;
       },
       maybeSingle() {
@@ -134,7 +166,15 @@ function baseTables(): Record<string, Row[]> {
   };
 }
 
-function messageSentEvent(overrides: { providerEventId: string }): NormalizedEvent {
+/** ID сообщения на самой платформе — то, что send-эндпоинт вернул drafta. */
+const PLATFORM_MESSAGE_ID = "ig_msg_88250";
+const SENT_TEXT = "Здравствуйте! Доставка по Берлину — 4 евро.";
+
+function messageSentEvent(overrides: {
+  providerEventId: string;
+  platformExternalId?: string;
+  text?: string;
+}): NormalizedEvent {
   return {
     type: "message.sent",
     providerEventId: overrides.providerEventId,
@@ -145,10 +185,40 @@ function messageSentEvent(overrides: { providerEventId: string }): NormalizedEve
     participant: { externalId: "ig_user_31220", displayName: "Lena Fischer" },
     message: {
       externalId: "zm_msg_88250",
-      text: "Здравствуйте! Доставка по Берлину — 4 евро.",
+      ...(overrides.platformExternalId
+        ? { platformExternalId: overrides.platformExternalId }
+        : {}),
+      text: overrides.text ?? SENT_TEXT,
       attachments: [],
     },
     rawMetadata: {},
+  };
+}
+
+/** Тред, в котором уже что-то происходило: обе половины теста пишут в него. */
+function existingConversation(): Row {
+  return {
+    id: "cnv_existing",
+    workspace_id: "wsp_a",
+    channel_connection_id: "chc_ig",
+    contact_id: null,
+    external_id: "zc_conv_77120",
+    status: "open",
+  };
+}
+
+/** Строка, которую создала отправка из drafta и которой ещё не проставили ID. */
+function pendingOutgoingRow(overrides: Partial<Row> = {}): Row {
+  return {
+    id: "msg_pending",
+    workspace_id: "wsp_a",
+    conversation_id: "cnv_existing",
+    external_id: null,
+    direction: "outgoing",
+    text: SENT_TEXT,
+    delivery_status: "pending",
+    created_at: new Date().toISOString(),
+    ...overrides,
   };
 }
 
@@ -240,5 +310,88 @@ describe("processInboundEvent — outbound DM lifecycle", () => {
     expect(stub.tables.conversations[0]!.contact_id).toBe(
       stub.tables.contacts[0]!.id,
     );
+  });
+
+  it("recognizes our own send when the echo names it by the provider's own id", async () => {
+    // Ровно тот случай, что плодил дубли в проде: send-эндпоинт Zernio вернул ID
+    // платформы, а эхо приходит под внутренним ID Zernio.
+    stub.tables.conversations.push(existingConversation());
+    stub.tables.messages.push({
+      id: "msg_ours",
+      workspace_id: "wsp_a",
+      conversation_id: "cnv_existing",
+      external_id: PLATFORM_MESSAGE_ID,
+      direction: "outgoing",
+      text: SENT_TEXT,
+      delivery_status: "sent",
+    });
+
+    await run(
+      messageSentEvent({
+        providerEventId: "wh_sent_4",
+        platformExternalId: PLATFORM_MESSAGE_ID,
+      }),
+    );
+
+    expect(stub.tables.messages).toHaveLength(1);
+    expect(stub.tables.messages[0]!.external_id).toBe(PLATFORM_MESSAGE_ID);
+  });
+
+  it("adopts the pending row when the echo overtakes the send pipeline", async () => {
+    stub.tables.conversations.push(existingConversation());
+    stub.tables.messages.push(pendingOutgoingRow());
+
+    await run(
+      messageSentEvent({
+        providerEventId: "wh_sent_5",
+        platformExternalId: PLATFORM_MESSAGE_ID,
+      }),
+    );
+
+    expect(stub.tables.messages).toHaveLength(1);
+    const adopted = stub.tables.messages[0]!;
+    // Тот же ID, который вот-вот запишет `mark-sent`, — его update остаётся
+    // идемпотентным вместо конфликта по уникальному индексу.
+    expect(adopted.external_id).toBe(PLATFORM_MESSAGE_ID);
+    // Статус не трогаем: `mark-sent` ищет строку по `delivery_status = pending`.
+    expect(adopted.delivery_status).toBe("pending");
+  });
+
+  it("does not adopt a pending row with different text", async () => {
+    stub.tables.conversations.push(existingConversation());
+    stub.tables.messages.push(pendingOutgoingRow());
+
+    await run(
+      messageSentEvent({
+        providerEventId: "wh_sent_6",
+        platformExternalId: PLATFORM_MESSAGE_ID,
+        text: "Ответ, отправленный из приложения Instagram",
+      }),
+    );
+
+    // Наш неотправленный ответ — не этот; сообщение извне становится своей строкой.
+    expect(stub.tables.messages).toHaveLength(2);
+    expect(stub.tables.messages[0]!.external_id).toBeNull();
+  });
+
+  it("does not adopt a pending row older than the adoption window", async () => {
+    stub.tables.conversations.push(existingConversation());
+    stub.tables.messages.push(
+      pendingOutgoingRow({
+        created_at: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
+      }),
+    );
+
+    await run(
+      messageSentEvent({
+        providerEventId: "wh_sent_7",
+        platformExternalId: PLATFORM_MESSAGE_ID,
+      }),
+    );
+
+    // Строка, час простоявшая без ID, — не гонка с этой отправкой, а зависший
+    // ответ; забрать её под чужое эхо значило бы потерять оба сообщения.
+    expect(stub.tables.messages).toHaveLength(2);
+    expect(stub.tables.messages[0]!.external_id).toBeNull();
   });
 });

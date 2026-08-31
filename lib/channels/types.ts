@@ -67,6 +67,18 @@ export interface NormalizedMessage {
    * conversation, this is the `messages` table's idempotency key.
    */
   externalId: string;
+  /**
+   * External ID of the same message at the *platform* (Instagram mid, WhatsApp
+   * wamid), when the provider reports one alongside its own.
+   *
+   * Two keys exist because a message can be known under two IDs at once, and
+   * drafta's own rows are keyed by whichever one the send endpoint returned:
+   * Zernio's `sendInboxMessage` answers with the platform ID while its webhooks
+   * identify the same message by Zernio's internal ID. Matching a webhook
+   * against `messages.external_id` therefore has to try both — see
+   * `messageExternalIds` in lib/webhooks/process-event.ts.
+   */
+  platformExternalId?: string;
   text: string;
   attachments: NormalizedAttachment[];
   sender: NormalizedSender;
@@ -87,6 +99,12 @@ export interface NormalizedConversationRef {
 export interface NormalizedOutgoingMessage {
   /** External ID of the message at the provider — the idempotency key. */
   externalId: string;
+  /**
+   * External ID of the same message at the platform — see
+   * `NormalizedMessage.platformExternalId`. This is the key that matches an
+   * echo against a message drafta itself sent.
+   */
+  platformExternalId?: string;
   text: string;
   attachments: NormalizedAttachment[];
 }

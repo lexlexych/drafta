@@ -542,13 +542,52 @@ async function processOutgoingMessage(params: {
 }
 
 /**
+ * Every ID one message can be reported under.
+ *
+ * A provider does not necessarily answer a send with the same ID it later uses
+ * in webhooks: Zernio's `sendInboxMessage` returns the *platform's* ID (which is
+ * what `messages.external_id` then holds for everything drafta sent), while its
+ * `message.sent` / delivery-status webhooks identify the same message by
+ * Zernio's own. Matching on one key alone silently missed every echo of our own
+ * sends and turned each into a second bubble in the thread.
+ */
+function messageExternalIds(message: {
+  externalId: string;
+  platformExternalId?: string;
+}): string[] {
+  const { externalId, platformExternalId } = message;
+
+  return platformExternalId && platformExternalId !== externalId
+    ? [externalId, platformExternalId]
+    : [externalId];
+}
+
+/**
+ * How long after a send its echo may still claim the row drafta created for it.
+ * Generous on purpose: the window only has to cover the gap between the provider
+ * accepting a send and the `send-message` pipeline recording the ID, and a row
+ * that stayed without an ID for a quarter of an hour is not one we are racing
+ * with anymore.
+ */
+const OUTGOING_ECHO_ADOPTION_WINDOW_MS = 15 * 60 * 1000;
+
+/**
  * Records a provider-reported outgoing message, unless it is one drafta sent.
  *
- * The send path writes `messages.external_id` from the provider's own id the
- * moment it accepts the message, so the same id arriving here means the row
- * already exists. Checking first (rather than relying on the unique index) also
- * keeps the row's own `delivery_status` — `delivered`/`read` may already have
- * overtaken this event.
+ * Ours are recognized two ways, because there is a window in which neither alone
+ * is enough:
+ *
+ *   * by ID — `messages.external_id` holds whichever ID the send endpoint
+ *     answered with, so both of the event's IDs have to be tried
+ *     (`messageExternalIds`);
+ *   * by adoption — until the `send-message` pipeline's `mark-sent` step lands,
+ *     the row has no ID at all, and an echo arriving in that gap would otherwise
+ *     insert a duplicate next to it.
+ *
+ * Only what neither finds is genuinely from outside drafta — a private reply, or
+ * an answer typed in the provider's own app — and that is what gets inserted.
+ * Matching first (rather than relying on the unique index) also keeps the row's
+ * own `delivery_status`: `delivered`/`read` may already have overtaken this event.
  */
 async function insertOutgoingMessageFromProvider(
   supabase: SupabaseClient,
@@ -561,11 +600,23 @@ async function insertOutgoingMessageFromProvider(
     .select("id")
     .eq("workspace_id", workspaceId)
     .eq("conversation_id", conversationId)
-    .eq("external_id", event.message.externalId)
+    .in("external_id", messageExternalIds(event.message))
+    .limit(1)
     .maybeSingle();
   if (selectError) throw selectError;
 
   if (existing) {
+    return;
+  }
+
+  if (
+    await adoptPendingOutgoingMessage(
+      supabase,
+      workspaceId,
+      conversationId,
+      event,
+    )
+  ) {
     return;
   }
 
@@ -587,6 +638,88 @@ async function insertOutgoingMessageFromProvider(
     if (isUniqueViolation(insertError)) return;
     throw insertError;
   }
+}
+
+/**
+ * Claims the row drafta already created for this send, when the echo overtook
+ * the pipeline that was about to stamp the provider's ID on it
+ * (docs/architecture/07-data-flows.md#63-отправка-ответа). Without this an echo
+ * arriving inside that gap is indistinguishable from a message sent elsewhere.
+ *
+ * Matched on the thread, the text and a time window, because in that gap the row
+ * carries nothing else to match on. The `external_id is null` filter is what
+ * keeps it honest: a row an earlier echo already claimed is invisible here, so
+ * two identical replies sent in a row still adopt one row each.
+ *
+ * The stamped value is the *platform* ID — the same one `mark-sent` is about to
+ * write — so the pipeline's own update stays idempotent instead of colliding
+ * with `messages_conversation_external_id_key`. `delivery_status` is left alone
+ * for the same reason: the row must stay `pending` for `mark-sent`'s guard.
+ *
+ * Returns true when the echo is accounted for and must not be inserted.
+ */
+async function adoptPendingOutgoingMessage(
+  supabase: SupabaseClient,
+  workspaceId: string,
+  conversationId: string,
+  event: NormalizedOutgoingMessageEvent,
+): Promise<boolean> {
+  const text = event.message.text;
+
+  // An attachment-only message carries no text to match on, and matching every
+  // textless pending row against every textless echo would adopt the wrong one.
+  if (!text) {
+    return false;
+  }
+
+  const createdAfter = new Date(
+    Date.now() - OUTGOING_ECHO_ADOPTION_WINDOW_MS,
+  ).toISOString();
+
+  const { data: candidate, error: selectError } = await supabase
+    .from("messages")
+    .select("id")
+    .eq("workspace_id", workspaceId)
+    .eq("conversation_id", conversationId)
+    .eq("direction", "outgoing")
+    .eq("text", text)
+    .is("external_id", null)
+    .gte("created_at", createdAfter)
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  if (selectError) throw selectError;
+
+  if (!candidate) {
+    return false;
+  }
+
+  const { data: adopted, error: updateError } = await supabase
+    .from("messages")
+    .update({
+      external_id:
+        event.message.platformExternalId ?? event.message.externalId,
+      provider_metadata: event.rawMetadata,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("workspace_id", workspaceId)
+    .eq("id", candidate.id)
+    .is("external_id", null)
+    .select("id")
+    .maybeSingle();
+  if (updateError) throw updateError;
+
+  if (!adopted) {
+    // A concurrent echo claimed the same row between the select and the update.
+    // The row exists and is one of ours either way, so inserting now would
+    // recreate exactly the duplicate this function exists to prevent.
+    console.warn(
+      "[webhooks] an outgoing echo lost the race to adopt a pending message; not inserting a duplicate",
+      { conversationId },
+    );
+  }
+
+  return true;
 }
 
 /** A post goes live: it appears in «Комментарии» right away, with no comments. */
@@ -1032,11 +1165,14 @@ async function processDeliveryStatusUpdate(params: {
       return;
     }
 
+    // Both IDs, for the same reason the outgoing echo needs both: a status for a
+    // message drafta sent has to find a row keyed by the platform's ID.
     const { data: message, error: messageError } = await supabase
       .from("messages")
       .select("id")
       .eq("conversation_id", conversation.id)
-      .eq("external_id", event.message.externalId)
+      .in("external_id", messageExternalIds(event.message))
+      .limit(1)
       .maybeSingle();
     if (messageError) throw messageError;
 

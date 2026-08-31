@@ -43,7 +43,7 @@ updated: 2026-07-19
 | `message.received` | contact_identity (+contact и доступный аватар), conversation, message | `push/notify.requested` → мгновенный push; при устаревшем/отсутствующем аватаре — `contact/avatar.sync-requested`. Черновик **не** генерируется |
 | `comment.received` | contact_identity (+contact), post (лениво, с описанием и ссылкой из блока `post`), comment | `post/thumbnail.sync-requested` → запрос миниатюры, только если её ещё нет |
 | `conversation.started` | conversation (+contact_identity участника) | — |
-| `message.sent` | conversation, исходящее message — если его ещё нет по `external_id` | — |
+| `message.sent` | conversation, исходящее message — если оно не наше: сверка по обоим ID сообщения, а для ещё не подтверждённой отправки — привязка к её строке ([5](05-channels.md#нормализованное-событие)) | — |
 | `post.published` (у Zernio — `post.external.*` и `post.platform.published`) | post | `post/thumbnail.sync-requested` → первая попытка получить миниатюру |
 
 Комментарий не порождает события генерации: черновик к комментарию создаётся
