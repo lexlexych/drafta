@@ -34,7 +34,7 @@ describe("parseZernioWebhook", () => {
       },
     });
 
-    const [event] = parseZernioWebhook({ rawBody, headers: {} });
+    const [event] = parseZernioWebhook({ rawBody, headers: {} }).events;
 
     expect(event?.type).toBe("message.received");
     expect(
@@ -57,7 +57,7 @@ describe("parseZernioWebhook", () => {
       },
     });
 
-    const [event] = parseZernioWebhook({ rawBody, headers: {} });
+    const [event] = parseZernioWebhook({ rawBody, headers: {} }).events;
     expect(
       event?.type === "message.received" && event.message.sender.avatarUrl,
     ).toBe("https://scontent.cdninstagram.com/sender.jpg");
@@ -66,7 +66,7 @@ describe("parseZernioWebhook", () => {
   it("maps a Telegram DM message.received fixture to a normalized event, field for field", () => {
     const rawBody = readFixture("telegram-dm.json");
 
-    const events = parseZernioWebhook({ rawBody, headers: {} });
+    const events = parseZernioWebhook({ rawBody, headers: {} }).events;
 
     expect(events).toHaveLength(1);
     const expected: NormalizedEvent = {
@@ -92,7 +92,7 @@ describe("parseZernioWebhook", () => {
   it("maps an Instagram comment.received fixture to a normalized comment event", () => {
     const rawBody = readFixture("instagram-comment.json");
 
-    const events = parseZernioWebhook({ rawBody, headers: {} });
+    const events = parseZernioWebhook({ rawBody, headers: {} }).events;
 
     expect(events).toHaveLength(1);
     const expected: NormalizedEvent = {
@@ -144,7 +144,7 @@ describe("parseZernioWebhook", () => {
       account: { id: "acct_ig_55014", platform: "instagram", username: "shop" },
     });
 
-    const [event] = parseZernioWebhook({ rawBody, headers: {} });
+    const [event] = parseZernioWebhook({ rawBody, headers: {} }).events;
 
     expect(event?.type).toBe("comment.received");
     expect(event?.type === "comment.received" && event.post.externalId).toBe(
@@ -158,7 +158,7 @@ describe("parseZernioWebhook", () => {
   it("maps a conversation.started fixture: the thread plus who is on the other side", () => {
     const rawBody = readFixture("instagram-conversation-started.json");
 
-    const events = parseZernioWebhook({ rawBody, headers: {} });
+    const events = parseZernioWebhook({ rawBody, headers: {} }).events;
 
     expect(events).toHaveLength(1);
     expect(events[0]).toEqual({
@@ -182,7 +182,7 @@ describe("parseZernioWebhook", () => {
     // завести контакт на самих себя.
     const rawBody = readFixture("instagram-message-sent.json");
 
-    const [event] = parseZernioWebhook({ rawBody, headers: {} });
+    const [event] = parseZernioWebhook({ rawBody, headers: {} }).events;
 
     expect(event).toEqual({
       type: "message.sent",
@@ -217,7 +217,7 @@ describe("parseZernioWebhook", () => {
       account: { id: "acct_ig_55014", platform: "instagram" },
     });
 
-    const [event] = parseZernioWebhook({ rawBody, headers: {} });
+    const [event] = parseZernioWebhook({ rawBody, headers: {} }).events;
 
     expect(event?.type).toBe("conversation.started");
     expect(
@@ -228,7 +228,7 @@ describe("parseZernioWebhook", () => {
   it("maps a post.external.created fixture to a post event — a natively published post before anyone comments", () => {
     const rawBody = readFixture("instagram-external-post.json");
 
-    const events = parseZernioWebhook({ rawBody, headers: {} });
+    const events = parseZernioWebhook({ rawBody, headers: {} }).events;
 
     expect(events).toHaveLength(1);
     expect(events[0]).toEqual({
@@ -269,7 +269,7 @@ describe("parseZernioWebhook", () => {
       },
     });
 
-    const [event] = parseZernioWebhook({ rawBody, headers: {} });
+    const [event] = parseZernioWebhook({ rawBody, headers: {} }).events;
 
     expect(event?.type).toBe("post.published");
     expect(event?.type === "post.published" && event.post).toEqual({
@@ -306,7 +306,7 @@ describe("parseZernioWebhook", () => {
       },
     });
 
-    const [event] = parseZernioWebhook({ rawBody, headers: {} });
+    const [event] = parseZernioWebhook({ rawBody, headers: {} }).events;
 
     expect(event?.type).toBe("post.published");
     // `account.accountId` rather than `account.id`, which this envelope lacks.
@@ -333,7 +333,7 @@ describe("parseZernioWebhook", () => {
       platform: { name: "instagram", status: "failed", error: "rate limited" },
     });
 
-    expect(parseZernioWebhook({ rawBody, headers: {} })).toEqual([]);
+    expect(parseZernioWebhook({ rawBody, headers: {} }).events).toEqual([]);
   });
 
   it("skips the post-level post.published rollup: it names no account, and every target arrives as post.platform.published", () => {
@@ -355,13 +355,13 @@ describe("parseZernioWebhook", () => {
       },
     });
 
-    expect(parseZernioWebhook({ rawBody, headers: {} })).toEqual([]);
+    expect(parseZernioWebhook({ rawBody, headers: {} }).events).toEqual([]);
   });
 
   it("maps a WhatsApp DM message.received fixture to a normalized event, field for field", () => {
     const rawBody = readFixture("whatsapp-dm.json");
 
-    const events = parseZernioWebhook({ rawBody, headers: {} });
+    const events = parseZernioWebhook({ rawBody, headers: {} }).events;
 
     expect(events).toHaveLength(1);
     const expected: NormalizedEvent = {
@@ -390,7 +390,7 @@ describe("parseZernioWebhook", () => {
   it("maps attachment metadata (type/url) from a fixture with an attachment; fileName/mimeType stay undefined (not in Zernio's real schema)", () => {
     const rawBody = readFixture("whatsapp-dm-with-attachment.json");
 
-    const events = parseZernioWebhook({ rawBody, headers: {} });
+    const events = parseZernioWebhook({ rawBody, headers: {} }).events;
 
     expect(events).toHaveLength(1);
     const [event] = events;
@@ -405,34 +405,91 @@ describe("parseZernioWebhook", () => {
   it("skips an unknown event type instead of throwing (comment/reaction webhooks are out of DM scope)", () => {
     const rawBody = readFixture("unknown-event-type.json");
 
-    const events = parseZernioWebhook({ rawBody, headers: {} });
+    const { events, unparsed } = parseZernioWebhook({ rawBody, headers: {} });
 
     expect(events).toEqual([]);
+    // Refused, but not lost: the route journals this, which is what makes
+    // "did the provider send it?" answerable from the database.
+    expect(unparsed).toHaveLength(1);
+    expect(unparsed[0].providerEventId).toBe("wh_evt_01HZXREACTION0004");
+    expect(unparsed[0].externalAccountId).toBe("acct_tg_98213");
+    expect(unparsed[0].reason).toBe(
+      'Unsupported event type "reaction.received"',
+    );
+    expect(unparsed[0].rawEnvelope).toMatchObject({
+      event: "reaction.received",
+    });
   });
 
   it("skips a message.received event for a platform this product doesn't support", () => {
     const rawBody = readFixture("unsupported-platform.json");
 
-    const events = parseZernioWebhook({ rawBody, headers: {} });
+    const { events, unparsed } = parseZernioWebhook({ rawBody, headers: {} });
 
     expect(events).toEqual([]);
+    expect(unparsed).toHaveLength(1);
+    expect(unparsed[0].providerEventId).toBe("wh_evt_01HZXTWITTER0005");
+    expect(unparsed[0].reason).toBe('Unsupported platform "twitter"');
   });
 
   it("keeps parsing the rest of a batch when one event has an unknown type", () => {
     const rawBody = readFixture("batch-with-unknown-event.json");
 
-    const events = parseZernioWebhook({ rawBody, headers: {} });
+    const { events, unparsed } = parseZernioWebhook({ rawBody, headers: {} });
 
     expect(events.map((event) => event.providerEventId)).toEqual([
       "wh_evt_01HZXTELEGRAM0001",
       "wh_evt_01HZXWHATSAPP0002",
+    ]);
+    expect(unparsed.map((envelope) => envelope.providerEventId)).toEqual([
+      "wh_evt_01HZXREACTION0004",
     ]);
   });
 
   it("skips a malformed envelope (missing required fields) instead of throwing", () => {
     const rawBody = JSON.stringify({ not: "a zernio envelope" });
 
-    expect(parseZernioWebhook({ rawBody, headers: {} })).toEqual([]);
+    const { events, unparsed } = parseZernioWebhook({ rawBody, headers: {} });
+
+    expect(events).toEqual([]);
+    // Nothing to key it on — the journal falls back to hashing the envelope,
+    // and the payload itself survives either way.
+    expect(unparsed).toHaveLength(1);
+    expect(unparsed[0].providerEventId).toBeNull();
+    expect(unparsed[0].externalAccountId).toBeNull();
+    expect(unparsed[0].reason).toBe(
+      "Malformed envelope: missing id, event or account",
+    );
+    expect(unparsed[0].rawEnvelope).toEqual({ not: "a zernio envelope" });
+  });
+
+  it("wraps an envelope that is not even an object, so the journal's payload stays a JSON object", () => {
+    const rawBody = JSON.stringify(["not an envelope"]);
+
+    const { unparsed } = parseZernioWebhook({ rawBody, headers: {} });
+
+    expect(unparsed).toHaveLength(1);
+    expect(unparsed[0].rawEnvelope).toEqual({ envelope: "not an envelope" });
+  });
+
+  it("reports a message.sent event whose message block is unusable, instead of dropping it", () => {
+    // The exact shape that hid a class of missing Instagram messages: the
+    // adapter refuses the envelope, and the reason has to reach the journal.
+    const rawBody = JSON.stringify({
+      id: "wh_evt_no_sender",
+      event: "message.sent",
+      account: { id: "acct_ig_55014", platform: "instagram" },
+      conversation: { id: "zc_conv_77120" },
+      message: { id: "zm_msg_1", text: "Hallo!" },
+    });
+
+    const { events, unparsed } = parseZernioWebhook({ rawBody, headers: {} });
+
+    expect(events).toEqual([]);
+    expect(unparsed[0].reason).toBe(
+      'Event "message.sent" has no usable message payload',
+    );
+    expect(unparsed[0].externalAccountId).toBe("acct_ig_55014");
   });
 
   it("maps message.delivered using the same envelope shape as message.received", () => {
@@ -447,7 +504,7 @@ describe("parseZernioWebhook", () => {
       },
     });
 
-    const events = parseZernioWebhook({ rawBody, headers: {} });
+    const events = parseZernioWebhook({ rawBody, headers: {} }).events;
 
     expect(events).toHaveLength(1);
     expect(events[0].type).toBe("message.delivered");
@@ -456,7 +513,7 @@ describe("parseZernioWebhook", () => {
   it("keeps the entire raw envelope in rawMetadata, not just the normalized fields", () => {
     const rawBody = readFixture("telegram-dm.json");
 
-    const events = parseZernioWebhook({ rawBody, headers: {} });
+    const events = parseZernioWebhook({ rawBody, headers: {} }).events;
 
     expect(events[0].rawMetadata).toEqual(JSON.parse(rawBody));
   });

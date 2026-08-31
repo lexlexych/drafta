@@ -6,7 +6,7 @@ function makeStubAdapter(provider: ChannelProvider): ChannelAdapter {
   return {
     provider,
     verifyWebhook: () => true,
-    parseWebhook: () => [],
+    parseWebhook: () => ({ events: [], unparsed: [] }),
     sendMessage: async () => {
       throw new Error("not implemented in stub");
     },

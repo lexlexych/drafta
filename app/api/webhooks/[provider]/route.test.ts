@@ -427,6 +427,50 @@ describe.skipIf(!hasLocalSupabaseConfig)("POST /api/webhooks/[provider] (zernio)
     expect(emitPushNotifyRequestedMock).not.toHaveBeenCalled();
   });
 
+  it("an event type the adapter cannot read: 200, the envelope is still journaled with the reason", async () => {
+    const workspaceId = await createTestWorkspace();
+    await createTestChannelConnection(workspaceId, {
+      platform: "telegram",
+      externalId: "acct_tg_unparsed",
+    });
+    // A reaction: a real Zernio event type this adapter does not map. Before
+    // journaling, an envelope like this vanished with only a console line —
+    // and a message that never arrives looks exactly the same as one the
+    // provider never sent.
+    const rawBody = buildEnvelope({
+      id: "wh_evt_test_unparsed_0001",
+      event: "reaction.received",
+      accountId: "acct_tg_unparsed",
+      conversationId: "conv_unparsed",
+      messageId: "msg_unparsed",
+      senderId: "sender_unparsed",
+    });
+
+    const response = await postZernioWebhook(rawBody);
+    expect(response.status).toBe(200);
+
+    const { data: webhookEvent } = await supabase
+      .from("webhook_events")
+      .select("workspace_id, payload, processed_at, processing_error")
+      .eq("provider", "zernio")
+      .eq("external_event_id", "unparsed:wh_evt_test_unparsed_0001")
+      .single();
+    expect(webhookEvent?.workspace_id).toBe(workspaceId);
+    expect(webhookEvent?.processed_at).not.toBeNull();
+    expect(webhookEvent?.processing_error).toBe(
+      'Unsupported event type "reaction.received"',
+    );
+    expect((webhookEvent?.payload as { id?: string })?.id).toBe(
+      "wh_evt_test_unparsed_0001",
+    );
+
+    const { data: messages } = await supabase
+      .from("messages")
+      .select("id")
+      .eq("external_id", "msg_unparsed");
+    expect(messages).toHaveLength(0);
+  });
+
   it("unknown provider: 404", async () => {
     const request = new NextRequest("http://localhost/api/webhooks/does-not-exist", {
       method: "POST",

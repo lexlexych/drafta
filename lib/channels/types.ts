@@ -248,6 +248,42 @@ export interface ParseWebhookInput {
   headers: Record<string, string>;
 }
 
+/**
+ * One envelope the adapter received but could not turn into a normalized
+ * event: an event type it does not map, an unknown platform, or a payload
+ * missing the fields the provider's own schema promises.
+ *
+ * These used to leave nothing behind but a console line, which is the worst
+ * possible trade for diagnosis: the route answers 200, the provider considers
+ * the delivery done, and no row anywhere records that the message ever
+ * existed. Exactly that combination hid a whole class of missing Instagram
+ * messages until a provider-side log turned it up. They are journaled into
+ * `webhook_events` instead — see `lib/webhooks/journal-unparsed.ts`.
+ *
+ * Both ids are nullable on purpose: an envelope malformed enough to be
+ * refused may also be missing them.
+ */
+export interface UnparsedEnvelope {
+  /** The provider's own event id, when the envelope carried a usable one. */
+  providerEventId: string | null;
+  /** The connected account the envelope named, when it named one. */
+  externalAccountId: string | null;
+  /** Why the adapter refused it — journaled verbatim as `processing_error`. */
+  reason: string;
+  /** The envelope exactly as received, for the journal's `payload`. */
+  rawEnvelope: Record<string, unknown>;
+}
+
+/**
+ * What one raw webhook payload normalizes to: the events to process, plus
+ * everything in the same delivery the adapter had to refuse. A batch can
+ * produce both — one bad envelope never costs the rest their processing.
+ */
+export interface ParseWebhookResult {
+  events: NormalizedEvent[];
+  unparsed: UnparsedEnvelope[];
+}
+
 /** Input to `sendMessage` — see docs/architecture/05-channels.md (stage 3 of the rollout plan). */
 export interface SendMessageInput {
   channelConnectionId: string;
@@ -409,10 +445,14 @@ export interface ChannelAdapter {
   /** Verify the raw webhook request's signature. */
   verifyWebhook(input: VerifyWebhookInput): boolean | Promise<boolean>;
 
-  /** Parse an already-verified raw webhook payload into normalized events. */
+  /**
+   * Parse an already-verified raw webhook payload into normalized events —
+   * and report the envelopes it could not normalize rather than dropping
+   * them silently (see `ParseWebhookResult`).
+   */
   parseWebhook(
     input: ParseWebhookInput,
-  ): NormalizedEvent[] | Promise<NormalizedEvent[]>;
+  ): ParseWebhookResult | Promise<ParseWebhookResult>;
 
   /**
    * Send an outgoing message through the provider (stage 3 of the rollout

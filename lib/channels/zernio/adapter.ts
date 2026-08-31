@@ -10,9 +10,9 @@ import type {
   SendCommentPrivateReplyResult,
   GetConnectUrlInput,
   GetConnectUrlResult,
-  NormalizedEvent,
   ParseConnectCallbackInput,
   ParseWebhookInput,
+  ParseWebhookResult,
   SendMessageInput,
   SendMessageResult,
   VerifyWebhookInput,
@@ -67,7 +67,7 @@ export function createZernioAdapter(
       return verifyZernioSignature(input, getWebhookSecret());
     },
 
-    parseWebhook(input: ParseWebhookInput): NormalizedEvent[] {
+    parseWebhook(input: ParseWebhookInput): ParseWebhookResult {
       return parseZernioWebhook(input);
     },
 

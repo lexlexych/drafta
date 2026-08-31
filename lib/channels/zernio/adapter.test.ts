@@ -49,11 +49,11 @@ describe("createZernioAdapter", () => {
     ).toBe(false);
   });
 
-  it("parseWebhook delegates to the Zernio payload parser", () => {
+  it("parseWebhook delegates to the Zernio payload parser", async () => {
     const adapter = createZernioAdapter(() => "secret");
     const rawBody = readFixture("telegram-dm.json");
 
-    const events = adapter.parseWebhook({ rawBody, headers: {} });
+    const { events } = await adapter.parseWebhook({ rawBody, headers: {} });
 
     expect(events).toHaveLength(1);
     expect(events[0].type).toBe("message.received");

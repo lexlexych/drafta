@@ -6,6 +6,8 @@ import type {
   NormalizedPostRef,
   NormalizedSender,
   ParseWebhookInput,
+  ParseWebhookResult,
+  UnparsedEnvelope,
 } from "../types";
 
 /**
@@ -419,19 +421,36 @@ function nonEmptyString(value: string | null | undefined): string | null {
   return trimmed ? trimmed : null;
 }
 
-function parseSingleEnvelope(raw: unknown): NormalizedEvent | null {
+/**
+ * What one envelope came out as: a normalized event, or a refusal carrying the
+ * reason. `"unparsed"` can never collide with a real event — `NormalizedEvent`
+ * is a closed union of known `type` strings — so the two share one return value
+ * without a wrapper object.
+ */
+interface UnparsedOutcome {
+  type: "unparsed";
+  reason: string;
+}
+
+type EnvelopeOutcome = NormalizedEvent | UnparsedOutcome;
+
+/**
+ * Refuse this envelope, with a reason short enough to read in
+ * `webhook_events.processing_error` and specific enough to act on. The event
+ * id is not repeated here — `parseZernioWebhook` adds it to the log line, and
+ * the journal keeps the whole envelope anyway.
+ */
+function unparsed(reason: string): UnparsedOutcome {
+  return { type: "unparsed", reason };
+}
+
+function parseSingleEnvelope(raw: unknown): EnvelopeOutcome {
   if (!isZernioEnvelope(raw)) {
-    console.warn(
-      "[zernio] skipping malformed webhook envelope (missing id/event/account)",
-    );
-    return null;
+    return unparsed("Malformed envelope: missing id, event or account");
   }
 
   if (!isKnownPlatform(raw.account.platform)) {
-    console.warn(
-      `[zernio] skipping event for unsupported platform "${raw.account.platform}" (event id: ${raw.id})`,
-    );
-    return null;
+    return unparsed(`Unsupported platform "${raw.account.platform}"`);
   }
 
   if (raw.event === COMMENT_EVENT) {
@@ -460,11 +479,10 @@ function parseSingleEnvelope(raw: unknown): NormalizedEvent | null {
   }
 
   // Reactions, account lifecycle, calls, etc. — real Zernio event types this
-  // adapter does not map. Not an error: skip and keep processing the batch.
-  console.warn(
-    `[zernio] skipping unsupported event type "${raw.event}" (event id: ${raw.id})`,
-  );
-  return null;
+  // adapter does not map. Not an error: refuse it and keep processing the
+  // batch. Journaled all the same, which is how "does Zernio even send us
+  // this?" stops being a question only the provider's own log can answer.
+  return unparsed(`Unsupported event type "${raw.event}"`);
 }
 
 /**
@@ -493,12 +511,9 @@ function conversationParticipant(
 function buildConversationStartedEvent(
   raw: ZernioWebhookEnvelope,
   platform: ChannelPlatform,
-): NormalizedEvent | null {
+): EnvelopeOutcome {
   if (!isZernioConversation(raw.conversation)) {
-    console.warn(
-      `[zernio] skipping "${raw.event}" event with no usable conversation payload (event id: ${raw.id})`,
-    );
-    return null;
+    return unparsed(`Event "${raw.event}" has no usable conversation payload`);
   }
 
   const participant = conversationParticipant(raw.conversation);
@@ -518,19 +533,13 @@ function buildConversationStartedEvent(
 function buildOutgoingMessageEvent(
   raw: ZernioWebhookEnvelope,
   platform: ChannelPlatform,
-): NormalizedEvent | null {
+): EnvelopeOutcome {
   if (!isZernioMessage(raw.message)) {
-    console.warn(
-      `[zernio] skipping "${raw.event}" event with no usable message payload (event id: ${raw.id})`,
-    );
-    return null;
+    return unparsed(`Event "${raw.event}" has no usable message payload`);
   }
 
   if (!isZernioConversation(raw.conversation)) {
-    console.warn(
-      `[zernio] skipping "${raw.event}" event with no usable conversation payload (event id: ${raw.id})`,
-    );
-    return null;
+    return unparsed(`Event "${raw.event}" has no usable conversation payload`);
   }
 
   const participant = conversationParticipant(raw.conversation);
@@ -562,19 +571,13 @@ function buildDmEvent(
   raw: ZernioWebhookEnvelope,
   type: NormalizedDirectMessageEvent["type"],
   platform: ChannelPlatform,
-): NormalizedEvent | null {
+): EnvelopeOutcome {
   if (!isZernioMessage(raw.message)) {
-    console.warn(
-      `[zernio] skipping "${raw.event}" event with no usable message payload (event id: ${raw.id})`,
-    );
-    return null;
+    return unparsed(`Event "${raw.event}" has no usable message payload`);
   }
 
   if (!isZernioConversation(raw.conversation)) {
-    console.warn(
-      `[zernio] skipping "${raw.event}" event with no usable conversation payload (event id: ${raw.id})`,
-    );
-    return null;
+    return unparsed(`Event "${raw.event}" has no usable conversation payload`);
   }
 
   const platformMessageId = nonEmptyString(raw.message.platformMessageId);
@@ -678,12 +681,9 @@ function optionalUrl(
 function buildCommentEvent(
   raw: ZernioWebhookEnvelope,
   platform: ChannelPlatform,
-): NormalizedEvent | null {
+): EnvelopeOutcome {
   if (!isZernioComment(raw.comment)) {
-    console.warn(
-      `[zernio] skipping "comment.received" event with no usable comment payload (event id: ${raw.id})`,
-    );
-    return null;
+    return unparsed('Event "comment.received" has no usable comment payload');
   }
 
   const comment = raw.comment;
@@ -731,12 +731,9 @@ function buildCommentEvent(
 function buildExternalPostEvent(
   raw: ZernioWebhookEnvelope,
   platform: ChannelPlatform,
-): NormalizedEvent | null {
+): EnvelopeOutcome {
   if (!isZernioExternalPost(raw.post)) {
-    console.warn(
-      `[zernio] skipping "${raw.event}" event with no usable post payload (event id: ${raw.id})`,
-    );
-    return null;
+    return unparsed(`Event "${raw.event}" has no usable post payload`);
   }
 
   const post = raw.post;
@@ -768,15 +765,12 @@ function buildExternalPostEvent(
 function buildPostPlatformEvent(
   raw: ZernioWebhookEnvelope,
   platform: ChannelPlatform,
-): NormalizedEvent | null {
+): EnvelopeOutcome {
   const target = raw.platform;
   const platformPostId = nonEmptyString(target?.platformPostId);
 
   if (!platformPostId || target?.status !== "published") {
-    console.warn(
-      `[zernio] skipping "${raw.event}" event with no published platform post id (event id: ${raw.id})`,
-    );
-    return null;
+    return unparsed(`Event "${raw.event}" has no published platform post id`);
   }
 
   const post = isZernioExternalPost(raw.post) ? raw.post : null;
@@ -802,27 +796,75 @@ function buildPostPlatformEvent(
 
 /**
  * Parses an already-verified raw Zernio webhook payload into normalized DM
- * events. Unknown event types and malformed entries are skipped (with a
- * console warning) rather than throwing, so one bad/irrelevant event in a
- * batch never drops the rest — see T-02 acceptance criteria.
+ * events. Unknown event types and malformed entries are refused rather than
+ * throwing, so one bad/irrelevant event in a batch never drops the rest — see
+ * T-02 acceptance criteria. They come back in `unparsed` with the reason and
+ * the envelope itself, which the route journals into `webhook_events`: a
+ * refusal that leaves no trace is indistinguishable from a webhook the
+ * provider never sent, and telling those apart took a provider-side log the
+ * last time it mattered.
  *
  * A body that isn't valid JSON is a different, more severe failure than an
  * "unknown event type" and is deliberately not swallowed here: `JSON.parse`
  * throws, and the caller (the webhook route, T-03) is expected to handle
  * that the same way it handles any other unexpected adapter failure.
  */
-export function parseZernioWebhook(input: ParseWebhookInput): NormalizedEvent[] {
+export function parseZernioWebhook(input: ParseWebhookInput): ParseWebhookResult {
   const body = JSON.parse(input.rawBody) as unknown;
   const envelopes = Array.isArray(body) ? body : [body];
 
   const events: NormalizedEvent[] = [];
+  const refused: UnparsedEnvelope[] = [];
 
   for (const envelope of envelopes) {
-    const event = parseSingleEnvelope(envelope);
-    if (event) {
-      events.push(event);
+    const outcome = parseSingleEnvelope(envelope);
+
+    if (outcome.type !== "unparsed") {
+      events.push(outcome);
+      continue;
     }
+
+    console.warn(
+      `[zernio] skipping envelope (event id: ${
+        envelopeEventId(envelope) ?? "unknown"
+      }): ${outcome.reason}`,
+    );
+    refused.push({
+      providerEventId: envelopeEventId(envelope),
+      externalAccountId: refusedEnvelopeAccountId(envelope),
+      reason: outcome.reason,
+      rawEnvelope: toRawEnvelope(envelope),
+    });
   }
 
-  return events;
+  return { events, unparsed: refused };
+}
+
+/**
+ * The three readers below work on an envelope that already failed validation,
+ * so none of the shapes above can be assumed — each field is read defensively
+ * and degrades to null rather than throwing. Whatever they cannot recover is
+ * still in `rawEnvelope`, which the journal stores whole.
+ */
+function envelopeEventId(raw: unknown): string | null {
+  const id = (raw as { id?: unknown } | null)?.id;
+  return typeof id === "string" && id.length > 0 ? id : null;
+}
+
+function refusedEnvelopeAccountId(raw: unknown): string | null {
+  const account = (raw as { account?: unknown } | null)?.account as
+    | { id?: unknown; accountId?: unknown }
+    | null
+    | undefined;
+  const id = account?.id ?? account?.accountId;
+  return typeof id === "string" && id.length > 0 ? id : null;
+}
+
+function toRawEnvelope(raw: unknown): Record<string, unknown> {
+  // `webhook_events.payload` is checked `jsonb_typeof(payload) = 'object'`, so
+  // an envelope that is not one (an array entry that is a bare string, say)
+  // gets wrapped instead of costing the journal write.
+  return typeof raw === "object" && raw !== null && !Array.isArray(raw)
+    ? (raw as Record<string, unknown>)
+    : { envelope: raw };
 }
