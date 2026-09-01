@@ -2,9 +2,9 @@
 
 /**
  * Client-side behavior of the Channels panel: one block per platform, the
- * Instagram onboarding → OAuth flow, the "в разработке" stub for the rest,
- * inline rename, disable/enable with confirmation, and the post-OAuth result
- * banner. Server actions (`./actions.ts`) are mocked — the actual DB-backed
+ * Instagram and WhatsApp onboarding → OAuth flow, the "в разработке" stub for
+ * the platforms whose flow is not built yet, inline rename, disable/enable
+ * with confirmation, and the post-OAuth result banner. Server actions (`./actions.ts`) are mocked — the actual DB-backed
  * business logic they delegate to is covered by
  * `lib/db/channel-connections.test.ts`.
  */
@@ -152,11 +152,52 @@ describe("ChannelsPanel", () => {
   it("shows a work-in-progress stub for platforms without a connect flow", () => {
     render(<ChannelsPanel channels={[]} />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Подключить WhatsApp" }));
+    fireEvent.click(screen.getByRole("button", { name: "Подключить Facebook" }));
 
-    expect(screen.getByText(/«WhatsApp» пока в разработке/)).toBeDefined();
+    expect(screen.getByText(/«Facebook» пока в разработке/)).toBeDefined();
     expect(startChannelConnectionAction).not.toHaveBeenCalled();
     expect(assignMock).not.toHaveBeenCalled();
+  });
+
+  it("shows the WhatsApp prerequisites before its authorization", () => {
+    render(<ChannelsPanel channels={[]} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Подключить WhatsApp" }));
+
+    expect(screen.getByText(/Перед подключением WhatsApp/)).toBeDefined();
+    // The two prerequisites that actually decide whether Meta accepts the
+    // number: a two-step PIN makes it reject the registration (error 133005),
+    // and a number already live in the WhatsApp Business app keeps working
+    // there in coexistence mode — users ask about both.
+    expect(screen.getByText(/двухшаговая проверка/)).toBeDefined();
+    expect(screen.getByText(/приложении WhatsApp Business/)).toBeDefined();
+    expect(
+      screen.getByRole("button", { name: "Войти через WhatsApp" }),
+    ).toBeDefined();
+    expect(startChannelConnectionAction).not.toHaveBeenCalled();
+  });
+
+  it("starts the WhatsApp OAuth flow from its onboarding", async () => {
+    startChannelConnectionAction.mockResolvedValue({
+      ok: true,
+      url: "https://zernio.com/connect/whatsapp?token=abc",
+    });
+
+    render(<ChannelsPanel channels={[]} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Подключить WhatsApp" }));
+    fireEvent.click(screen.getByRole("button", { name: "Войти через WhatsApp" }));
+
+    await waitFor(() =>
+      expect(startChannelConnectionAction).toHaveBeenCalledWith({
+        platform: "whatsapp",
+      }),
+    );
+    await waitFor(() =>
+      expect(assignMock).toHaveBeenCalledWith(
+        "https://zernio.com/connect/whatsapp?token=abc",
+      ),
+    );
   });
 
   it("shows a success banner after returning from OAuth", () => {

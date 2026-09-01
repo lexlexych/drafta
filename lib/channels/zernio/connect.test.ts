@@ -1,6 +1,17 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+
 import { describe, expect, it } from "vitest";
 
 import { parseZernioConnectCallback, ZernioConnectCallbackError } from "./connect";
+import { parseZernioWebhook } from "./parse";
+
+function readFixture(name: string): string {
+  return readFileSync(
+    fileURLToPath(new URL(`./__fixtures__/${name}`, import.meta.url)),
+    "utf8",
+  );
+}
 
 describe("parseZernioConnectCallback", () => {
   it("extracts the connected account's external id, platform and handle", () => {
@@ -15,6 +26,34 @@ describe("parseZernioConnectCallback", () => {
     expect(result.platform).toBe("whatsapp");
     expect(result.accountUsername).toBe("+491234567");
     expect(result.credentials).toBeUndefined();
+  });
+
+  /**
+   * Inbound webhooks resolve a connection by `(provider, external_id)`, and
+   * `external_id` is exactly what this parser returns from the connect
+   * callback. If Zernio named the same account differently in the two places,
+   * every WhatsApp message would land as "unknown connection" instead of in
+   * the inbox — so pin both halves to one account id.
+   *
+   * This guards the code path, not Zernio's behaviour: the live callback still
+   * has to be checked against a real webhook on the first connection.
+   */
+  it("returns the same account id the WhatsApp webhook reports", () => {
+    const [event] = parseZernioWebhook({
+      rawBody: readFixture("whatsapp-dm.json"),
+      headers: {},
+    }).events;
+
+    expect(event.platform).toBe("whatsapp");
+    expect(event.externalAccountId).toBe("acct_wa_31207");
+
+    const connected = parseZernioConnectCallback({
+      connected: "whatsapp",
+      accountId: "acct_wa_31207",
+      username: "+49 151 2345678",
+    });
+
+    expect(connected.externalAccountId).toBe(event.externalAccountId);
   });
 
   it("leaves the account handle undefined when the provider omits it", () => {

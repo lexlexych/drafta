@@ -120,6 +120,34 @@ describe("GET /api/channels/[provider]/connect/callback", () => {
     );
   });
 
+  it("connects a WhatsApp number and names the channel after it", async () => {
+    createChannelConnectionMock.mockResolvedValue({ ok: true, data: {} });
+
+    const location = await callCallback({
+      search: {
+        [CONNECT_STATE_NONCE_PARAM]: NONCE,
+        connected: "whatsapp",
+        accountId: "acct_wa_31207",
+        username: "+49 151 2345678",
+      },
+      cookieToken: mintState({ platform: "whatsapp" }),
+    });
+
+    expect(createChannelConnectionMock).toHaveBeenCalledWith(
+      expect.anything(),
+      "ws_1",
+      {
+        provider: "zernio",
+        platform: "whatsapp",
+        // WhatsApp has no handle — Zernio reports the number itself, and that
+        // is what names the channel until the user renames it.
+        externalId: "acct_wa_31207",
+        name: "+49 151 2345678",
+      },
+    );
+    expect(location.searchParams.get("connect")).toBe("connected");
+  });
+
   it("redirects with reason=duplicate when another account of the platform is connected", async () => {
     createChannelConnectionMock.mockResolvedValue({
       ok: false,
