@@ -475,8 +475,11 @@ export async function getConversationListView(
   // builder narrows from `PostgrestFilterBuilder` (has `.in()`) to
   // `PostgrestTransformBuilder` (doesn't) once a transform method like
   // `.order()` is called, so filtering has to finish first.
+  // `conversation_list_entries`, не `conversations`: вью отсеивает треды без
+  // единого сообщения (20260903100000). Фильтровать после выборки нельзя —
+  // страница и `count` тогда врут.
   let filterBuilder = supabase
-    .from("conversations")
+    .from("conversation_list_entries")
     .select(
       "id, channel_connection_id, contact_id, matched_kb_file_ids, status, last_incoming_at, unread_count",
       { count: "exact" },

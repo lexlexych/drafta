@@ -174,6 +174,10 @@ describe.skipIf(!hasLocalSupabaseConfig)("lib/db/inbox", () => {
     const newer = await createConversation(workspaceId, channelId, contactBob, {
       lastIncomingAt: new Date().toISOString(),
     });
+    // Список показывает только треды, в которых что-то есть, — см. вью
+    // `conversation_list_entries` (20260903100000).
+    await createMessage(workspaceId, older);
+    await createMessage(workspaceId, newer);
 
     const channels = await listChannelConnections(supabase, workspaceId);
     const list = await getConversationListView(supabase, workspaceId, channels);
@@ -194,7 +198,11 @@ describe.skipIf(!hasLocalSupabaseConfig)("lib/db/inbox", () => {
     const contactId = await createContact(workspaceId, "Alice");
 
     const conversationA = await createConversation(workspaceId, channelA, contactId);
-    await createConversation(workspaceId, channelB, contactId);
+    const conversationB = await createConversation(workspaceId, channelB, contactId);
+    // Оба треда непустые: иначе B выпал бы из списка сам по себе и тест
+    // зеленел бы, ничего не проверив про фильтр.
+    await createMessage(workspaceId, conversationA);
+    await createMessage(workspaceId, conversationB);
 
     const channels = await listChannelConnections(supabase, workspaceId);
     const list = await getConversationListView(supabase, workspaceId, channels, {
@@ -285,6 +293,28 @@ describe.skipIf(!hasLocalSupabaseConfig)("lib/db/inbox", () => {
     // "Существенные факты" and lib/db/inbox.ts's module docstring.
     expect(thread?.categories).toEqual([]);
     expect(thread?.draft).toBeNull();
+  });
+
+  it("hides a conversation that has no messages yet", async () => {
+    // Подключение WhatsApp приносит `conversation.started` на каждый тред
+    // синхронизированной истории, но без самих сообщений. Такие строки — шум:
+    // ни превью, ни повода открывать. Диалог не удаляется и появится в списке
+    // сам, как только в него придёт первое сообщение.
+    const workspaceId = await createTestWorkspace();
+    const channelId = await createChannel(workspaceId);
+    const contactId = await createContact(workspaceId, "+491512345678");
+    const empty = await createConversation(workspaceId, channelId, contactId);
+    const withMessage = await createConversation(workspaceId, channelId, contactId);
+    await createMessage(workspaceId, withMessage);
+
+    const channels = await listChannelConnections(supabase, workspaceId);
+    const list = await getConversationListView(supabase, workspaceId, channels);
+
+    expect(list.items.map((item) => item.id)).toEqual([withMessage]);
+    expect(list.items.map((item) => item.id)).not.toContain(empty);
+    // Счётчик страницы тоже считает по вью, иначе пагинация обещала бы строки,
+    // которых в списке нет.
+    expect(list.total).toBe(1);
   });
 
   it("previews a conversation with its last message, not its first", async () => {

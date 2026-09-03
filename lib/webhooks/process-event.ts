@@ -769,13 +769,22 @@ async function upsertContactIdentity(
 
   const { data: existing, error: selectError } = await supabase
     .from("contact_identities")
-    .select("id, contact_id, avatar_url, avatar_fetched_at")
+    .select("id, contact_id, display_name, avatar_url, avatar_fetched_at")
     .eq("workspace_id", workspaceId)
     .eq("platform", platform)
     .eq("external_id", externalId)
     .maybeSingle();
   if (selectError) throw selectError;
   if (existing) {
+    await refreshIdentityName(
+      supabase,
+      workspaceId,
+      existing.id,
+      existing.contact_id,
+      externalId,
+      existing.display_name,
+      sender.displayName,
+    );
     const avatarFetchedAt = await refreshIdentityAvatar(
       supabase,
       existing.id,
@@ -824,12 +833,21 @@ async function upsertContactIdentity(
       // transaction for at this scope.
       const { data: winner, error: winnerError } = await supabase
         .from("contact_identities")
-        .select("id, contact_id, avatar_url, avatar_fetched_at")
+        .select("id, contact_id, display_name, avatar_url, avatar_fetched_at")
         .eq("workspace_id", workspaceId)
         .eq("platform", platform)
         .eq("external_id", externalId)
         .single();
       if (winnerError || !winner) throw winnerError ?? identityError;
+      await refreshIdentityName(
+        supabase,
+        workspaceId,
+        winner.id,
+        winner.contact_id,
+        externalId,
+        winner.display_name,
+        sender.displayName,
+      );
       const avatarFetchedAt = await refreshIdentityAvatar(
         supabase,
         winner.id,
@@ -851,6 +869,72 @@ async function upsertContactIdentity(
     contactId: newContact.id,
     avatarFetchedAt: newIdentity.avatar_fetched_at,
   };
+}
+
+/**
+ * Fills in a name the provider did not know when the contact was first seen.
+ *
+ * WhatsApp threads synced at connect time arrive as `conversation.started`
+ * with no profile name — Meta has none to report until the person actually
+ * writes — so the contact is created under its own external id, which for
+ * WhatsApp is the phone number. The real name comes with the first message,
+ * and without this it would never be applied: by then the identity exists, and
+ * the branch above only ever refreshed the avatar.
+ *
+ * The two names are not the same kind of data:
+ *
+ * - `contact_identities.display_name` is the provider's own label for that
+ *   identity and simply follows the provider;
+ * - `contacts.display_name` is what the product shows. It is overwritten only
+ *   while it still holds the generated placeholder (the external id) — a
+ *   contact merged by hand can carry a name from another platform, and that
+ *   one has to survive.
+ */
+async function refreshIdentityName(
+  supabase: SupabaseClient,
+  workspaceId: string,
+  contactIdentityId: string,
+  contactId: string,
+  externalId: string,
+  currentIdentityName: string | null,
+  incomingName: string | undefined,
+): Promise<void> {
+  const name = incomingName?.trim();
+  // A name equal to the external id says nothing the row does not already
+  // hold. The Zernio adapter drops those before they get here; this is the
+  // same rule stated once more for any provider.
+  if (!name || name === externalId || name === currentIdentityName) {
+    return;
+  }
+
+  const updatedAt = new Date().toISOString();
+  const { error: identityError } = await supabase
+    .from("contact_identities")
+    .update({ display_name: name, updated_at: updatedAt })
+    .eq("id", contactIdentityId);
+
+  if (identityError) {
+    // Decorative data must never make a valid inbound message fail.
+    console.error("[webhooks] failed to refresh a contact name", identityError);
+    return;
+  }
+
+  // The placeholder check is the filter itself, not a preceding read: two
+  // webhooks can race here, and whichever lands first simply leaves nothing
+  // for the other to overwrite.
+  const { error: contactError } = await supabase
+    .from("contacts")
+    .update({ display_name: name, updated_at: updatedAt })
+    .eq("workspace_id", workspaceId)
+    .eq("id", contactId)
+    .eq("display_name", externalId);
+
+  if (contactError) {
+    console.error(
+      "[webhooks] failed to rename a placeholder contact",
+      contactError,
+    );
+  }
 }
 
 async function refreshIdentityAvatar(

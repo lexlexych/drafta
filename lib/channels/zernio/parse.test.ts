@@ -225,6 +225,76 @@ describe("parseZernioWebhook", () => {
     ).toBeUndefined();
   });
 
+  it("does not take a WhatsApp participant username as a name: it is the phone number again", () => {
+    // У WhatsApp нет хэндлов, и Zernio кладёт в `participantUsername` номер —
+    // ровно то, что уже лежит в `participantId` (`wa_id`). Взять его значило бы
+    // записать контакту заглушку, выглядящую как настоящее имя, и заморозить
+    // его номером: настоящее имя приходит только с первым сообщением.
+    const rawBody = JSON.stringify({
+      id: "wh_evt_wa_conv_1",
+      event: "conversation.started",
+      account: { id: "acct_wa_31207", platform: "whatsapp" },
+      conversation: {
+        id: "zc_wa_conv_1",
+        participantId: "491512345678",
+        participantName: "",
+        participantUsername: "491512345678",
+      },
+    });
+
+    const [event] = parseZernioWebhook({ rawBody, headers: {} }).events;
+
+    expect(
+      event?.type === "conversation.started" && event.participant,
+    ).toEqual({
+      externalId: "491512345678",
+      displayName: undefined,
+      avatarUrl: undefined,
+    });
+  });
+
+  it("still takes a participant username that is a real handle", () => {
+    // Обратная сторона: у Instagram `participantUsername` — это хэндл, он от
+    // `participantId` отличается и именем быть обязан.
+    const rawBody = JSON.stringify({
+      id: "wh_evt_ig_conv_3",
+      event: "conversation.started",
+      account: { id: "acct_ig_55014", platform: "instagram" },
+      conversation: {
+        id: "zc_conv_77122",
+        participantId: "ig_user_31220",
+        participantUsername: "lena.fischer",
+      },
+    });
+
+    const [event] = parseZernioWebhook({ rawBody, headers: {} }).events;
+
+    expect(
+      event?.type === "conversation.started" &&
+        event.participant?.displayName,
+    ).toBe("lena.fischer");
+  });
+
+  it("does not take a message sender name that only repeats the sender id", () => {
+    const rawBody = JSON.stringify({
+      id: "wh_evt_wa_msg_1",
+      event: "message.received",
+      account: { id: "acct_wa_31207", platform: "whatsapp" },
+      conversation: { id: "zc_wa_conv_1" },
+      message: {
+        id: "wa_msg_1",
+        text: "Добрый день!",
+        sender: { id: "491512345678", name: "491512345678" },
+      },
+    });
+
+    const [event] = parseZernioWebhook({ rawBody, headers: {} }).events;
+
+    expect(
+      event?.type === "message.received" && event.message.sender.displayName,
+    ).toBeUndefined();
+  });
+
   it("maps a post.external.created fixture to a post event — a natively published post before anyone comments", () => {
     const rawBody = readFixture("instagram-external-post.json");
 

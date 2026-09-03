@@ -486,6 +486,23 @@ function parseSingleEnvelope(raw: unknown): EnvelopeOutcome {
 }
 
 /**
+ * A name that only repeats the participant's own external id is not a name.
+ *
+ * WhatsApp has no handles, so Zernio fills `participantUsername` with the phone
+ * number — which is exactly what `participantId` (the `wa_id`) already holds.
+ * Taking it would store a placeholder that looks like a deliberate name, and
+ * the contact would sit in the inbox as a bare phone number. Reporting no name
+ * instead lets the real one, which arrives with the first actual message, win.
+ */
+function meaningfulName(
+  value: string | null | undefined,
+  externalId: string,
+): string | undefined {
+  const name = nonEmptyString(value);
+  return name && name !== externalId ? name : undefined;
+}
+
+/**
  * The contact on the other side of a thread, from the envelope's `conversation`
  * block. Undefined when the provider did not name them — the thread is still
  * worth creating, it just has no contact attached yet.
@@ -501,9 +518,8 @@ function conversationParticipant(
   return {
     externalId,
     displayName:
-      nonEmptyString(conversation.participantName) ??
-      nonEmptyString(conversation.participantUsername) ??
-      undefined,
+      meaningfulName(conversation.participantName, externalId) ??
+      meaningfulName(conversation.participantUsername, externalId),
     avatarUrl: nonEmptyString(conversation.participantPicture) ?? undefined,
   };
 }
@@ -602,7 +618,7 @@ function buildDmEvent(
       attachments: (raw.message.attachments ?? []).map(mapAttachment),
       sender: {
         externalId: raw.message.sender.id,
-        displayName: raw.message.sender.name ?? undefined,
+        displayName: meaningfulName(raw.message.sender.name, raw.message.sender.id),
         avatarUrl:
           nonEmptyString(raw.conversation.participantPicture) ??
           nonEmptyString(raw.message.sender.picture) ??

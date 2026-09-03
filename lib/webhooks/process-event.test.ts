@@ -139,9 +139,21 @@ function createSupabaseStub(tables: Record<string, Row[]>) {
     return chain;
   };
 
+  const rpcCalls: { name: string; args: Row }[] = [];
+
   return {
     tables,
-    client: { from: (table: string) => builder(table) },
+    rpcCalls,
+    client: {
+      from: (table: string) => builder(table),
+      // Счётчики непрочитанного двигаются атомарной RPC. Без неё путь входящего
+      // сообщения падал бы на ровном месте и тест зеленел бы по ветке с
+      // ошибкой, ничего на самом деле не проверив.
+      rpc: async (name: string, args: Row) => {
+        rpcCalls.push({ name, args });
+        return { data: null, error: null };
+      },
+    },
   };
 }
 
@@ -221,6 +233,115 @@ function pendingOutgoingRow(overrides: Partial<Row> = {}): Row {
     ...overrides,
   };
 }
+
+const WHATSAPP_ACCOUNT_ID = "acct_wa_31207";
+/** У WhatsApp внешний ID участника — это `wa_id`, то есть сам номер телефона. */
+const WHATSAPP_PARTICIPANT_ID = "491512345678";
+
+function whatsappTables(): Record<string, Row[]> {
+  return {
+    channel_connections: [
+      {
+        id: "chc_wa",
+        workspace_id: "wsp_a",
+        provider: "zernio",
+        external_id: WHATSAPP_ACCOUNT_ID,
+        status: "active",
+      },
+    ],
+    webhook_events: [],
+    contacts: [],
+    contact_identities: [],
+    conversations: [],
+    messages: [],
+  };
+}
+
+/**
+ * Синхронизация истории при подключении номера: тред есть, имени профиля у Meta
+ * ещё нет. Контакт заводится под собственным внешним ID — номером телефона.
+ */
+function whatsappThreadSynced(): NormalizedEvent {
+  return {
+    type: "conversation.started",
+    providerEventId: "wh_wa_started_1",
+    provider: "zernio",
+    platform: "whatsapp",
+    externalAccountId: WHATSAPP_ACCOUNT_ID,
+    conversation: { externalId: "zc_wa_conv_1" },
+    participant: { externalId: WHATSAPP_PARTICIPANT_ID },
+    rawMetadata: {},
+  };
+}
+
+/** Первое настоящее сообщение — вот с ним Meta наконец присылает profile name. */
+function whatsappIncoming(displayName: string): NormalizedEvent {
+  return {
+    type: "message.received",
+    providerEventId: `wh_wa_msg_${displayName}`,
+    provider: "zernio",
+    platform: "whatsapp",
+    externalAccountId: WHATSAPP_ACCOUNT_ID,
+    conversation: { externalId: "zc_wa_conv_1" },
+    message: {
+      externalId: `zm_wa_${displayName}`,
+      text: "Добрый день!",
+      attachments: [],
+      sender: { externalId: WHATSAPP_PARTICIPANT_ID, displayName },
+    },
+    rawMetadata: {},
+  };
+}
+
+describe("processInboundEvent — имя контакта появляется позже самого контакта", () => {
+  let stub: ReturnType<typeof createSupabaseStub>;
+
+  const run = (event: NormalizedEvent) =>
+    processInboundEvent(stub.client as unknown as SupabaseClient, event);
+
+  beforeEach(() => {
+    stub = createSupabaseStub(whatsappTables());
+  });
+
+  it("называет контакт его внешним ID, пока провайдер не сообщил имени", async () => {
+    await run(whatsappThreadSynced());
+
+    expect(stub.tables.contacts[0]!.display_name).toBe(WHATSAPP_PARTICIPANT_ID);
+    expect(stub.tables.contact_identities[0]!.display_name).toBeNull();
+  });
+
+  it("заменяет эту заглушку, когда имя приходит с первым сообщением", async () => {
+    await run(whatsappThreadSynced());
+    await run(whatsappIncoming("Anna Weber"));
+
+    // Ровно один контакт: сообщение попало в уже созданную identity, а не
+    // завело вторую.
+    expect(stub.tables.contacts).toHaveLength(1);
+    expect(stub.tables.contacts[0]!.display_name).toBe("Anna Weber");
+    expect(stub.tables.contact_identities[0]!.display_name).toBe("Anna Weber");
+  });
+
+  it("не трогает имя контакта, которое пришло не из этой identity", async () => {
+    await run(whatsappThreadSynced());
+    // Так выглядит контакт после ручной склейки: имя у него из другого канала,
+    // и заглушкой оно уже не является.
+    stub.tables.contacts[0]!.display_name = "Anna Weber (Instagram)";
+
+    await run(whatsappIncoming("Anna"));
+
+    expect(stub.tables.contacts[0]!.display_name).toBe("Anna Weber (Instagram)");
+    // Провайдерская метка самой identity при этом обновляется всегда.
+    expect(stub.tables.contact_identities[0]!.display_name).toBe("Anna");
+  });
+
+  it("не записывает имя, которое лишь повторяет внешний ID", async () => {
+    await run(whatsappThreadSynced());
+    await run(whatsappIncoming(WHATSAPP_PARTICIPANT_ID));
+
+    expect(stub.tables.contact_identities[0]!.display_name).toBeNull();
+    expect(stub.tables.contacts[0]!.display_name).toBe(WHATSAPP_PARTICIPANT_ID);
+  });
+});
 
 describe("processInboundEvent — outbound DM lifecycle", () => {
   let stub: ReturnType<typeof createSupabaseStub>;
