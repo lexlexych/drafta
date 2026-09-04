@@ -132,8 +132,12 @@ describe("ChannelsPanel", () => {
     expect(
       await screen.findByText("Не удалось начать подключение канала."),
     ).toBeDefined();
+    // Пока переход не завершился, кнопка подписана «Открываем авторизацию…».
+    // Сообщение об ошибке успевает отрисоваться раньше, чем спадёт `isPending`,
+    // поэтому осевшую подпись надо дождаться, а не спрашивать синхронно —
+    // иначе тест выигрывает эту гонку только на быстрой машине.
     expect(
-      screen.getByRole("button", { name: "Войти через Instagram" }),
+      await screen.findByRole("button", { name: "Войти через Instagram" }),
     ).toBeDefined();
     expect(assignMock).not.toHaveBeenCalled();
   });
@@ -408,7 +412,10 @@ describe("ChannelsPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: "Удалить канал" }));
 
     expect(await screen.findByText("Не удалось удалить канал.")).toBeDefined();
-    expect(screen.getByRole("button", { name: "Удалить канал" })).toBeDefined();
+    // То же самое: пока идёт переход, кнопка называется «Удаляем…».
+    expect(
+      await screen.findByRole("button", { name: "Удалить канал" }),
+    ).toBeDefined();
     expect(refresh).not.toHaveBeenCalled();
   });
 

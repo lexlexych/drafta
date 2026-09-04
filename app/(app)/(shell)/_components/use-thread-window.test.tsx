@@ -121,7 +121,10 @@ describe("useThreadWindow", () => {
       <Harness items={[item("m5", 5), item("m6", 6)]} hasMoreBefore={false} />,
     );
 
-    expect(ids()).toBe("m2,m3,m4,m5,m6");
+    // Подгрузка сверху шла через `startTransition`, и к моменту перерисовки
+    // переход мог ещё не осесть. Ждём итог, а не мгновенный снимок: промежуточные
+    // состояния с этой строкой не совпадают, так что ожидание ничего не прячет.
+    await waitFor(() => expect(ids()).toBe("m2,m3,m4,m5,m6"));
   });
 
   it("starts over when the server page no longer overlaps what we hold", async () => {

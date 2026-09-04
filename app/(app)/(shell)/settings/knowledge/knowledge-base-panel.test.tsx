@@ -137,8 +137,10 @@ describe("KnowledgeBasePanel", () => {
       }),
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Прайс" }));
-    fireEvent.click(screen.getByRole("button", { name: "Удалить" }));
+    // `waitFor` выше отпускает по факту вызова действия, а переход в этот момент
+    // ещё идёт и список перерисовывается — до кнопок надо дождаться.
+    fireEvent.click(await screen.findByRole("button", { name: "Прайс" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Удалить" }));
     await waitFor(() =>
       expect(deleteKnowledgeFileAction).toHaveBeenCalledWith({ id: "kbf_price" }),
     );
