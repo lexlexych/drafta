@@ -827,10 +827,10 @@ async function upsertContactIdentity(
   if (identityError) {
     if (isUniqueViolation(identityError)) {
       // Lost a race with a concurrent webhook creating the same identity —
-      // re-select the winner. The `contact` row just created above becomes
-      // an unused orphan (harmless: nothing references it, no constraint
-      // violation) rather than something worth a multi-statement
-      // transaction for at this scope.
+      // the two deliveries that open a thread (`conversation.started` and the
+      // first `message.received`) arrive as separate HTTP requests and can be
+      // in flight at once. Re-select the winner, then drop the `contact` row
+      // this run created a moment ago.
       const { data: winner, error: winnerError } = await supabase
         .from("contact_identities")
         .select("id, contact_id, display_name, avatar_url, avatar_fetched_at")
@@ -839,6 +839,27 @@ async function upsertContactIdentity(
         .eq("external_id", externalId)
         .single();
       if (winnerError || !winner) throw winnerError ?? identityError;
+
+      // That row was created for an identity that ended up on the winner
+      // instead, so nothing will ever reference it. Left behind it is not the
+      // harmless orphan it looks like: «Контакты» lists contacts, not
+      // identities, so it shows up there as a nameless twin of a real person.
+      if (winner.contact_id !== newContact.id) {
+        const { error: orphanError } = await supabase
+          .from("contacts")
+          .delete()
+          .eq("workspace_id", workspaceId)
+          .eq("id", newContact.id);
+
+        if (orphanError) {
+          // Losing the cleanup must not fail a valid inbound message: the
+          // duplicate is cosmetic, the message is not.
+          console.error(
+            "[webhooks] failed to remove an orphaned contact",
+            orphanError,
+          );
+        }
+      }
       await refreshIdentityName(
         supabase,
         workspaceId,

@@ -27,6 +27,11 @@ type Order = { column: string; ascending: boolean };
  */
 function createSupabaseStub(tables: Record<string, Row[]>) {
   let sequence = 0;
+  /** Одноразовые отказы вставки — ими имитируется проигранная гонка. */
+  const insertFailures = new Map<
+    string,
+    { error: { code: string }; onFail?: () => void }
+  >();
 
   const nextId = (table: string) => `${table}-${(sequence += 1)}`;
 
@@ -47,15 +52,25 @@ function createSupabaseStub(tables: Record<string, Row[]>) {
     let mode: "select" | "insert" | "update" | "delete" = "select";
     let payload: Row = {};
     let inserted: Row[] = [];
+    let insertError: { code: string } | null = null;
     let order: Order | null = null;
     let take: number | null = null;
 
     const result = () => {
       if (mode === "insert") {
-        return { data: inserted, error: null };
+        return insertError
+          ? { data: [] as Row[], error: insertError }
+          : { data: inserted, error: null };
       }
 
       let selected = rows.filter((row) => matches(row, filters));
+
+      if (mode === "delete") {
+        const kept = rows.filter((row) => !matches(row, filters));
+        rows.length = 0;
+        rows.push(...kept);
+        return { data: selected, error: null };
+      }
 
       if (order) {
         const { column, ascending } = order;
@@ -84,11 +99,26 @@ function createSupabaseStub(tables: Record<string, Row[]>) {
       },
       insert(values: Row | Row[]) {
         mode = "insert";
+
+        const failure = insertFailures.get(table);
+        if (failure) {
+          insertFailures.delete(table);
+          // Момент, в который конкурирующая доставка успела записать свою
+          // строку: именно поэтому наша вставка и упала.
+          failure.onFail?.();
+          insertError = failure.error;
+          return chain;
+        }
+
         inserted = (Array.isArray(values) ? values : [values]).map((value) => {
           const row = { id: nextId(table), ...value };
           rows.push(row);
           return row;
         });
+        return chain;
+      },
+      delete() {
+        mode = "delete";
         return chain;
       },
       update(values: Row) {
@@ -121,11 +151,16 @@ function createSupabaseStub(tables: Record<string, Row[]>) {
         return chain;
       },
       maybeSingle() {
-        const { data } = result();
-        return Promise.resolve({ data: data[0] ?? null, error: null });
+        const { data, error } = result();
+        return Promise.resolve(
+          error ? { data: null, error } : { data: data[0] ?? null, error: null },
+        );
       },
       single() {
-        const { data } = result();
+        const { data, error } = result();
+        if (error) {
+          return Promise.resolve({ data: null, error });
+        }
         return Promise.resolve({
           data: data[0] ?? null,
           error: data[0] ? null : { code: "PGRST116" },
@@ -144,6 +179,14 @@ function createSupabaseStub(tables: Record<string, Row[]>) {
   return {
     tables,
     rpcCalls,
+    /** Уронить следующую вставку в таблицу — с побочным эффектом «гонка». */
+    failNextInsert(
+      table: string,
+      error: { code: string },
+      onFail?: () => void,
+    ) {
+      insertFailures.set(table, { error, onFail });
+    },
     client: {
       from: (table: string) => builder(table),
       // Счётчики непрочитанного двигаются атомарной RPC. Без неё путь входящего
@@ -340,6 +383,53 @@ describe("processInboundEvent — имя контакта появляется �
 
     expect(stub.tables.contact_identities[0]!.display_name).toBeNull();
     expect(stub.tables.contacts[0]!.display_name).toBe(WHATSAPP_PARTICIPANT_ID);
+  });
+});
+
+describe("processInboundEvent — две доставки создают контакт наперегонки", () => {
+  let stub: ReturnType<typeof createSupabaseStub>;
+
+  const run = (event: NormalizedEvent) =>
+    processInboundEvent(stub.client as unknown as SupabaseClient, event);
+
+  beforeEach(() => {
+    stub = createSupabaseStub(whatsappTables());
+  });
+
+  /**
+   * `conversation.started` и первое `message.received` приезжают разными HTTP
+   * запросами и могут выполняться одновременно: обе доставки не находят
+   * identity, обе заводят контакт, а уникальный индекс пропускает только одну.
+   */
+  it("не оставляет от проигравшей доставки пустой контакт", async () => {
+    stub.failNextInsert("contact_identities", { code: "23505" }, () => {
+      // Ровно в этот момент конкурент дописал свою строку — потому наша и упала.
+      stub.tables.contacts.push({
+        id: "con_winner",
+        workspace_id: "wsp_a",
+        display_name: WHATSAPP_PARTICIPANT_ID,
+      });
+      stub.tables.contact_identities.push({
+        id: "cid_winner",
+        workspace_id: "wsp_a",
+        contact_id: "con_winner",
+        platform: "whatsapp",
+        external_id: WHATSAPP_PARTICIPANT_ID,
+        display_name: null,
+        avatar_url: null,
+        avatar_fetched_at: null,
+      });
+    });
+
+    await run(whatsappIncoming("Alexey"));
+
+    // Один человек — один контакт. Без уборки в «Контактах» висел бы второй,
+    // без единой identity и без истории.
+    expect(stub.tables.contacts).toHaveLength(1);
+    expect(stub.tables.contacts[0]!.id).toBe("con_winner");
+    expect(stub.tables.contact_identities).toHaveLength(1);
+    // Победитель при этом получает имя из той же доставки, что проиграла гонку.
+    expect(stub.tables.contacts[0]!.display_name).toBe("Alexey");
   });
 });
 
