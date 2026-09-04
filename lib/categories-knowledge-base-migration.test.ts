@@ -10,6 +10,9 @@ import { describe, expect, it } from "vitest";
  * `*-migration.test.ts`. Смысл — поймать молчаливую потерю ключевого куска при
  * будущей правке файла (миграция уже применена и повторно не выполнится).
  */
+// Переводы строк нормализуем: на Windows рабочая копия приезжает с CRLF
+// (core.autocrlf), а ожидания ниже написаны через LF — в шаблонных строках
+// TypeScript тоже LF, их спецификация нормализует при разборе.
 const migration = readFileSync(
   join(
     process.cwd(),
@@ -18,7 +21,7 @@ const migration = readFileSync(
     "20260729100000_categories_as_knowledge_base.sql",
   ),
   "utf8",
-);
+).replaceAll("\r\n", "\n");
 
 describe("categories-as-knowledge-base migration contract", () => {
   it("drops the old category model completely", () => {

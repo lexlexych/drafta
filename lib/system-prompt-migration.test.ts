@@ -9,11 +9,14 @@ import {
   DEFAULT_SYSTEM_PROMPT,
 } from "./ai/default-prompts";
 
+// Переводы строк нормализуем: на Windows рабочая копия приезжает с CRLF
+// (core.autocrlf), а ожидания ниже написаны через LF — в шаблонных строках
+// TypeScript тоже LF, их спецификация нормализует при разборе.
 function migrationSql(name: string): string {
   return readFileSync(
     join(process.cwd(), "supabase", "migrations", name),
     "utf8",
-  );
+  ).replaceAll("\r\n", "\n");
 }
 
 const migration = migrationSql("20260728100000_workspace_system_prompts.sql");
