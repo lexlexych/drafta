@@ -116,7 +116,11 @@ export async function acquireLeases(
         ok = true;
         break;
       }
-      await sleep(`${waitSeconds(attempt)}s`);
+      // После последней попытки не спим: ждать больше нечего, и лишняя пауза
+      // только оттянула бы падение прогона.
+      if (attempt < maxWaitAttempts) {
+        await sleep(`${waitSeconds(attempt)}s`);
+      }
     }
 
     if (!ok) {
