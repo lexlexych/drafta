@@ -10,7 +10,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
  * нажавшие кнопку одновременно, не должны отправить человеку два сообщения.
  *
  * Строка создаётся пользовательским RLS-клиентом до похода к провайдеру, а
- * статус доводит Inngest-функция под service_role.
+ * статус доводит прогон под service_role.
  */
 
 export type PrivateReplyStatus = "pending" | "sent" | "failed";
@@ -78,7 +78,7 @@ export async function listPostPrivateReplies(
 }
 
 /**
- * Заводит ЛС в статусе `pending` — то, за что дальше держится Inngest-функция.
+ * Заводит ЛС в статусе `pending` — то, за что дальше держится прогон.
  *
  * Нарушение уникального ключа здесь не ошибка выполнения, а ровно тот случай,
  * ради которого ключ и стоит: комментарию уже писали. Отвечаем понятным
@@ -121,7 +121,7 @@ export async function createCommentPrivateReply(
 }
 
 /**
- * Компенсация неудачного `inngest.send`: без события строка осталась бы
+ * Компенсация неудачного запуска прогона: без него строка осталась бы
  * `pending` навсегда, а кнопка — недоступной (правило 8).
  */
 export async function markPrivateReplyFailedAfterEmit(

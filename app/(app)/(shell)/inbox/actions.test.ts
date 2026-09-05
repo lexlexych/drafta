@@ -9,9 +9,9 @@ const mocks = vi.hoisted(() => ({
   discardConversationDraft: vi.fn(),
   discardGeneratingConversationDraft: vi.fn(),
   canGenerateConversationDraft: vi.fn(),
-  emitDraftGenerateRequested: vi.fn(),
-  emitDraftGenerateCancelled: vi.fn(),
-  emitMessageSendRequested: vi.fn(),
+  startGenerateDraft: vi.fn(),
+  cancelDraftGenerationRuns: vi.fn(),
+  startSendMessage: vi.fn(),
   createManualOutgoingMessage: vi.fn(),
   retryFailedOutgoingMessage: vi.fn(),
   markOutgoingMessageFailedAfterEmit: vi.fn(),
@@ -34,10 +34,10 @@ vi.mock("@/lib/db/drafts", () => ({
   discardGeneratingConversationDraft: mocks.discardGeneratingConversationDraft,
   canGenerateConversationDraft: mocks.canGenerateConversationDraft,
 }));
-vi.mock("@/lib/inngest/events", () => ({
-  emitDraftGenerateRequested: mocks.emitDraftGenerateRequested,
-  emitDraftGenerateCancelled: mocks.emitDraftGenerateCancelled,
-  emitMessageSendRequested: mocks.emitMessageSendRequested,
+vi.mock("@/lib/workflows/start", () => ({
+  startGenerateDraft: mocks.startGenerateDraft,
+  cancelDraftGenerationRuns: mocks.cancelDraftGenerationRuns,
+  startSendMessage: mocks.startSendMessage,
 }));
 vi.mock("@/lib/db/outgoing", () => ({
   createManualOutgoingMessage: mocks.createManualOutgoingMessage,
@@ -77,13 +77,13 @@ describe("draft server actions", () => {
 
   it("emits generation with exactly conversationId and workspaceId", async () => {
     mocks.canGenerateConversationDraft.mockResolvedValue({ ok: true });
-    mocks.emitDraftGenerateRequested.mockResolvedValue(undefined);
+    mocks.startGenerateDraft.mockResolvedValue(undefined);
 
     await expect(generateDraftAction("conversation-1")).resolves.toEqual({
       ok: true,
     });
 
-    const payload = mocks.emitDraftGenerateRequested.mock.calls[0][0];
+    const payload = mocks.startGenerateDraft.mock.calls[0][0];
     expect(payload).toEqual({
       conversationId: "conversation-1",
       workspaceId: "workspace-1",
@@ -104,7 +104,7 @@ describe("draft server actions", () => {
       ok: false,
       error: "Диалог не найден.",
     });
-    expect(mocks.emitDraftGenerateRequested).not.toHaveBeenCalled();
+    expect(mocks.startGenerateDraft).not.toHaveBeenCalled();
   });
 
   it("refuses a conversation with nothing incoming instead of locking the field", async () => {
@@ -117,12 +117,15 @@ describe("draft server actions", () => {
       ok: false,
       error: "Нет входящих сообщений для ответа.",
     });
-    expect(mocks.emitDraftGenerateRequested).not.toHaveBeenCalled();
+    expect(mocks.startGenerateDraft).not.toHaveBeenCalled();
   });
 
-  it("discards the generating draft first, then asks Inngest to cancel the run", async () => {
-    mocks.discardGeneratingConversationDraft.mockResolvedValue({ ok: true });
-    mocks.emitDraftGenerateCancelled.mockResolvedValue(undefined);
+  it("discards the generating draft first, then cancels its run", async () => {
+    mocks.discardGeneratingConversationDraft.mockResolvedValue({
+      ok: true,
+      runIds: ["wrun_1"],
+    });
+    mocks.cancelDraftGenerationRuns.mockResolvedValue(undefined);
 
     await expect(
       cancelDraftGenerationAction("conversation-1"),
@@ -135,10 +138,8 @@ describe("draft server actions", () => {
       "workspace-1",
       "conversation-1",
     );
-    expect(mocks.emitDraftGenerateCancelled).toHaveBeenCalledWith({
-      conversationId: "conversation-1",
-      workspaceId: "workspace-1",
-    });
+    // Прогон снимается адресно: id пришёл из погашенной строки черновика.
+    expect(mocks.cancelDraftGenerationRuns).toHaveBeenCalledWith(["wrun_1"]);
   });
 
   it("does not cancel the run when the draft could not be discarded", async () => {
@@ -153,7 +154,7 @@ describe("draft server actions", () => {
       ok: false,
       error: "Не удалось остановить генерацию.",
     });
-    expect(mocks.emitDraftGenerateCancelled).not.toHaveBeenCalled();
+    expect(mocks.cancelDraftGenerationRuns).not.toHaveBeenCalled();
   });
 });
 
@@ -163,7 +164,7 @@ describe("send server actions", () => {
       ok: true,
       messageId: "message-3",
     });
-    mocks.emitMessageSendRequested.mockResolvedValue(undefined);
+    mocks.startSendMessage.mockResolvedValue(undefined);
 
     await expect(
       sendManualMessageAction("conversation-1", "Добрый день!"),
@@ -176,7 +177,7 @@ describe("send server actions", () => {
       "Добрый день!",
       null,
     );
-    const payload = mocks.emitMessageSendRequested.mock.calls[0][0];
+    const payload = mocks.startSendMessage.mock.calls[0][0];
     expect(payload).toEqual({
       messageId: "message-3",
       conversationId: "conversation-1",
@@ -195,7 +196,7 @@ describe("send server actions", () => {
       ok: true,
       messageId: "message-4",
     });
-    mocks.emitMessageSendRequested.mockResolvedValue(undefined);
+    mocks.startSendMessage.mockResolvedValue(undefined);
 
     await sendManualMessageAction(
       "conversation-1",
@@ -221,7 +222,7 @@ describe("send server actions", () => {
     await expect(
       sendManualMessageAction("conversation-1", "Добрый день!"),
     ).resolves.toEqual({ ok: false, error: "Диалог не найден." });
-    expect(mocks.emitMessageSendRequested).not.toHaveBeenCalled();
+    expect(mocks.startSendMessage).not.toHaveBeenCalled();
   });
 
   it("marks the persisted message failed when the emit itself fails", async () => {
@@ -232,7 +233,7 @@ describe("send server actions", () => {
       ok: true,
       messageId: "message-9",
     });
-    mocks.emitMessageSendRequested.mockRejectedValue(new Error("inngest down"));
+    mocks.startSendMessage.mockRejectedValue(new Error("workflow backend down"));
     mocks.markOutgoingMessageFailedAfterEmit.mockResolvedValue(undefined);
 
     const result = await sendManualMessageAction("conversation-1", "Ответ");
@@ -258,7 +259,7 @@ describe("send server actions", () => {
       ok: false,
       error: "Сообщение уже изменилось — обновите тред.",
     });
-    expect(mocks.emitMessageSendRequested).not.toHaveBeenCalled();
+    expect(mocks.startSendMessage).not.toHaveBeenCalled();
   });
 
   it("re-emits message/send after a successful failed→pending reset", async () => {
@@ -266,13 +267,13 @@ describe("send server actions", () => {
       ok: true,
       messageId: "message-5",
     });
-    mocks.emitMessageSendRequested.mockResolvedValue(undefined);
+    mocks.startSendMessage.mockResolvedValue(undefined);
 
     await expect(
       retrySendMessageAction("conversation-1", "message-5"),
     ).resolves.toEqual({ ok: true, messageId: "message-5" });
 
-    expect(mocks.emitMessageSendRequested).toHaveBeenCalledWith({
+    expect(mocks.startSendMessage).toHaveBeenCalledWith({
       messageId: "message-5",
       conversationId: "conversation-1",
       workspaceId: "workspace-1",

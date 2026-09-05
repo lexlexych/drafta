@@ -34,10 +34,10 @@ import {
   type CurrentWorkspace,
 } from "@/lib/db/workspace";
 import {
-  emitDraftGenerateCancelled,
-  emitDraftGenerateRequested,
-  emitMessageSendRequested,
-} from "@/lib/inngest/events";
+  cancelDraftGenerationRuns,
+  startGenerateDraft,
+  startSendMessage,
+} from "@/lib/workflows/start";
 
 /** These actions belong to "/inbox" only — comments have their own actions. */
 function revalidateInboxViews() {
@@ -250,11 +250,11 @@ export async function discardDraftAction(
 /**
  * Shared tail of every send action (stage 3,
  * docs/architecture/07-data-flows.md#63-отправка-ответа): the outgoing
- * message is already persisted as `pending` — emit the ID-only
- * `message/send` event; the actual provider call happens in the
- * `send-message` Inngest function with retries (vibecoding rule 8), never
- * inside this request. If even the emit fails, compensate to `failed` so
- * the thread shows the retry button instead of a forever-pending bubble.
+ * message is already persisted as `pending` — start the IDs-only
+ * `send-message` workflow; the actual provider call happens in that run with
+ * retries (vibecoding rule 8), never inside this request. If even the start
+ * fails, compensate to `failed` so the thread shows the retry button instead
+ * of a forever-pending bubble.
  */
 async function requestMessageSend(
   context: Exclude<DraftActionContext, { error: string }>,
@@ -262,13 +262,13 @@ async function requestMessageSend(
   messageId: string,
 ): Promise<OutgoingSendResult> {
   try {
-    await emitMessageSendRequested({
+    await startSendMessage({
       messageId,
       conversationId,
       workspaceId: context.workspace.id,
     });
   } catch (error) {
-    console.error("[outgoing] failed to emit message/send", error);
+    console.error("[outgoing] failed to start send-message", error);
     await markOutgoingMessageFailedAfterEmit(
       context.supabase,
       context.workspace.id,
@@ -318,7 +318,7 @@ export async function sendManualMessageAction(
   return requestMessageSend(context, conversationId, created.messageId);
 }
 
-/** «Повторить» on a failed outgoing bubble: failed → pending → re-emit. */
+/** «Повторить» on a failed outgoing bubble: failed → pending → restart. */
 export async function retrySendMessageAction(
   conversationId: string,
   messageId: string,
@@ -347,7 +347,7 @@ export async function retrySendMessageAction(
 /**
  * Значок AI в композере — единственный способ создать черновик к диалогу
  * (docs/architecture/07-data-flows.md#62-генерация-черновика). Работа идёт в
- * Inngest-функции `generate-draft` с ретраями (правило 8); сюда возвращается
+ * прогона `generate-draft` с ретраями (правило 8); сюда возвращается
  * только «запустили», а сам черновик приезжает в поле ввода через Realtime.
  */
 export async function generateDraftAction(conversationId: string) {
@@ -368,7 +368,7 @@ export async function generateDraftAction(conversationId: string) {
   }
 
   try {
-    await emitDraftGenerateRequested({
+    await startGenerateDraft({
       conversationId,
       workspaceId: context.workspace.id,
     });
@@ -383,8 +383,8 @@ export async function generateDraftAction(conversationId: string) {
  * Кнопка «стоп» под спиннером генерации.
  *
  * Черновик гасится здесь и сейчас — именно это разблокирует поле ввода во всех
- * открытых вкладках. Отмена самого прогона Inngest идёт следом и только
- * экономит остаток работы, поэтому её неудача не превращается в ошибку.
+ * открытых вкладках. Снятие самого прогона идёт следом и только экономит
+ * остаток работы, поэтому его неудача не превращается в ошибку.
  */
 export async function cancelDraftGenerationAction(conversationId: string) {
   const context = await getDraftActionContext();
@@ -403,10 +403,7 @@ export async function cancelDraftGenerationAction(conversationId: string) {
     return discarded;
   }
 
-  await emitDraftGenerateCancelled({
-    conversationId,
-    workspaceId: context.workspace.id,
-  });
+  await cancelDraftGenerationRuns(discarded.runIds);
 
   revalidateInboxViews();
   return { ok: true as const };
@@ -417,7 +414,7 @@ export async function cancelDraftGenerationAction(conversationId: string) {
  * «Настройки → Аккаунт» и кэшируется в `message_translations`.
  *
  * Единственный вызов LLM, который идёт синхронно в запросе, а не событием
- * Inngest: пользователь ждёт результат здесь и сейчас со спиннером на месте
+ * прогоном: пользователь ждёт результат здесь и сейчас со спиннером на месте
  * значка, и очередь с ретраями сделала бы это ожидание неопределённым. Правило
  * 8 сюда не распространяется — наружу ничего не отправляется, а вебхуки (правило
  * 6) это не затрагивает.

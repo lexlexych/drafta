@@ -12,10 +12,10 @@ import type {
 } from "@/lib/channels/types";
 import { isAvatarStale } from "@/lib/avatars";
 import {
-  emitContactAvatarSyncRequested,
-  emitPostThumbnailSyncRequested,
-  emitPushNotifyRequested,
-} from "@/lib/inngest/events";
+  startContactAvatarSync,
+  startPostThumbnailSync,
+  startPushNotify,
+} from "@/lib/workflows/start";
 
 /**
  * One normalized event → the DB side of §6.1's pipeline
@@ -129,7 +129,7 @@ export async function processInboundEvent(
   // reconciliation pass can retry — see `webhook_events_processing_idx`
   // (supabase/migrations/20260720103000_create_schema_v1.sql) and the
   // `reconcile-webhooks` cron listed as a later stage
-  // (docs/architecture/07-data-flows.md#66-полный-список-inngest-функций).
+  // (docs/architecture/07-data-flows.md#66-полный-список-прогонов).
   // Reserved for genuinely transient failures (a DB write erroring
   // mid-pipeline), not for definitive business outcomes like an unknown
   // channel_connection or an out-of-scope event type — those are terminal
@@ -300,12 +300,12 @@ async function processIncomingDirectMessage(params: {
 
     // Fail-safe by design (docs/architecture/14-vibecoding-rules.md#7) —
     // never allowed to turn a persisted message into a failed webhook. The
-    // event payload is IDs-only.
+    // run arguments are IDs-only.
     await Promise.all([
-      emitPushNotifyRequested({ messageId, conversationId, workspaceId }),
+      startPushNotify({ messageId, conversationId, workspaceId }),
       ...(isAvatarStale(avatarFetchedAt)
         ? [
-            emitContactAvatarSyncRequested({
+            startContactAvatarSync({
               workspaceId,
               contactIdentityId,
               conversationId,
@@ -371,7 +371,7 @@ async function processIncomingComment(params: {
     // Fail-safe and IDs-only: the worker reloads the post and skips the Zernio
     // call when `thumbnail_url` is already present. If the provider does not
     // know the picture yet, the field stays null and a later comment retries.
-    await emitPostThumbnailSyncRequested({ workspaceId, postId });
+    await startPostThumbnailSync({ workspaceId, postId });
   } catch (error) {
     console.error("[webhooks] failed to process incoming comment", error);
     await markUnprocessedWithError(describeError(error));
@@ -748,7 +748,7 @@ async function processPublishedPost(params: {
       event.post,
     );
     await markProcessed(null);
-    await emitPostThumbnailSyncRequested({ workspaceId, postId });
+    await startPostThumbnailSync({ workspaceId, postId });
   } catch (error) {
     console.error("[webhooks] failed to process published post", error);
     await markUnprocessedWithError(describeError(error));

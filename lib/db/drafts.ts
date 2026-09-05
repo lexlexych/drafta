@@ -146,25 +146,35 @@ export async function discardConversationDraft(
  * before it ever sees the row (it locks optimistically on click), so the id may
  * not be on the client yet. Being an UPDATE, it also reaches every other open
  * tab through the `drafts` realtime subscription, which a DELETE could not.
+ *
+ * Возвращает `runIds` погашенных черновиков: по ним действие отмены снимает сам
+ * прогон через `run.cancel()` (docs/architecture/18-workflows.md). Отмена
+ * адресная, и адрес хранится в строке черновика — её пишет первый же шаг
+ * прогона.
  */
 export async function discardGeneratingConversationDraft(
   supabase: SupabaseClient,
   workspaceId: string,
   conversationId: string,
-): Promise<{ ok: true } | { ok: false; error: string }> {
-  const { error } = await supabase
+): Promise<{ ok: true; runIds: string[] } | { ok: false; error: string }> {
+  const { data, error } = await supabase
     .from("drafts")
     .update({ status: "discarded", updated_at: new Date().toISOString() })
     .eq("workspace_id", workspaceId)
     .eq("conversation_id", conversationId)
-    .eq("status", "generating");
+    .eq("status", "generating")
+    .select("workflow_run_id");
 
   if (error) {
     console.error("[drafts] failed to discard a generating draft", error);
     return { ok: false, error: "Не удалось остановить генерацию." };
   }
 
-  return { ok: true };
+  const runIds = ((data ?? []) as { workflow_run_id: string | null }[])
+    .map((row) => row.workflow_run_id)
+    .filter((runId): runId is string => Boolean(runId));
+
+  return { ok: true, runIds };
 }
 
 /**

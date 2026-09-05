@@ -38,7 +38,7 @@ describe("comment_private_replies migration contract", () => {
 
   it("tracks the send the way every other outgoing row does", () => {
     // pending → sent/failed: строка появляется до похода к провайдеру, потому
-    // что отправляет Inngest-функция с ретраями, а не запрос.
+    // что отправляет прогон с ретраями, а не запрос.
     expect(migration).toContain(
       "status text not null default 'pending'\n    check (status in ('pending', 'sent', 'failed'))",
     );

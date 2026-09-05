@@ -93,6 +93,11 @@ async function removeProbeContact(contactId: string): Promise<void> {
   }
 }
 
+const anonymousProbeColumns = {
+  workflow_leases: "key",
+  workspace_members: "workspace_id",
+} as const;
+
 describe("workspace RLS isolation", () => {
   beforeAll(async () => {
     await Promise.all([
@@ -373,7 +378,10 @@ describe("workspace RLS isolation", () => {
   });
 
   it.each(publicClientTables)("denies anonymous access to %s", async (table) => {
-    const selectedColumn = table === "workspace_members" ? "workspace_id" : "id";
+    // Почти у всех таблиц есть `id`; исключения — те, где первичный ключ
+    // составной или отсутствует, и колонку надо назвать явно.
+    const selectedColumn =
+      anonymousProbeColumns[table as keyof typeof anonymousProbeColumns] ?? "id";
     const result = await anonymousClient.from(table).select(selectedColumn).limit(1);
 
     expectDenied(result, `${table}: anon must not receive any rows`);

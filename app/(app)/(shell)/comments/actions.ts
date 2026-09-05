@@ -31,9 +31,9 @@ import {
   type CurrentWorkspace,
 } from "@/lib/db/workspace";
 import {
-  emitCommentPrivateReplySendRequested,
-  emitCommentSendRequested,
-} from "@/lib/inngest/events";
+  startSendComment,
+  startSendPrivateReply,
+} from "@/lib/workflows/start";
 /**
  * Server actions of the «Публикации» screen. Nothing here is shared with
  * `/inbox`: comments have their own tables and their own send path.
@@ -228,7 +228,7 @@ export async function translateCommentAction(
  *
  * Строка `comments` появляется сразу в статусе `pending` — она и есть то, что
  * пользователь видит в треде как «Отправляется…». Наружу ответ уходит
- * Inngest-функцией `send-comment` с ретраями (правило 8), а не из этого
+ * прогоном `send-comment` с ретраями (правило 8), а не из этого
  * запроса; если событие не удалось отправить, ответ помечается `failed`, иначе
  * он остался бы «отправляющимся» навсегда.
  */
@@ -257,14 +257,14 @@ export async function replyToCommentAction(input: {
   revalidateCommentsView();
 
   try {
-    await emitCommentSendRequested({
+    await startSendComment({
       workspaceId: context.workspace.id,
       postId: input.postId,
       replyCommentId: accepted.replyCommentId,
     });
     return { ok: true };
   } catch (error) {
-    console.error("[comments] failed to emit comment/send", error);
+    console.error("[comments] failed to start send-comment", error);
     await markCommentSendFailedAfterEmit(
       context.supabase,
       context.workspace.id,
@@ -282,8 +282,8 @@ export async function replyToCommentAction(input: {
  * после него — держит уникальный ключ `comment_private_replies`, поэтому
  * повторное нажатие в двух вкладках не превращается в два сообщения у клиента.
  *
- * Наружу отправляет Inngest-функция с ретраями (правило 8); если событие не
- * ушло, строка помечается `failed`, иначе она осталась бы «отправляющейся»
+ * Наружу отправляет прогон с ретраями (правило 8); если запустить его не
+ * удалось, строка помечается `failed`, иначе она осталась бы «отправляющейся»
  * навсегда.
  */
 export async function sendCommentPrivateReplyAction(input: {
@@ -317,14 +317,14 @@ export async function sendCommentPrivateReplyAction(input: {
   revalidateCommentsView();
 
   try {
-    await emitCommentPrivateReplySendRequested({
+    await startSendPrivateReply({
       workspaceId: context.workspace.id,
       postId: input.postId,
       privateReplyId: created.privateReplyId,
     });
     return { ok: true };
   } catch (error) {
-    console.error("[comments] failed to emit comment/private-reply.send", error);
+    console.error("[comments] failed to start send-comment-private-reply", error);
     await markPrivateReplyFailedAfterEmit(
       context.supabase,
       context.workspace.id,
@@ -362,14 +362,14 @@ export async function retryCommentPrivateReplyAction(input: {
   revalidateCommentsView();
 
   try {
-    await emitCommentPrivateReplySendRequested({
+    await startSendPrivateReply({
       workspaceId: context.workspace.id,
       postId: input.postId,
       privateReplyId: retried.privateReplyId,
     });
     return { ok: true };
   } catch (error) {
-    console.error("[comments] failed to emit comment/private-reply.send", error);
+    console.error("[comments] failed to start send-comment-private-reply", error);
     await markPrivateReplyFailedAfterEmit(
       context.supabase,
       context.workspace.id,

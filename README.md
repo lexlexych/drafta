@@ -5,6 +5,10 @@ PWA-инбокс для малого бизнеса: сообщения и ко�
 и правила разработки находятся в [AGENTS.md](AGENTS.md) и
 [docs/architecture](docs/architecture/_index.md).
 
+Менеджер пакетов — **pnpm** (версия закреплена полем `packageManager` в
+`package.json`, Corepack подхватит её сам). Зависимости ставятся `pnpm install`;
+`package-lock.json` в репозитории нет.
+
 ## Основной путь разработки: Supabase Cloud + Vercel (без Docker)
 
 Этот путь подходит, когда локальный контейнерный рантайм недоступен. Используйте
@@ -18,9 +22,9 @@ PWA-инбокс для малого бизнеса: сообщения и ко�
 2. Свяжите CLI именно с dev-проектом и сначала проверьте план миграций:
 
    ```powershell
-   npx supabase link --project-ref <dev-project-ref>
-   npx supabase db push --dry-run
-   npx supabase db push --include-seed
+   pnpm exec supabase link --project-ref <dev-project-ref>
+   pnpm exec supabase db push --dry-run
+   pnpm exec supabase db push --include-seed
    ```
 
    `--include-seed` допустим только для выделенного dev-проекта: он применяет
@@ -31,7 +35,7 @@ PWA-инбокс для малого бизнеса: сообщения и ко�
 3. Запустите приложение:
 
    ```powershell
-   npm run dev
+   pnpm dev
    ```
 
 4. Для Vercel подключите репозиторий и задайте регион функций **fra1**. В
@@ -46,7 +50,7 @@ PWA-инбокс для малого бизнеса: сообщения и ко�
 
 ## Проверка RLS в Cloud dev
 
-`npm run test:rls` — отдельный интеграционный сьют. Он создаёт три клиента
+`pnpm test:rls` — отдельный интеграционный сьют. Он создаёт три клиента
 `supabase-js` только с publishable-ключом: два входят под сид-пользователями,
 третий остаётся анонимным. Перед любым сетевым запросом сьют завершается с
 ошибкой, если отсутствует обязательная конфигурация. Он принимает только
@@ -55,7 +59,7 @@ PWA-инбокс для малого бизнеса: сообщения и ко�
 создания клиента. Точный внутренний формат opaque-ключа намеренно не
 дублируется в приложении.
 
-После `npx supabase db push --include-seed` внесите точный ref выделенного
+После `pnpm exec supabase db push --include-seed` внесите точный ref выделенного
 dev-проекта в versioned allowlist
 [`lib/rls-test-targets.ts`](lib/rls-test-targets.ts) отдельным проверяемым
 изменением. Пустой allowlist — безопасное состояние по умолчанию: Cloud-сьют
@@ -68,7 +72,7 @@ $env:RLS_TEST_REMOTE_CONFIRMATION = "cloud-dev:<dev-project-ref>"
 $env:RLS_TEST_SUPABASE_PUBLISHABLE_KEY = "sb_publishable_<dev-key>"
 $env:RLS_TEST_USER_A_PASSWORD = "drafta-demo-password"
 $env:RLS_TEST_USER_B_PASSWORD = "drafta-demo-password"
-npm run test:rls
+pnpm test:rls
 ```
 
 `RLS_TEST_SUPABASE_URL` должен в точности равняться URL ref из checked-in
@@ -90,9 +94,9 @@ Supabase CLI и Docker/совместимый container runtime. Этот реп
 Docker автоматически.
 
 ```powershell
-npx supabase start
-npx supabase db reset
-npm run dev
+pnpm exec supabase start
+pnpm exec supabase db reset
+pnpm dev
 ```
 
 `supabase db reset` последовательно применяет миграции и
@@ -107,36 +111,39 @@ $env:RLS_TEST_SUPABASE_URL = "http://127.0.0.1:54321"
 $env:RLS_TEST_SUPABASE_PUBLISHABLE_KEY = "<local-publishable-key>"
 $env:RLS_TEST_USER_A_PASSWORD = "drafta-demo-password"
 $env:RLS_TEST_USER_B_PASSWORD = "drafta-demo-password"
-npm run test:rls
+pnpm test:rls
 ```
 
 Для `local` сьют принимает только loopback URL на порту `54321`; он не читает
 обычные `NEXT_PUBLIC_*` переменные приложения, поэтому не может случайно
 подключиться к настроенному Vercel/Supabase окружению.
 
-## Локальный Inngest-контур
+## Локальный контур прогонов
 
-Для сквозной проверки вебхука и фоновой функции запустите три процесса в
-отдельных терминалах из корня репозитория:
+Для сквозной проверки вебхука и фоновых прогонов достаточно двух процессов в
+отдельных терминалах из корня репозитория — отдельный dev-сервер очереди не
+нужен, `next dev` исполняет прогоны сам (Local World, состояние в
+`.workflow-data/`):
 
 ```powershell
 # Терминал 1: локальная БД (требует Docker)
-npx supabase start
+pnpm exec supabase start
 
-# Терминал 2: Next.js в локальном режиме Inngest SDK v4
-$env:INNGEST_DEV = "1"
-npm run dev
-
-# Терминал 3: Inngest Dev Server; UI откроется на http://localhost:8288
-npx --ignore-scripts=false inngest-cli@latest dev -u http://localhost:3000/api/inngest
+# Терминал 2: приложение
+pnpm dev
 ```
 
-Dev Server также умеет автоматически обнаружить `/api/inngest`, но явный `-u`
-делает запуск воспроизводимым. В UI должны появиться приложение `drafta` и
-функция `generate-draft`. Для локальной фикстуры используйте то же значение
-`ZERNIO_WEBHOOK_SECRET`, которое задано приложению. Сид локальной БД содержит
-канал `seed-a-telegram`, поэтому PowerShell-команда ниже подменяет внешний ID
-аккаунта в тестовом payload и подписывает в точности отправляемое тело:
+Инспектор прогонов запускается по требованию — веб-интерфейс или терминал:
+
+```powershell
+pnpm exec workflow web
+pnpm exec workflow inspect runs
+```
+
+Для локальной фикстуры используйте то же значение `ZERNIO_WEBHOOK_SECRET`,
+которое задано приложению. Сид локальной БД содержит канал `seed-a-telegram`,
+поэтому PowerShell-команда ниже подменяет внешний ID аккаунта в тестовом payload
+и подписывает в точности отправляемое тело:
 
 ```powershell
 $fixtureBody = (Get-Content -Raw -Encoding utf8 lib/channels/zernio/__fixtures__/telegram-dm.json).Replace("acct_tg_98213", "seed-a-telegram")
@@ -145,20 +152,36 @@ $signature = [Convert]::ToHexString($hmac.ComputeHash([Text.Encoding]::UTF8.GetB
 Invoke-WebRequest -Method Post -Uri http://localhost:3000/api/webhooks/zernio -ContentType application/json -Headers @{ "X-Zernio-Signature" = $signature } -Body $fixtureBody
 ```
 
-После отправки в `POST /api/webhooks/zernio` событие
-`interaction/received` должно завершиться успешным запуском единственного шага
-`log-event-identifiers`; его лог содержит только `messageId`, `conversationId`
-и `workspaceId`. Секреты `INNGEST_EVENT_KEY` и `INNGEST_SIGNING_KEY` локальному
-Dev Server не нужны.
+Роут должен ответить 200 быстрее секунды, а в инспекторе — появиться прогоны
+`send-push` и (если аватар контакта устарел или его нет) `contact-avatar`.
+Черновик при этом **не** генерируется: он создаётся только по значку AI в поле
+ответа треда. Секреты для инспектора не нужны.
+
+Крон-роуты дёргаются вручную, расписание из `vercel.json` локально не работает:
+
+```powershell
+Invoke-WebRequest -Uri http://localhost:3000/api/cron/push-digest
+Invoke-WebRequest -Uri http://localhost:3000/api/cron/cleanup-ai-request-log
+```
+
+Локально они открыты (без `CRON_SECRET` проверка пропускает всё, что не
+production); в проде Vercel Cron подписывает вызов заголовком
+`Authorization: Bearer $CRON_SECRET`. Устройство контура —
+[18. Durable-исполнение](docs/architecture/18-workflows.md).
 
 ## Статические проверки
 
 ```powershell
-npm run lint
-npm run build
-npm test
+pnpm lint
+pnpm build
+pnpm test
+pnpm test:workflows
 ```
 
-`npm test` включает статический контракт сидов и fail-fast валидацию конфигурации
+`pnpm test` включает статический контракт сидов и fail-fast валидацию конфигурации
 RLS, но не подключается к Supabase. Runtime-проверка RLS выполняется только
-отдельной командой `npm run test:rls` с явными переменными выше.
+отдельной командой `pnpm test:rls` с явными переменными выше.
+
+`pnpm test:workflows` — отдельный сьют, который гоняет настоящие прогоны
+в Local World и проверяет поведение рантайма: ретраи, `FatalError`, компенсации
+и отмену ([18. Durable-исполнение](docs/architecture/18-workflows.md#локальный-контур-и-тестирование)).

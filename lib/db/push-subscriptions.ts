@@ -16,7 +16,7 @@ export type PushSubscriptionResult =
   | { ok: true }
   | { ok: false; error: string };
 
-/** Полная подписка для отправки push из Inngest (без persist-полей). */
+/** Полная подписка для отправки push из прогона (без persist-полей). */
 export type PushSubscriptionRecord = {
   id: string;
   userId: string;
@@ -92,7 +92,7 @@ function mapRecord(row: Record<string, unknown>): PushSubscriptionRecord {
 /**
  * Подписки получателей мгновенных push в workspace: пользователи в режиме
  * `instant` **или** без строки настроек (дефолт — instant, §11). Admin-клиент
- * (обходит RLS) — вызывается только из Inngest-функции `send-push`.
+ * (обходит RLS) — вызывается только из прогона `send-push`.
  */
 export async function listInstantSubscriptions(
   workspaceId: string,

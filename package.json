@@ -2,19 +2,20 @@
   "name": "drafta",
   "version": "0.1.0",
   "private": true,
+  "packageManager": "pnpm@10.33.0",
   "scripts": {
     "dev": "next dev",
     "build": "next build --webpack",
     "start": "next start",
     "lint": "eslint .",
     "test": "vitest run",
+    "test:workflows": "vitest run --config vitest.integration.config.ts",
     "test:rls": "vitest run --config vitest.rls.config.ts"
   },
   "dependencies": {
     "@serwist/next": "^9.5.12",
     "@supabase/ssr": "^0.12.3",
     "@supabase/supabase-js": "^2.110.7",
-    "inngest": "^4.13.0",
     "next": "16.2.10",
     "openai": "^6.48.0",
     "react": "19.2.4",
@@ -23,7 +24,8 @@
     "remark-gfm": "^4.0.1",
     "server-only": "^0.0.1",
     "serwist": "^9.5.12",
-    "web-push": "^3.6.7"
+    "web-push": "^3.6.7",
+    "workflow": "5.0.0-beta.47"
   },
   "devDependencies": {
     "@testing-library/dom": "^10.4.1",
@@ -32,6 +34,7 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@types/web-push": "^3.6.4",
+    "@workflow/vitest": "5.0.0-beta.47",
     "eslint": "^9",
     "eslint-config-next": "16.2.10",
     "jsdom": "^29.1.1",

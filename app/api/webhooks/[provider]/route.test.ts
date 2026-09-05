@@ -16,21 +16,21 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 // вызывается напрямую" integration tests T-03 step 5 asks for.
 vi.mock("server-only", () => ({}));
 
-// Emission is asserted at the unit level in lib/inngest/events.test.ts
+// Run arguments are asserted at the unit level in lib/workflows/start.test.ts
 // (exact payload shape, fail-safe on rejection). Mocked here too so the
 // route suite can (a) assert the route passes the right IDs through without
-// depending on network access to a real Inngest endpoint, and (b) prove a
+// depending on network access to a real workflow backend, and (b) prove a
 // rejected emission still lets the webhook answer 200 with the message
-// already persisted — see the "Inngest emission failure" test below.
-const emitPushNotifyRequestedMock = vi.fn().mockResolvedValue(undefined);
-const emitContactAvatarSyncRequestedMock = vi.fn().mockResolvedValue(undefined);
-const emitPostThumbnailSyncRequestedMock = vi.fn().mockResolvedValue(undefined);
-vi.mock("@/lib/inngest/events", () => ({
-  emitPushNotifyRequested: (...args: unknown[]) => emitPushNotifyRequestedMock(...args),
-  emitContactAvatarSyncRequested: (...args: unknown[]) =>
-    emitContactAvatarSyncRequestedMock(...args),
-  emitPostThumbnailSyncRequested: (...args: unknown[]) =>
-    emitPostThumbnailSyncRequestedMock(...args),
+// already persisted — see the "workflow start failure" test below.
+const startPushNotifyMock = vi.fn().mockResolvedValue(undefined);
+const startContactAvatarSyncMock = vi.fn().mockResolvedValue(undefined);
+const startPostThumbnailSyncMock = vi.fn().mockResolvedValue(undefined);
+vi.mock("@/lib/workflows/start", () => ({
+  startPushNotify: (...args: unknown[]) => startPushNotifyMock(...args),
+  startContactAvatarSync: (...args: unknown[]) =>
+    startContactAvatarSyncMock(...args),
+  startPostThumbnailSync: (...args: unknown[]) =>
+    startPostThumbnailSyncMock(...args),
 }));
 
 const ZERNIO_WEBHOOK_SECRET = "test-zernio-webhook-secret";
@@ -124,8 +124,8 @@ describe.skipIf(!hasLocalSupabaseConfig)("POST /api/webhooks/[provider] (zernio)
   });
 
   afterEach(async () => {
-    emitPushNotifyRequestedMock.mockClear();
-    emitContactAvatarSyncRequestedMock.mockClear();
+    startPushNotifyMock.mockClear();
+    startContactAvatarSyncMock.mockClear();
 
     // workspaces cascade-delete channel_connections/contacts/contact_identities/
     // conversations/messages/posts/comments/webhook_events (docs/architecture/06-data-model.md
@@ -240,15 +240,15 @@ describe.skipIf(!hasLocalSupabaseConfig)("POST /api/webhooks/[provider] (zernio)
     expect(webhookEvent?.processing_error).toBeNull();
 
     // Rule 7 (docs/architecture/14-vibecoding-rules.md#7): only IDs cross
-    // into the Inngest payload — see lib/inngest/events.test.ts for the
+    // into the run arguments — see lib/workflows/start.test.ts for the
     // exact-keys check; here we confirm the route wires the *right* IDs
     // through (not e.g. the workspace's other conversation, or nothing).
-    expect(emitPushNotifyRequestedMock).toHaveBeenCalledWith({
+    expect(startPushNotifyMock).toHaveBeenCalledWith({
       messageId: message!.id,
       conversationId: conversation!.id,
       workspaceId,
     });
-    expect(emitContactAvatarSyncRequestedMock).toHaveBeenCalledWith({
+    expect(startContactAvatarSyncMock).toHaveBeenCalledWith({
       contactIdentityId: contactIdentity!.id,
       conversationId: conversation!.id,
       workspaceId,
@@ -284,7 +284,7 @@ describe.skipIf(!hasLocalSupabaseConfig)("POST /api/webhooks/[provider] (zernio)
       .single();
     expect(identity?.avatar_url).toBe(avatarUrl);
     expect(identity?.avatar_fetched_at).not.toBeNull();
-    expect(emitContactAvatarSyncRequestedMock).not.toHaveBeenCalled();
+    expect(startContactAvatarSyncMock).not.toHaveBeenCalled();
   });
 
   it("idempotency: delivering the same webhook twice processes it once (one webhook_events row, one message)", async () => {
@@ -322,9 +322,9 @@ describe.skipIf(!hasLocalSupabaseConfig)("POST /api/webhooks/[provider] (zernio)
       .eq("external_id", "tg_msg_55210");
     expect(messages).toHaveLength(1);
 
-    // Only the first delivery reaches Inngest — the second is a pure
+    // Only the first delivery starts a run — the second is a pure
     // idempotency no-op (docs/architecture/07-data-flows.md#61).
-    expect(emitPushNotifyRequestedMock).toHaveBeenCalledTimes(1);
+    expect(startPushNotifyMock).toHaveBeenCalledTimes(1);
   });
 
   it("two messages from the same sender: one contact, one conversation, two messages", async () => {
@@ -392,7 +392,7 @@ describe.skipIf(!hasLocalSupabaseConfig)("POST /api/webhooks/[provider] (zernio)
       .eq("external_id", "msg_invalid_sig");
     expect(messages).toHaveLength(0);
 
-    expect(emitPushNotifyRequestedMock).not.toHaveBeenCalled();
+    expect(startPushNotifyMock).not.toHaveBeenCalled();
   });
 
   it("unknown external account id: 200, webhook_event journaled with an error, no message created", async () => {
@@ -424,7 +424,7 @@ describe.skipIf(!hasLocalSupabaseConfig)("POST /api/webhooks/[provider] (zernio)
       .eq("external_id", "msg_unknown_account");
     expect(messages).toHaveLength(0);
 
-    expect(emitPushNotifyRequestedMock).not.toHaveBeenCalled();
+    expect(startPushNotifyMock).not.toHaveBeenCalled();
   });
 
   it("an event type the adapter cannot read: 200, the envelope is still journaled with the reason", async () => {
@@ -484,8 +484,8 @@ describe.skipIf(!hasLocalSupabaseConfig)("POST /api/webhooks/[provider] (zernio)
     expect(response.status).toBe(404);
   });
 
-  it("Inngest emission failure is fail-safe: the webhook still returns 200 and the message is still persisted", async () => {
-    emitPushNotifyRequestedMock.mockRejectedValueOnce(new Error("inngest down"));
+  it("a failed workflow start is fail-safe: the webhook still returns 200 and the message is still persisted", async () => {
+    startPushNotifyMock.mockRejectedValueOnce(new Error("workflow backend down"));
 
     const workspaceId = await createTestWorkspace();
     await createTestChannelConnection(workspaceId, {
@@ -493,8 +493,8 @@ describe.skipIf(!hasLocalSupabaseConfig)("POST /api/webhooks/[provider] (zernio)
       externalId: "acct_tg_98213",
     });
 
-    // emitPushNotifyRequested itself never rejects by contract (see
-    // lib/inngest/events.ts / events.test.ts) — this mock deliberately
+    // startPushNotify itself never rejects by contract (see
+    // lib/workflows/start.ts) — this mock deliberately
     // bypasses that contract to prove there's a second layer of defense:
     // even a rejecting emitter (lib/webhooks/process-event.ts's own
     // try/catch around the whole DM pipeline) must not turn into a failed
@@ -546,7 +546,7 @@ describe.skipIf(!hasLocalSupabaseConfig)("POST /api/webhooks/[provider] (zernio)
       .select("id")
       .eq("external_id", "msg_inactive_channel");
     expect(messages).toHaveLength(0);
-    expect(emitPushNotifyRequestedMock).not.toHaveBeenCalled();
+    expect(startPushNotifyMock).not.toHaveBeenCalled();
   });
 
   it(

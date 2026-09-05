@@ -9,7 +9,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
  * же причинам: ключ кэша включает язык, НА который переведено, поэтому смена
  * языка в «Настройки → Аккаунт» не обесценивает уже сделанные переводы, а пишет
  * сюда пользовательский RLS-клиент, потому что перевод запускает участник
- * workspace синхронным server action, а не Inngest-пайплайн.
+ * workspace синхронным server action, а не шаг прогона.
  */
 
 export type CommentTranslationView = {

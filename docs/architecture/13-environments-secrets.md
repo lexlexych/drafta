@@ -28,7 +28,8 @@ updated: 2026-07-20
 
 - `git push` → Vercel (превью-окружения на PR = бесплатный staging)
 - миграции — `supabase db push` (локально или шагом CI)
-- Inngest подхватывает функции через интеграцию с Vercel
+- прогоны Workflows деплоятся вместе с приложением, отдельной интеграции не нужно;
+  расписание кронов — в `vercel.json` ([§18](18-workflows.md#кроны))
 
 **Два проекта Supabase (оба в регионе Frankfurt):** prod и dev.
 **Регион функций Vercel — fra1.** Обоснование региона —
@@ -38,7 +39,7 @@ updated: 2026-07-20
 
 ```
 supabase start
-npx inngest-cli dev
+pnpm exec workflow web   # инспектор прогонов
 + туннель (cloudflared / ngrok) для вебхуков Zernio и OAuth-callback подключения канала
 ```
 
@@ -71,8 +72,7 @@ npx inngest-cli dev
 | `MISTRAL_API_KEY` | LLM, основной провайдер; если задан — используется Mistral ([8. AI-подсистема](08-ai-subsystem.md#клиент-и-выбор-провайдера)) |
 | `OPENROUTER_API_KEY` | LLM, резервный провайдер OpenRouter — используется, только когда `MISTRAL_API_KEY` не задан ([8. AI-подсистема](08-ai-subsystem.md#резервный-провайдер--openrouter)) |
 | `OPENROUTER_MODEL` | модель OpenRouter по умолчанию, формат `vendor/model` — обязательна вместе с `OPENROUTER_API_KEY` |
-| `INNGEST_EVENT_KEY` | отправка событий |
-| `INNGEST_SIGNING_KEY` | подпись вызовов функций |
+| `CRON_SECRET` | подпись тиков Vercel Cron для роутов `app/api/cron/*` ([18. Durable-исполнение](18-workflows.md#кроны)); без неё роуты сводки и чистки логов открыты всему интернету |
 | `VAPID_PUBLIC_KEY` | Web Push ([11. PWA](11-realtime-pwa.md#web-push)) |
 | `NEXT_PUBLIC_VAPID_PUBLIC_KEY` | тот же публичный VAPID-ключ, экспонированный браузеру для `pushManager.subscribe` |
 | `VAPID_PRIVATE_KEY` | Web Push — **только сервер** |

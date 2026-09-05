@@ -37,11 +37,11 @@ app/
 │   └── settings/                 # каналы, AI, база знаний, шаблоны ответов, команда, уведомления, приватность
 ├── api/
 │   ├── webhooks/[provider]/      # единый приёмник вебхуков
-│   └── inngest/                  # serve() всех функций
+│   └── cron/                     # тики расписания из vercel.json
 ├── sw.ts                         # Serwist
 lib/
 ├── channels/                     # types, registry, zernio/, postmark/, meta/(будущее)
-├── inngest/functions/            # generate-draft, send-message, send-push, push-digest, ...
+├── workflows/                    # generate-draft, send-message, send-push, digest, ...
 ├── ai/                           # клиент LLM, сборка промпта и разбор ответа, masking.ts, бюджет базы знаний
 └── db/                           # типизированные запросы; клиенты supabase (publishable/secret)
 supabase/migrations/              # вся схема и RLS — только миграциями
@@ -55,7 +55,7 @@ CLAUDE.md                         # глоссарий §1.1 + правила §
 | `app/(app)/*` — экраны | [10. UI и навигация](10-ui.md) + [11. Realtime, Web Push, PWA](11-realtime-pwa.md) |
 | `app/api/webhooks/[provider]/` | [7.1. Входящее](07-data-flows.md#61-входящее-dm-или-комментарий) |
 | `lib/channels/` | [5. Слой абстракции каналов](05-channels.md) |
-| `lib/inngest/functions/` | [7.6. Список функций](07-data-flows.md#66-полный-список-inngest-функций) |
+| `lib/workflows/` | [7.6. Список прогонов](07-data-flows.md#66-полный-список-прогонов), [18. Durable-исполнение](18-workflows.md) |
 | `lib/ai/` (включая `masking.ts`) | [8. AI-подсистема](08-ai-subsystem.md) + [9. Категории и база знаний](09-categories.md) |
 | `supabase/migrations/` | [6. Модель данных](06-data-model.md) |
 | `CLAUDE.md` | [2. Глоссарий](02-glossary.md) + [14. Правила вайбкодинга](14-vibecoding-rules.md) |
