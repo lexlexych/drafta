@@ -129,7 +129,7 @@ export async function processInboundEvent(
   // reconciliation pass can retry — see `webhook_events_processing_idx`
   // (supabase/migrations/20260720103000_create_schema_v1.sql) and the
   // `reconcile-webhooks` cron listed as a later stage
-  // (docs/architecture/07-data-flows.md#66-полный-список-inngest-функций).
+  // (docs/architecture/07-data-flows.md#66-полный-список-прогонов).
   // Reserved for genuinely transient failures (a DB write erroring
   // mid-pipeline), not for definitive business outcomes like an unknown
   // channel_connection or an out-of-scope event type — those are terminal

@@ -31,7 +31,7 @@ cssclass: architecture-doc
 |---|---|---|
 | 1 | [Что мы строим](01-overview.md) | Продукт, два ящика, черновик по запросу, масштаб, условия разработки |
 | 2 | [Глоссарий](02-glossary.md) | Жёстко зафиксированные термины: workspace, user, channel_connection, category |
-| 3 | [Стек](03-stack.md) | Next.js, Supabase (Frankfurt), Inngest, Vercel, Serwist, Zernio, Postmark, Mistral (резерв — OpenRouter) |
+| 3 | [Стек](03-stack.md) | Next.js, Supabase (Frankfurt), Vercel (+ Workflows), Serwist, Zernio, Postmark, Mistral (резерв — OpenRouter) |
 
 ### Часть II. Ядро системы
 
@@ -40,7 +40,7 @@ cssclass: architecture-doc
 | 4 | [Мультитенантность, роли, приглашения](04-multitenancy.md) | Тенант = workspace, роли owner/member, инвайты через Supabase Auth, RLS |
 | 5 | [Слой абстракции каналов](05-channels.md) | Адаптеры, несколько именованных каналов, нормализованное событие, capabilities, дисциплина импортов |
 | 6 | [Модель данных](06-data-model.md) | Все таблицы по сущностям, `workspace_id` + RLS, каскады |
-| 7 | [Потоки данных](07-data-flows.md) | Входящее, генерация черновика, отправка, email, список Inngest-функций |
+| 7 | [Потоки данных](07-data-flows.md) | Входящее, генерация черновика, отправка, email, список прогонов |
 | 8 | [AI-подсистема](08-ai-subsystem.md) | Mistral (резерв — OpenRouter), маскирование идентификаторов, база знаний в промпте, контракт ответа, структура промпта |
 | 9 | [Категории и база знаний](09-categories.md) | Категория = запись базы знаний: markdown в промпт, названия обратно из ответа модели, фильтр бесед |
 | 10 | [UI и навигация](10-ui.md) | Десктопное меню и мобильная панель, счётчики новых, каналы-источники, разделы настроек |
@@ -53,6 +53,7 @@ cssclass: architecture-doc
 | 12 | [Структура репозитория](12-repo-structure.md) | Дерево каталогов `app/`, `lib/`, `supabase/` |
 | 13 | [Окружения, секреты, деплой](13-environments-secrets.md) | Vercel + Supabase prod/dev, ручная настройка, список env-переменных |
 | 14 | [Правила вайбкодинга (CLAUDE.md)](14-vibecoding-rules.md) | Правила для AI-агента и тесты как «несущие стены» |
+| 18 | [Durable-исполнение: Vercel Workflows](18-workflows.md) | Прогоны и шаги, ретраи и компенсации, лизы конкурентности, кроны, отмена, регион прогонов |
 
 ### Часть IV. Запуск
 
@@ -99,7 +100,7 @@ cssclass: architecture-doc
 
 **Push-уведомления** — [режимы «мгновенно» и «дайджест»](11-realtime-pwa.md#частота-уведомлений--настройка-пользователя) ·
 [`notification_settings`](06-data-model.md#notification_settings) ·
-[функции `send-push` и `push-digest`](07-data-flows.md#66-полный-список-inngest-функций)
+[функции `send-push` и `push-digest`](07-data-flows.md#66-полный-список-прогонов)
 
 **Регион ЕС** — [Supabase Frankfurt и Vercel fra1](03-stack.md) ·
 [Mistral как европейский LLM](08-ai-subsystem.md) ·
