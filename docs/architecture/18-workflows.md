@@ -237,18 +237,18 @@ await start(sendMessageWorkflow, [args], { region: "fra1" });
 через Local World, состояние лежит в `.workflow-data/`.
 
 ```powershell
-npx supabase start
-npm run dev
-npx workflow web          # веб-инспектор прогонов
-npx workflow inspect runs # то же в терминале
+pnpm exec supabase start
+pnpm dev
+pnpm exec workflow web          # веб-инспектор прогонов
+pnpm exec workflow inspect runs # то же в терминале
 ```
 
 Тесты разделены на два контура:
 
 | Контур | Команда | Что проверяет |
 |---|---|---|
-| Юниты | `npm test` | Логику шагов и оркестрацию. Без компилятора директивы — no-op, поэтому шаги и тела прогонов вызываются как обычные функции, а соседний модуль шагов подменяется `vi.mock`. |
-| Прогоны | `npm run test:workflows` | Поведение рантайма: ретраи, `FatalError`, компенсации, отмену. Плагин `@workflow/vitest` компилирует директивы и поднимает Local World в процессе теста. |
+| Юниты | `pnpm test` | Логику шагов и оркестрацию. Без компилятора директивы — no-op, поэтому шаги и тела прогонов вызываются как обычные функции, а соседний модуль шагов подменяется `vi.mock`. |
+| Прогоны | `pnpm test:workflows` | Поведение рантайма: ретраи, `FatalError`, компенсации, отмену. Плагин `@workflow/vitest` компилирует директивы и поднимает Local World в процессе теста. |
 
 Две особенности интеграционного контура, о которые легко споткнуться:
 

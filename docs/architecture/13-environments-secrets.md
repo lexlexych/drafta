@@ -39,7 +39,7 @@ updated: 2026-07-20
 
 ```
 supabase start
-npx workflow web   # инспектор прогонов
+pnpm exec workflow web   # инспектор прогонов
 + туннель (cloudflared / ngrok) для вебхуков Zernio и OAuth-callback подключения канала
 ```
 
