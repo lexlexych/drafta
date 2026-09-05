@@ -72,4 +72,5 @@ export const publicClientTables = [
   "comment_private_replies",
   "conversation_message_previews",
   "post_comment_previews",
+  "workflow_leases",
 ] as const;
