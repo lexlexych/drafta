@@ -12,9 +12,8 @@ import {
  * (docs/architecture/05-channels.md): вебхук шлёт IDs-only запуск, а внешний
  * вызов делает уже этот прогон, повторно проверив `posts.thumbnail_url`.
  *
- * Лиза `post:<id>` заменяет `concurrency` Inngest с тем же лимитом 1: пачка
- * комментариев к одному посту не должна превращаться в пачку одинаковых
- * запросов к провайдеру.
+ * Лиза `post:<id>` с лимитом 1: пачка комментариев к одному посту не должна
+ * превращаться в пачку одинаковых запросов к провайдеру.
  */
 export async function postThumbnailWorkflow(
   input: PostThumbnailInput,

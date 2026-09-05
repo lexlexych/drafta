@@ -2,10 +2,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
 // Emitted fail-safe after the DB work; irrelevant to what is asserted here.
-vi.mock("@/lib/inngest/events", () => ({
-  emitContactAvatarSyncRequested: async () => {},
-  emitPostThumbnailSyncRequested: async () => {},
-  emitPushNotifyRequested: async () => {},
+vi.mock("@/lib/workflows/start", () => ({
+  startContactAvatarSync: async () => {},
+  startPostThumbnailSync: async () => {},
+  startPushNotify: async () => {},
 }));
 
 const { processInboundEvent } = await import("./process-event");

@@ -31,7 +31,7 @@ describe("accept_manual_comment_reply migration contract", () => {
     expect(migration).toContain("parent_external_id,");
   });
 
-  it("inserts the reply pending and unsent, for Inngest to publish", () => {
+  it("inserts the reply pending and unsent, for the send workflow to publish", () => {
     expect(migration).toContain("'outgoing',");
     expect(migration).toContain("'pending'");
   });

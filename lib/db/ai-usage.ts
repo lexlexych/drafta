@@ -7,7 +7,7 @@ import { createAdminSupabaseClient } from "@/lib/db/admin";
  * Token accounting for LLM calls (`public.ai_usage`), the data behind the
  * dashboard's spend block.
  *
- * Written from the server only — the Inngest pipelines, which run without a user
+ * Written from the server only — the workflow steps, which run without a user
  * session, and the translation action, which runs inside a request. Hence the
  * admin client either way: `authenticated` has no insert grant on the table at
  * all, so this is the single write path by design.
@@ -16,7 +16,7 @@ import { createAdminSupabaseClient } from "@/lib/db/admin";
 /**
  * Classification is the cheap pinned model; draft generation is the costly one.
  * Translation is the operator-triggered one — the only operation that does not
- * run in an Inngest pipeline (app/(app)/(shell)/inbox/actions.ts).
+ * run in a workflow step (app/(app)/(shell)/inbox/actions.ts).
  */
 export type AiUsageOperation = "classification" | "draft" | "translation";
 

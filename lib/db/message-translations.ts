@@ -10,7 +10,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
  * перестают совпадать по `target_language`.
  *
  * Пишется пользовательским RLS-клиентом, а не админским: перевод запускает
- * участник workspace синхронным server action, а не Inngest-пайплайн, и RLS
+ * участник workspace синхронным server action, а не шаг прогона, и RLS
  * здесь — та же граница тенанта, что и для остальных таблиц инбокса.
  */
 

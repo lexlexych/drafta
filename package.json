@@ -15,7 +15,6 @@
     "@serwist/next": "^9.5.12",
     "@supabase/ssr": "^0.12.3",
     "@supabase/supabase-js": "^2.110.7",
-    "inngest": "^4.13.0",
     "next": "16.2.10",
     "openai": "^6.48.0",
     "react": "19.2.4",

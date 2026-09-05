@@ -9,7 +9,7 @@ import type { AiUsageOperation, AiUsageSurface } from "@/lib/db/ai-usage";
  * LLM and what came back, byte for byte, next to the token counts for the same
  * call.
  *
- * Written from the Inngest pipelines and from the translation action, hence the
+ * Written from the workflow steps and from the translation action, hence the
  * admin client; no other role has a grant on the table. The text stored here is
  * the masked text the provider was given (lib/ai/masking.ts), which is what
  * "the request, 1:1" means — but it is still conversation content, so rows are dropped after
@@ -78,7 +78,7 @@ export async function recordAiRequest(
 
 /**
  * Deletes everything logged before `cutoffIso`. Unlike the write path this one
- * throws: it runs inside an Inngest step, where a failure should be retried and
+ * throws: it runs inside a workflow step, where a failure should be retried and
  * visible rather than swallowed.
  */
 export async function deleteAiRequestLogsBefore(

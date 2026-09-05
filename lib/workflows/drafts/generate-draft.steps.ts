@@ -425,7 +425,7 @@ export async function failGeneratingDrafts(input: {
  * учёт, а не дубль (docs/architecture/08-ai-subsystem.md).
  *
  * `logPromptIfEnabled` зовётся без явного логгера: по умолчанию он пишет в
- * `console`, доступный в шаге, — логгер, приходивший раньше из Inngest, не нужен.
+ * `console`, который в шаге доступен.
  */
 export async function generateDraftCompletion(input: {
   maskedContext: MaskedDraftContext;

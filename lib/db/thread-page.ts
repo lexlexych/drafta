@@ -10,7 +10,7 @@ import "server-only";
  *
  * Ключ курсора — `(created_at, id)`: у `created_at` нет уникальности, а два
  * сообщения одной секунды должны иметь детерминированный порядок. Тот же
- * тай-брейк уже стоит в `lib/inngest/functions/draft-pipeline.ts`.
+ * тай-брейк уже стоит в `lib/workflows/drafts/generate-draft.steps.ts`.
  */
 
 /** Граница страницы: записи строго старше этой. */

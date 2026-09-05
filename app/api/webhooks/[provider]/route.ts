@@ -20,7 +20,7 @@ import { processInboundEvent } from "@/lib/webhooks/process-event";
  *
  *   verify signature → webhook_events idempotency write → adapter normalizes
  *   → upsert contact_identity(+contact), conversation → insert message
- *   → inngest.send("interaction/received") → 200
+ *   → start the send-push / contact-avatar workflows → 200
  *
  * Vibecoding rule 6 (docs/architecture/14-vibecoding-rules.md#6): no LLM
  * calls here, answers fast. The route itself only does HTTP concerns

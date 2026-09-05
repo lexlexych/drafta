@@ -111,7 +111,7 @@ describe("releaseLeases", () => {
 });
 
 describe("lease keys", () => {
-  it("keeps the concurrency limits the Inngest functions declared", () => {
+  it("keeps the documented concurrency limits", () => {
     expect(workspaceLlmLease("ws-1")).toMatchObject({
       key: "workspace:ws-1",
       limit: 2,

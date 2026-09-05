@@ -491,13 +491,12 @@ function maskCommentPrompt(
 
 /**
  * Одна генерация: маскирование → промпт → LLM → размаскирование. Всё внутри
- * одного шага, как было в Inngest: ретрай шага означает, что провайдера правда
- * спросили дважды, и `ai_request_log` это честно покажет
+ * одного шага: его ретрай означает, что провайдера правда спросили дважды, и
+ * `ai_request_log` это честно покажет
  * (docs/architecture/08-ai-subsystem.md).
  *
  * `logPromptIfEnabled` вызывается без явного логгера — по умолчанию он пишет в
- * `console`, а внутри шага доступен полный рантайм Node, поэтому отдельный
- * логгер, который раньше приходил из Inngest, больше не нужен.
+ * `console`, а внутри шага доступен полный рантайм Node.
  */
 export async function generateCommentDraft(input: {
   context: LoadedCommentDraftsContext;
