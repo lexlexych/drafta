@@ -49,3 +49,8 @@ next-env.d.ts
 .claude/settings.local.json
 
 .testlogin
+# workflow (generated route handlers)
+/app/.well-known/workflow/
+/.workflow-data/
+/.workflow-vitest/
+/.swc

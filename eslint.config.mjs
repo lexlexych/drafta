@@ -20,6 +20,12 @@ const eslintConfig = defineConfig([
     // код под Deno, который иначе роняет `npm run lint` на каждой машине с
     // поднятым локальным стеком. В git не попадает — supabase/.gitignore.
     "supabase/.temp/**",
+    // Артефакты Workflow SDK: служебные роуты, которые `withWorkflow` генерирует
+    // при сборке, бандлы плагина `@workflow/vitest` и состояние Local World.
+    // Всё генерированное, в git не попадает (.gitignore).
+    "app/.well-known/workflow/**",
+    ".workflow-vitest/**",
+    ".workflow-data/**",
   ]),
 ]);
 

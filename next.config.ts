@@ -1,5 +1,6 @@
 import withSerwistInit from "@serwist/next";
 import type { NextConfig } from "next";
+import { withWorkflow } from "workflow/next";
 
 const nextConfig: NextConfig = {
   /*
@@ -25,4 +26,11 @@ const withSerwist = withSerwistInit({
   disable: process.env.NODE_ENV === "development",
 });
 
-export default withSerwist(nextConfig);
+/**
+ * Durable-исполнение через Vercel Workflows (docs/architecture/18-workflows.md).
+ * `withWorkflow` подключает загрузчики, которые разбирают директивы
+ * `"use workflow"` / `"use step"` и генерируют служебные роуты в
+ * `app/.well-known/workflow/` — обёртка внешняя, чтобы её обработка
+ * накладывалась поверх webpack-конфига Serwist, а не наоборот.
+ */
+export default withWorkflow(withSerwist(nextConfig));
