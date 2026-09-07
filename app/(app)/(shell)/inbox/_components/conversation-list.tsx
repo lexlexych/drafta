@@ -22,6 +22,7 @@ import type {
 import { countWithNoun } from "@/lib/mock/plural";
 
 import { Avatar } from "../../_components/avatar";
+import { AutoReplyBadgeIcon, AutoReplyIcon } from "../../_components/icons";
 import { LinkActivity } from "../../_components/activity";
 import { CategoryChip, ChannelChip } from "../../_components/chips";
 import { ListFilters, scopeLabel } from "../../_components/list-filters";
@@ -48,6 +49,8 @@ export function ConversationList({
   categories,
   openedId,
   hasChannels,
+  autoReplyEnabled,
+  autoReplyOpen,
 }: {
   items: ConversationListItemView[];
   total: number;
@@ -56,6 +59,10 @@ export function ConversationList({
   categories: readonly CategoryBadgeView[];
   openedId: string | null;
   hasChannels: boolean;
+  /** Состояние контура — подпись и вид значка в шапке. */
+  autoReplyEnabled: boolean;
+  /** Панель автоответов уже открыта справа. */
+  autoReplyOpen: boolean;
 }) {
   const {
     filter,
@@ -104,6 +111,22 @@ export function ConversationList({
       <div className={styles.paneHead}>
         <div className={styles.paneHeadRow}>
           <h2>Сообщения</h2>
+          {/* Значок ведёт в панель автоответов на месте беседы. Подпись под ним
+              говорит состояние контура, а `data-enabled` делает выключенный
+              значок неактивным на вид, не отключая саму ссылку — выключенные
+              автоответы настраивают тем же способом, что и включённые. */}
+          <Link
+            className={styles.autoReplyToggle}
+            data-enabled={autoReplyEnabled}
+            data-active={autoReplyOpen}
+            href={buildHref(PATHNAME, { [QUERY_KEYS.autoReply]: "1" })}
+            aria-label={`Автоответы: ${autoReplyEnabled ? "включены" : "выключены"}`}
+            title="Автоответы"
+          >
+            <AutoReplyIcon />
+            <span>{autoReplyEnabled ? "вкл" : "выкл"}</span>
+            <LinkActivity label="Открываем автоответы…" />
+          </Link>
         </div>
         <span className={styles.paneSubtitle}>{subtitle}</span>
       </div>
@@ -155,7 +178,18 @@ export function ConversationList({
                 <b>{item.title}</b>
                 <time className={uiStyles.num}>{item.time}</time>
               </span>
-              <span className={styles.listPreview}>{item.preview}</span>
+              <span className={styles.listPreview}>
+                {item.isAutoReplyPreview ? (
+                  <span
+                    className={styles.autoReplyMark}
+                    title="Последний ответ отправлен автоматически"
+                    aria-label="Последний ответ отправлен автоматически"
+                  >
+                    <AutoReplyBadgeIcon />
+                  </span>
+                ) : null}
+                {item.preview}
+              </span>
               <span className={styles.listChips}>
                 <ChannelChip channel={item.channel} />
                 {item.categories.map((category) => (

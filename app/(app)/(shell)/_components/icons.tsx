@@ -501,3 +501,44 @@ export function UndoIcon(props: IconProps) {
     </Icon>
   );
 }
+
+/**
+ * Автоответы: пузырь сообщения с молнией — «отвечает само».
+ *
+ * Свой SVG, а не библиотека: иконки проекта — набор в этом файле, и внешних
+ * зависимостей ради одной картинки не заводим.
+ */
+export function AutoReplyIcon(props: IconProps) {
+  return (
+    <Icon
+      {...stroke}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      {...props}
+    >
+      <path d="M21 11.5a7.5 7.5 0 0 1-10.9 6.7L3 20l1.8-4.1A7.5 7.5 0 1 1 21 11.5z" />
+      <path d="M12.8 7.4L10 12h3l-1 4" />
+    </Icon>
+  );
+}
+
+/**
+ * Пометка автоответа на пузыре и в превью списка: буква «A» в кружке.
+ * Маленькая и заливкой, а не обводкой, — рядом со временем доставки она читается
+ * как значок, а не как ещё одна кнопка.
+ */
+export function AutoReplyBadgeIcon(props: IconProps) {
+  return (
+    <Icon size={13} fill="none" {...props}>
+      <circle cx="12" cy="12" r="9.2" fill="currentColor" />
+      <path
+        d="M9.2 15.6l2.8-7.2 2.8 7.2M10.2 13.4h3.6"
+        fill="none"
+        stroke="var(--surface, #fff)"
+        strokeWidth="1.7"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Icon>
+  );
+}

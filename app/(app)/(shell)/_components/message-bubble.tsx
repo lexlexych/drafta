@@ -22,7 +22,7 @@ import {
 
 import { translateMessageAction } from "../inbox/actions";
 import { Spinner } from "./activity";
-import { PictureIcon, TranslateIcon, UndoIcon } from "./icons";
+import { AutoReplyBadgeIcon, PictureIcon, TranslateIcon, UndoIcon } from "./icons";
 import { RetrySendButton } from "./retry-send-button";
 import { showToast } from "./stub";
 import styles from "./panes.module.css";
@@ -46,6 +46,8 @@ export type MessageBubbleMessage = {
   deliveryLabel: string | null;
   attachmentName: string | null;
   canRetrySend: boolean;
+  /** Отправлено автоответчиком — в подвале пузыря значок «A». */
+  isAutoReply: boolean;
   translation: MessageBubbleTranslation | null;
 };
 
@@ -138,6 +140,15 @@ export function MessageBubble({
             )}
             {isTranslated ? <span>{originLabel}</span> : null}
           </button>
+        ) : null}
+        {message.isAutoReply ? (
+          <span
+            className={styles.autoReplyMark}
+            title="Отправлено автоматически"
+            aria-label="Отправлено автоматически"
+          >
+            <AutoReplyBadgeIcon />
+          </span>
         ) : null}
         <time className={`${styles.bubbleMeta} ${uiStyles.num}`}>
           {message.time}

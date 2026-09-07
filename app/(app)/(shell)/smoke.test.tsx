@@ -163,6 +163,17 @@ vi.mock("@/lib/db/reply-templates", () => ({
   listActiveReplyTemplates: async () => REPLY_TEMPLATES,
 }));
 
+vi.mock("@/lib/db/auto-reply", () => ({
+  // Контур выключен: значок в шапке списка показывает «выкл», панель за
+  // `?autoreply=1` в этих сценариях не открывается.
+  getAutoReplySettings: async () => ({
+    isEnabled: false,
+    delayMinutes: 5,
+    fallbackTemplateId: null,
+  }),
+  listAutoReplyScenarios: async () => [],
+}));
+
 vi.mock("@/lib/db/ai-settings", () => ({
   getWorkspaceAiSettings: async () => ({
     id: "ais_tonwerk",

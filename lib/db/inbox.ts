@@ -140,10 +140,16 @@ type MessageRow = {
   attachments: unknown;
   delivery_status: string;
   created_at: string;
+  /**
+   * Входящее, на которое это исходящее отправил автоответчик; `null` — писал
+   * оператор. Признак значка «A» и в треде, и в превью списка диалогов
+   * (supabase/migrations/20260907100000_auto_reply.sql).
+   */
+  auto_reply_for_message_id: string | null;
 };
 
 const MESSAGE_COLUMNS =
-  "id, conversation_id, direction, text, attachments, delivery_status, created_at";
+  "id, conversation_id, direction, text, attachments, delivery_status, created_at, auto_reply_for_message_id";
 
 /** Размер страницы треда: последние N сообщений и каждая подгрузка вверх. */
 export const MESSAGE_PAGE_SIZE = THREAD_PAGE_SIZE;
@@ -157,6 +163,8 @@ export type InboxThreadMessageView = ThreadMessageView & {
   createdAt: string;
   /** Failed outgoing message — the thread renders the retry button (stage 3). */
   canRetrySend: boolean;
+  /** Отправлено автоответчиком — пузырь показывает значок «A». */
+  isAutoReply: boolean;
   /**
    * Готовый перевод на язык workspace, если он уже в кэше
    * (`lib/db/message-translations.ts`). Едет вместе с тредом, чтобы значок
@@ -561,6 +569,7 @@ export async function getConversationListView(
       categories: (conversation.matched_kb_file_ids ?? [])
         .map((id) => badgeById.get(id))
         .filter((badge): badge is CategoryBadgeView => Boolean(badge)),
+      isAutoReplyPreview: lastMessage?.auto_reply_for_message_id != null,
       avatar: avatarFor(
         contact?.id ?? conversation.id,
         name,
@@ -611,6 +620,7 @@ function toMessageView(
     attachmentName: attachmentIndicatorLabel(message.attachments),
     canRetrySend:
       message.direction === "outgoing" && message.delivery_status === "failed",
+    isAutoReply: message.auto_reply_for_message_id !== null,
     translation: translations.get(message.id) ?? null,
   };
 }

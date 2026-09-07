@@ -628,3 +628,62 @@
     max-width: 84%;
   }
 }
+
+/* Значок автоответов в шапке списка «Сообщения»: иконка и подпись состояния
+   под ней. Выключенный контур выглядит неактивным, но остаётся кликабельным —
+   именно через него его и включают. */
+.autoReplyToggle {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  padding: 3px 6px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  color: var(--ink2);
+  text-decoration: none;
+  line-height: 1;
+  position: relative;
+}
+
+.autoReplyToggle span {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.autoReplyToggle[data-enabled="true"] {
+  color: var(--accent);
+}
+
+.autoReplyToggle[data-enabled="false"] {
+  opacity: 0.55;
+}
+
+.autoReplyToggle:hover,
+.autoReplyToggle[data-active="true"] {
+  border-color: var(--line2);
+  background: var(--surface2);
+}
+
+/* Пометка автоответа: в подвале пузыря и перед превью в списке диалогов.
+   Значок, а не текст, — строка и без того занята временем и статусом. */
+.autoReplyMark {
+  display: inline-flex;
+  align-items: center;
+  color: var(--ink2);
+  vertical-align: -2px;
+}
+
+.listPreview .autoReplyMark {
+  margin-right: 4px;
+}
+
+.bubbleFooter .autoReplyMark {
+  margin-right: auto;
+}
+
+.bubbleFooter .translateToggle ~ .autoReplyMark {
+  margin-right: 0;
+  margin-left: 6px;
+}
