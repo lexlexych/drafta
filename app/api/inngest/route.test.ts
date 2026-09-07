@@ -6,6 +6,7 @@ const route = await import("./route");
 const {
   generateDraft,
   generateCommentDrafts,
+  autoReply,
   sendMessage,
   sendComment,
   sendCommentPrivateReply,
@@ -28,12 +29,16 @@ const { COMMENT_DRAFTS_CONCURRENCY } = await import(
 const { SEND_COMMENT_CONCURRENCY } = await import(
   "@/lib/inngest/functions/send-comment"
 );
+const { AUTO_REPLY_CONCURRENCY } = await import(
+  "@/lib/inngest/functions/auto-reply"
+);
 
 describe("Inngest serve route", () => {
   it("registers generation and send functions", () => {
     expect(inngestFunctions).toEqual([
       generateDraft,
       generateCommentDrafts,
+      autoReply,
       sendMessage,
       sendComment,
       sendCommentPrivateReply,
@@ -58,6 +63,37 @@ describe("Inngest serve route", () => {
         if: "async.data.conversationId == event.data.conversationId",
       },
     ]);
+  });
+
+  it("serves auto-replies with bounded concurrency and a failure hook", () => {
+    expect(autoReply.opts.concurrency).toEqual([...AUTO_REPLY_CONCURRENCY]);
+    // Провалившийся прогон обязан оставить строку в журнале: «клиенту не
+    // ответили» без причины неотличимо от «контур не сработал».
+    expect(autoReply.opts.onFailure).toBeTypeOf("function");
+  });
+
+  it("lets the operator's own reply cancel a waiting auto-reply", () => {
+    expect(autoReply.opts.cancelOn).toEqual([
+      {
+        event: expect.objectContaining({ name: "auto-reply/cancelled" }),
+        if: "async.data.conversationId == event.data.conversationId",
+      },
+    ]);
+  });
+
+  it("never cancels an auto-reply run on its own trigger event", () => {
+    // Гарантии, что запускающее событие не отменит собственный прогон, у
+    // Inngest нет, а отменённый прогон не оставляет строки в журнале.
+    // «Новое входящее перезапускает таймер» держится на состоянии БД.
+    const cancelOn = autoReply.opts.cancelOn ?? [];
+
+    expect(
+      cancelOn.some((rule) =>
+        String((rule as { event?: { name?: string } }).event?.name).includes(
+          "auto-reply/requested",
+        ),
+      ),
+    ).toBe(false);
   });
 
   it("serves comment drafts as their own function, one run per post", () => {

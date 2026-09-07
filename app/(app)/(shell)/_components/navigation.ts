@@ -46,6 +46,11 @@ export const QUERY_KEYS = {
   section: "section",
   /** Окно дашборда: `day` | `week` | `month` (`lib/db/dashboard.ts`). */
   period: "period",
+  /**
+   * Панель автоответов вместо беседы в правой части «Сообщений».
+   * Значение всегда `"1"` — это переключатель экрана, а не идентификатор.
+   */
+  autoReply: "autoreply",
 } as const;
 
 export function sectionIdForPathname(pathname: string): SectionId {

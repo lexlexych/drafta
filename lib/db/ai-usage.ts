@@ -17,8 +17,17 @@ import { createAdminSupabaseClient } from "@/lib/db/admin";
  * Classification is the cheap pinned model; draft generation is the costly one.
  * Translation is the operator-triggered one — the only operation that does not
  * run in an Inngest pipeline (app/(app)/(shell)/inbox/actions.ts).
+ *
+ * The auto-reply classification is its own operation rather than
+ * `classification`: the dashboard aggregates by (operation, surface), and two
+ * different calls under one name would report as one line of spend
+ * (supabase/migrations/20260907100000_auto_reply.sql).
  */
-export type AiUsageOperation = "classification" | "draft" | "translation";
+export type AiUsageOperation =
+  | "classification"
+  | "draft"
+  | "translation"
+  | "auto_reply";
 
 /** Comments are never classified today, but the column keeps both surfaces honest. */
 export type AiUsageSurface = "message" | "comment";

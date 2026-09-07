@@ -210,17 +210,24 @@ values
     'active'
   ),
   (
-    -- Second Telegram connection for Workspace A, different user-given name —
-    -- docs/epics/epic_02/T-05-inbox-messages.md step 6: "два канала одной
-    -- платформы с разными именами", exercising the inbox's channel badge
-    -- (docs/architecture/05-channels.md#несколько-каналов-и-имена).
+    -- Третий канал Workspace A — чтобы в списке диалогов встречался не один
+    -- бейдж канала (docs/architecture/10-ui.md#откуда-пришло-входящее).
+    --
+    -- Здесь был второй Telegram: сид писался под требование T-05 «два канала
+    -- одной платформы с разными именами», от которого продукт потом отказался.
+    -- `channel_connections_workspace_platform_key`
+    -- (20260721100000_workspace_zernio_profile_and_channel_platform.sql)
+    -- разрешает workspace ровно один канал на платформу — и сид, оставшийся с
+    -- двумя Telegram, просто переставал применяться. Ту же роль играет WhatsApp:
+    -- платформа в Workspace A свободна, а 24-часовое окно ответа заодно
+    -- показывает в треде плашку с остатком окна.
     'a0000000-0000-4000-8000-000000000103',
     'a0000000-0000-4000-8000-000000000001',
-    'Telegram Поддержка A',
+    'WhatsApp Поддержка A',
     'zernio',
-    'telegram',
-    'seed-a-telegram-support',
-    '{"responseWindowHours":null,"supportsAttachments":true,"supportsReadReceipts":true,"maxMessageLength":4096,"threadingStyle":"flat","supportsComments":false,"supportsPrivateReply":false,"privateReplyWindowHours":null}'::jsonb,
+    'whatsapp',
+    'seed-a-whatsapp-support',
+    '{"responseWindowHours":24,"supportsAttachments":true,"supportsReadReceipts":true,"maxMessageLength":4096,"threadingStyle":"flat","supportsComments":false,"supportsPrivateReply":false,"privateReplyWindowHours":null}'::jsonb,
     'active'
   ),
   (
@@ -270,13 +277,12 @@ values
     array['instagram']
   ),
   (
-    -- Contact on the second Telegram connection (Telegram Поддержка A) —
-    -- same platform as Anna's, different channel_connection, so the inbox
-    -- shows both under their own channel badge/name.
+    -- Contact on the WhatsApp connection (WhatsApp Поддержка A) — a third
+    -- channel badge in the list, next to Anna's Telegram and Anton's Instagram.
     'a0000000-0000-4000-8000-000000000203',
     'a0000000-0000-4000-8000-000000000001',
     'Clara Support',
-    'Third seed contact for Workspace A — second Telegram connection',
+    'Third seed contact for Workspace A — WhatsApp connection',
     array['support']
   ),
   (
@@ -332,7 +338,7 @@ values
     'a0000000-0000-4000-8000-000000000303',
     'a0000000-0000-4000-8000-000000000001',
     'a0000000-0000-4000-8000-000000000203',
-    'telegram',
+    'whatsapp',
     'seed-a-clara',
     'Clara Support',
     '{"seed":true}'::jsonb
@@ -399,12 +405,12 @@ values
     -- Two unread messages, most recent last_incoming_at of Workspace A's
     -- conversations — sorts first in the list (T-05 acceptance criteria:
     -- sorted by last_incoming_at desc) and exercises a non-zero unread
-    -- counter on the second Telegram channel specifically.
+    -- counter on the WhatsApp channel specifically.
     'a0000000-0000-4000-8000-000000000403',
     'a0000000-0000-4000-8000-000000000001',
     'a0000000-0000-4000-8000-000000000103',
     'a0000000-0000-4000-8000-000000000203',
-    'seed-a-telegram-chat-clara',
+    'seed-a-whatsapp-chat-clara',
     'open',
     now() - interval '5 minutes',
     2
@@ -496,8 +502,8 @@ values
     now() - interval '24 minutes'
   ),
   (
-    -- Second Telegram connection (Telegram Поддержка A) — both still
-    -- unread, matching the conversation's unread_count = 2 above.
+    -- WhatsApp connection (WhatsApp Поддержка A) — both still unread,
+    -- matching the conversation's unread_count = 2 above.
     'a0000000-0000-4000-8000-000000000505',
     'a0000000-0000-4000-8000-000000000001',
     'a0000000-0000-4000-8000-000000000403',
@@ -675,6 +681,89 @@ set
   bodies = excluded.bodies,
   is_enabled_for_messages = excluded.is_enabled_for_messages,
   is_enabled_for_comments = excluded.is_enabled_for_comments,
+  sort_order = excluded.sort_order,
+  updated_at = now();
+
+-- Автоответы: контур настроен, но выключен — сид не должен ни в одном
+-- окружении начать сам писать клиентам (20260907100000_auto_reply.sql).
+insert into public.auto_reply_settings (
+  id,
+  workspace_id,
+  is_enabled,
+  delay_minutes,
+  fallback_template_id
+)
+values
+  (
+    'a0000000-0000-4000-8000-000000000901',
+    'a0000000-0000-4000-8000-000000000001',
+    false,
+    5,
+    null
+  ),
+  (
+    'b0000000-0000-4000-8000-000000000901',
+    'b0000000-0000-4000-8000-000000000001',
+    false,
+    10,
+    null
+  )
+on conflict (id) do update
+set
+  is_enabled = excluded.is_enabled,
+  delay_minutes = excluded.delay_minutes,
+  fallback_template_id = excluded.fallback_template_id,
+  updated_at = now();
+
+insert into public.auto_reply_scenarios (
+  id,
+  workspace_id,
+  name,
+  condition,
+  examples,
+  action,
+  reply_template_id,
+  sort_order
+)
+values
+  (
+    'a0000000-0000-4000-8000-000000000902',
+    'a0000000-0000-4000-8000-000000000001',
+    'Versand',
+    'Der Kunde fragt nach Lieferzeit oder Versandkosten.',
+    '["Wann kommt meine Bestellung?","Wie lange dauert der Versand?"]'::jsonb,
+    'reply',
+    'a0000000-0000-4000-8000-000000000801',
+    0
+  ),
+  (
+    'a0000000-0000-4000-8000-000000000903',
+    'a0000000-0000-4000-8000-000000000001',
+    'Werbung',
+    'Kaltakquise, Linktausch, Kooperationsangebote.',
+    '["Wir bieten Ihnen eine Zusammenarbeit an"]'::jsonb,
+    -- Сценарий распознаётся, но ответа не будет: «не отвечать автоматически».
+    'ignore',
+    null,
+    1
+  ),
+  (
+    'b0000000-0000-4000-8000-000000000902',
+    'b0000000-0000-4000-8000-000000000001',
+    'Öffnungszeiten',
+    'Der Kunde fragt, wann wir erreichbar sind.',
+    '["Bis wann habt ihr offen?"]'::jsonb,
+    'reply',
+    'b0000000-0000-4000-8000-000000000801',
+    0
+  )
+on conflict (id) do update
+set
+  name = excluded.name,
+  condition = excluded.condition,
+  examples = excluded.examples,
+  action = excluded.action,
+  reply_template_id = excluded.reply_template_id,
   sort_order = excluded.sort_order,
   updated_at = now();
 

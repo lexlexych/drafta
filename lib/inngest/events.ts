@@ -107,6 +107,36 @@ export type PushNotifyRequestedEvent = {
 };
 
 /**
+ * Payload for `auto-reply/requested` — an incoming direct message arrived and
+ * the workspace has auto-replies switched on
+ * (docs/architecture/07-data-flows.md#67-автоответ). The run waits out the
+ * configured delay before it classifies anything, so the event only has to say
+ * which message started it. IDs only (vibecoding rule 7): the text the model
+ * classifies is loaded by the pipeline itself.
+ */
+export type AutoReplyRequestedEvent = {
+  workspaceId: string;
+  conversationId: string;
+  messageId: string;
+};
+
+/**
+ * Payload for `auto-reply/cancelled` — the operator answered the customer
+ * themselves, so a pending auto-reply run has nothing left to do. Matched
+ * against the waiting run by `conversationId` through that function's
+ * `cancelOn` expression. IDs only (rule 7).
+ *
+ * Cancellation is an optimization, never the guarantee: the run also re-reads
+ * the conversation after its wait, and the RPC refuses to insert once an
+ * outgoing message exists. A lost event costs one classification, not a wrong
+ * reply to a customer.
+ */
+export type AutoReplyCancelledEvent = {
+  workspaceId: string;
+  conversationId: string;
+};
+
+/**
  * Inngest SDK v4 event definitions. `staticSchema` provides compile-time
  * validation without adding a runtime validation dependency; payload fields
  * remain an explicit allow-list of pseudonymous IDs (vibecoding rule 7).
@@ -141,6 +171,14 @@ export const messageSendRequestedEvent = eventType("message/send", {
 
 export const pushNotifyRequestedEvent = eventType("push/notify.requested", {
   schema: staticSchema<PushNotifyRequestedEvent>(),
+});
+
+export const autoReplyRequestedEvent = eventType("auto-reply/requested", {
+  schema: staticSchema<AutoReplyRequestedEvent>(),
+});
+
+export const autoReplyCancelledEvent = eventType("auto-reply/cancelled", {
+  schema: staticSchema<AutoReplyCancelledEvent>(),
 });
 
 export const commentDraftsRequestedEvent = eventType(
@@ -297,6 +335,48 @@ export async function emitPushNotifyRequested(
   } catch (error) {
     console.error(
       '[inngest] failed to emit "push/notify.requested" (webhook already persisted; not retried from here)',
+      error,
+    );
+  }
+}
+
+/**
+ * Emits `auto-reply/requested`, fail-safe for exactly the same reason as the
+ * push event above: by the time it is called the incoming message is durably
+ * committed and the webhook route is about to answer 200 (rule 6). A failed
+ * emit costs the customer one automatic reply, not the message itself, and
+ * making Zernio retry the delivery would only re-hit the `webhook_events`
+ * idempotency guard.
+ */
+export async function emitAutoReplyRequested(
+  payload: AutoReplyRequestedEvent,
+): Promise<void> {
+  try {
+    await inngest.send(autoReplyRequestedEvent.create(payload));
+  } catch (error) {
+    console.error(
+      '[inngest] failed to emit "auto-reply/requested" (webhook already persisted; not retried from here)',
+      error,
+    );
+  }
+}
+
+/**
+ * Emits `auto-reply/cancelled`, fail-safe. The operator's own reply is already
+ * persisted by the time this runs, and that reply — not this event — is what
+ * actually stops the auto-reply: the waiting run re-reads the conversation and
+ * the RPC refuses to insert behind an outgoing message. Cancelling the run just
+ * saves a classification, so a failed emit must not turn a successful send into
+ * an error the operator has to act on.
+ */
+export async function emitAutoReplyCancelled(
+  payload: AutoReplyCancelledEvent,
+): Promise<void> {
+  try {
+    await inngest.send(autoReplyCancelledEvent.create(payload));
+  } catch (error) {
+    console.error(
+      '[inngest] failed to emit "auto-reply/cancelled" (the reply is already sent; not retried from here)',
       error,
     );
   }

@@ -89,6 +89,11 @@ export type ConversationListItemView = {
   channel: ChannelBadgeView;
   /** Категории последнего черновика беседы; пусто, пока черновика не было. */
   categories: CategoryBadgeView[];
+  /**
+   * Последнее сообщение диалога отправил автоответчик — в превью встаёт значок
+   * «A». Видно, что по диалогу уже ответили автоматически, не открывая его.
+   */
+  isAutoReplyPreview: boolean;
   avatar: AvatarView | null;
 };
 
@@ -503,6 +508,8 @@ function dmListItem(conversation: Conversation): ConversationListItemView {
     unreadCount: conversation.unread_count,
     channel: channelBadge(requireChannel(conversation.channel_connection_id)),
     categories: categoryBadges(conversation.matched_kb_file_ids),
+    // Mock-данные автоответов не знают: контур настраивается на живой БД.
+    isAutoReplyPreview: false,
     avatar: avatarFor(contact?.id ?? conversation.id, name),
   };
 }
@@ -522,6 +529,7 @@ function postListItem(conversation: Conversation): ConversationListItemView {
     unreadCount: conversation.unread_count,
     channel: channelBadge(requireChannel(conversation.channel_connection_id)),
     categories: [],
+    isAutoReplyPreview: false,
     avatar: null,
   };
 }

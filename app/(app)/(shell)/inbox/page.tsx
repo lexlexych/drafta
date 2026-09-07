@@ -8,6 +8,10 @@ import {
   getThreadView,
   listChannelConnections,
 } from "@/lib/db/inbox";
+import {
+  getAutoReplySettings,
+  listAutoReplyScenarios,
+} from "@/lib/db/auto-reply";
 import { listActiveReplyTemplates } from "@/lib/db/reply-templates";
 import { createServerSupabaseClient } from "@/lib/db/server";
 import { getWorkspaceLanguage } from "@/lib/db/workspace-language";
@@ -22,6 +26,7 @@ import { MessageList } from "../_components/message-list";
 import { QUERY_KEYS, buildHref, firstParam } from "../_components/navigation";
 import styles from "../_components/panes.module.css";
 import uiStyles from "../_components/ui.module.css";
+import { AutoReplyPanel } from "./_components/auto-reply-panel";
 import { ConversationList } from "./_components/conversation-list";
 import { MarkThreadRead } from "./mark-thread-read";
 
@@ -38,6 +43,9 @@ export default async function InboxPage({
   // Фильтры по каналу и категории — клиентское состояние `ConversationList`,
   // а не query-параметры: см. его докстринг.
   const conversationId = firstParam(params[QUERY_KEYS.conversation]);
+  // Панель автоответов занимает место беседы, поэтому она и беседа —
+  // взаимоисключающие состояния одного экрана.
+  const autoReplyOpen = firstParam(params[QUERY_KEYS.autoReply]) === "1";
 
   const user = await getAuthenticatedUser();
   const workspace = user ? await getCurrentWorkspace(user.id) : null;
@@ -57,10 +65,12 @@ export default async function InboxPage({
 
   // Шаблоны для значка в поле ответа. Список маленький и меняется редко —
   // едет пропом вместе с остальным тредом, без отдельного клиентского запроса.
-  const [replyTemplates, workspaceLanguage] = await Promise.all([
-    listActiveReplyTemplates(supabase, workspace.id, "message"),
-    getWorkspaceLanguage(supabase, workspace.id),
-  ]);
+  const [replyTemplates, workspaceLanguage, autoReplySettings] =
+    await Promise.all([
+      listActiveReplyTemplates(supabase, workspace.id, "message"),
+      getWorkspaceLanguage(supabase, workspace.id),
+      getAutoReplySettings(supabase, workspace.id),
+    ]);
 
   // Первая страница без фильтра: дальше список дозагружает себя сам через
   // `loadConversationsAction` (см. `_components/conversation-list.tsx`).
@@ -77,7 +87,7 @@ export default async function InboxPage({
 
   // Диалог открывается только явным выбором пользователя: пока в адресе нет
   // `conversation`, правая панель пуста и ни один элемент списка не активен.
-  const openedId = conversationId;
+  const openedId = autoReplyOpen ? null : conversationId;
   const thread = openedId
     ? await getThreadView(
         supabase,
@@ -88,7 +98,13 @@ export default async function InboxPage({
         workspaceLanguage,
       )
     : null;
-  const isDetail = conversationId !== null;
+  const isDetail = autoReplyOpen || conversationId !== null;
+
+  // Сценарии и шаблоны нужны только открытой панели: списку диалогов хватает
+  // одного флага «вкл/выкл» для значка в шапке.
+  const autoReplyScenarios = autoReplyOpen
+    ? await listAutoReplyScenarios(supabase, workspace.id)
+    : [];
 
   return (
     <div className={styles.panes} data-detail={isDetail}>
@@ -100,10 +116,28 @@ export default async function InboxPage({
         categories={categoryBadges(categories)}
         openedId={openedId}
         hasChannels={hasChannels}
+        autoReplyEnabled={autoReplySettings.isEnabled}
+        autoReplyOpen={autoReplyOpen}
       />
 
       <section className={styles.paneDetail}>
-        {thread ? (
+        {autoReplyOpen ? (
+          <AutoReplyPanel
+            settings={autoReplySettings}
+            scenarios={autoReplyScenarios.map((scenario) => ({
+              id: scenario.id,
+              name: scenario.name,
+              condition: scenario.condition,
+              examples: scenario.examples,
+              action: scenario.action,
+              replyTemplateId: scenario.reply_template_id,
+            }))}
+            templates={replyTemplates.map((template) => ({
+              id: template.id,
+              name: template.name,
+            }))}
+          />
+        ) : thread ? (
           <>
             <MarkThreadRead conversationId={thread.conversationId} />
             <div className={styles.threadHead}>

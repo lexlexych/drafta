@@ -2,10 +2,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
 // Emitted fail-safe after the DB work; irrelevant to what is asserted here.
+const emitted = vi.hoisted(() => ({ autoReply: [] as unknown[] }));
 vi.mock("@/lib/inngest/events", () => ({
   emitContactAvatarSyncRequested: async () => {},
   emitPostThumbnailSyncRequested: async () => {},
   emitPushNotifyRequested: async () => {},
+  emitAutoReplyRequested: async (payload: unknown) => {
+    emitted.autoReply.push(payload);
+  },
 }));
 
 const { processInboundEvent } = await import("./process-event");
@@ -218,6 +222,7 @@ function baseTables(): Record<string, Row[]> {
     contact_identities: [],
     conversations: [],
     messages: [],
+    auto_reply_settings: [],
   };
 }
 
@@ -297,6 +302,7 @@ function whatsappTables(): Record<string, Row[]> {
     contact_identities: [],
     conversations: [],
     messages: [],
+    auto_reply_settings: [],
   };
 }
 
@@ -604,5 +610,65 @@ describe("processInboundEvent — outbound DM lifecycle", () => {
     // ответ; забрать её под чужое эхо значило бы потерять оба сообщения.
     expect(stub.tables.messages).toHaveLength(2);
     expect(stub.tables.messages[0]!.external_id).toBeNull();
+  });
+});
+
+describe("processInboundEvent — запуск автоответа", () => {
+  let stub: ReturnType<typeof createSupabaseStub>;
+
+  const run = (event: NormalizedEvent) =>
+    processInboundEvent(stub.client as unknown as SupabaseClient, event);
+
+  beforeEach(() => {
+    stub = createSupabaseStub(whatsappTables());
+    emitted.autoReply = [];
+  });
+
+  it("молчит, пока контур автоответов не включён", async () => {
+    // Настроек у большинства workspace нет вовсе, и событие стоит денег:
+    // оплаченный прогон Inngest на каждое входящее вышел бы на первом шаге.
+    await run(whatsappIncoming("Alexey"));
+
+    expect(emitted.autoReply).toEqual([]);
+  });
+
+  it("запускает прогон на новое входящее при включённом контуре", async () => {
+    stub.tables.auto_reply_settings.push({
+      id: "ars_1",
+      workspace_id: "wsp_a",
+      is_enabled: true,
+    });
+
+    await run(whatsappIncoming("Alexey"));
+
+    // Payload — только ID (правило 7).
+    expect(emitted.autoReply).toEqual([
+      {
+        workspaceId: "wsp_a",
+        conversationId: expect.any(String),
+        messageId: expect.any(String),
+      },
+    ]);
+  });
+
+  it("не запускает второй прогон на повторную доставку того же сообщения", async () => {
+    // Тот же `external_id` под другим `providerEventId`: идемпотентность
+    // webhook_events такую доставку не ловит, а второй прогон стоил бы второго
+    // вызова модели на один вопрос клиента.
+    stub.tables.auto_reply_settings.push({
+      id: "ars_1",
+      workspace_id: "wsp_a",
+      is_enabled: true,
+    });
+
+    const first = whatsappIncoming("Alexey");
+    await run(first);
+
+    // Уникальный ключ (conversation_id, external_id) отбивает вторую вставку —
+    // ровно так эта повторная доставка выглядит в Postgres.
+    stub.failNextInsert("messages", { code: "23505" });
+    await run({ ...first, providerEventId: "wh_wa_msg_redelivery" });
+
+    expect(emitted.autoReply).toHaveLength(1);
   });
 });
