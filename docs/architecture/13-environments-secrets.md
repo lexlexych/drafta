@@ -71,6 +71,7 @@ npx inngest-cli dev
 | `MISTRAL_API_KEY` | LLM, основной провайдер; если задан — используется Mistral ([8. AI-подсистема](08-ai-subsystem.md#клиент-и-выбор-провайдера)) |
 | `OPENROUTER_API_KEY` | LLM, резервный провайдер OpenRouter — используется, только когда `MISTRAL_API_KEY` не задан ([8. AI-подсистема](08-ai-subsystem.md#резервный-провайдер--openrouter)) |
 | `OPENROUTER_MODEL` | модель OpenRouter по умолчанию, формат `vendor/model` — обязательна вместе с `OPENROUTER_API_KEY` |
+| `AUTO_REPLY_MIN_CONFIDENCE` | порог уверенности классификатора автоответов в процентах, по умолчанию 75 ([6.7](07-data-flows.md#67-автоответ)) |
 | `INNGEST_EVENT_KEY` | отправка событий |
 | `INNGEST_SIGNING_KEY` | подпись вызовов функций |
 | `VAPID_PUBLIC_KEY` | Web Push ([11. PWA](11-realtime-pwa.md#web-push)) |
