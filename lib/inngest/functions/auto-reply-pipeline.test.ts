@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("server-only", () => ({}));
 
 const {
+  AUTO_REPLY_REPEAT_WINDOW_MS,
   MAX_AUTO_REPLY_WAITS,
   runAutoReplyPipeline,
 } = await import("./auto-reply-pipeline");
@@ -80,6 +81,8 @@ function dependencies(
       confidence: 90,
       language: "ru",
     })),
+    // По умолчанию прошлых автоответов в диалоге нет — правило повтора молчит.
+    loadPreviousAutoReply: vi.fn(async () => null),
     loadTemplate: vi.fn(async () => ({
       id: "tpl-1",
       bodies: { ru: "Доставка бесплатная", de: "Versand ist gratis" },
@@ -115,6 +118,7 @@ describe("runAutoReplyPipeline", () => {
       "check-conversation-1",
       "load-scenarios",
       "classify",
+      "load-previous-auto-reply",
       "load-template",
       "create-reply",
       "request-send",
@@ -416,6 +420,128 @@ describe("runAutoReplyPipeline", () => {
     expect(deps.createReply).toHaveBeenCalledWith(
       expect.objectContaining({ text: "Versand ist gratis" }),
     );
+  });
+
+  it("stays silent when the same scenario was already answered automatically", async () => {
+    // Клиент получил шаблон и пишет снова — значит шаблон не помог. Второй раз
+    // тот же текст не отправляем: уточнение разбирает человек.
+    const deps = dependencies({
+      loadPreviousAutoReply: vi.fn(async () => ({
+        scenarioId: "sc-1",
+        scenarioName: "Цены",
+        humanRepliedSince: false,
+        ageMs: 60 * 60 * 1000,
+      })),
+    });
+
+    const result = await runAutoReplyPipeline(INPUT, new TestSteps(), deps);
+
+    expect(result).toEqual({ outcome: "repeat_scenario" });
+    expect(deps.createReply).not.toHaveBeenCalled();
+    // В журнале это отдельная причина: оператор не отвечал, диалог его ждёт.
+    expect(journalled).toEqual([
+      expect.objectContaining({ outcome: "repeat_scenario", scenarioId: "sc-1" }),
+    ]);
+  });
+
+  it("answers when the previous auto reply was a different scenario", async () => {
+    const deps = dependencies({
+      loadPreviousAutoReply: vi.fn(async () => ({
+        scenarioId: "sc-other",
+        scenarioName: "Часы работы",
+        humanRepliedSince: false,
+        ageMs: 60 * 60 * 1000,
+      })),
+    });
+
+    const result = await runAutoReplyPipeline(INPUT, new TestSteps(), deps);
+
+    expect(result.outcome).toBe("sent");
+  });
+
+  it("answers again once the operator has replied since", async () => {
+    // Человек ответил — цикл закрыт, и следующий такой же вопрос это новое
+    // обращение, а не уточнение.
+    const deps = dependencies({
+      loadPreviousAutoReply: vi.fn(async () => ({
+        scenarioId: "sc-1",
+        scenarioName: "Цены",
+        humanRepliedSince: true,
+        ageMs: 60 * 60 * 1000,
+      })),
+    });
+
+    const result = await runAutoReplyPipeline(INPUT, new TestSteps(), deps);
+
+    expect(result.outcome).toBe("sent");
+  });
+
+  it("answers again once a day has passed", async () => {
+    const deps = dependencies({
+      loadPreviousAutoReply: vi.fn(async () => ({
+        scenarioId: "sc-1",
+        scenarioName: "Цены",
+        humanRepliedSince: false,
+        ageMs: AUTO_REPLY_REPEAT_WINDOW_MS + 1,
+      })),
+    });
+
+    const result = await runAutoReplyPipeline(INPUT, new TestSteps(), deps);
+
+    expect(result.outcome).toBe("sent");
+  });
+
+  it("treats a repeated fallback as a repeat too", async () => {
+    // У «иначе» тот же шаблон, что и в прошлый раз — клиенту уйдёт тот же текст.
+    const deps = dependencies({
+      loadSettings: vi.fn(async () => ({
+        isEnabled: true,
+        delayMinutes: 5,
+        fallbackTemplateId: "tpl-1",
+      })),
+      classify: vi.fn(async () => ({
+        scenarioIndex: null,
+        confidence: 90,
+        language: "ru",
+      })),
+      loadPreviousAutoReply: vi.fn(async () => ({
+        scenarioId: null,
+        scenarioName: null,
+        humanRepliedSince: false,
+        ageMs: 60 * 60 * 1000,
+      })),
+    });
+
+    const result = await runAutoReplyPipeline(INPUT, new TestSteps(), deps);
+
+    expect(result).toEqual({ outcome: "repeat_scenario" });
+  });
+
+  it("does not let a deleted scenario block the fallback", async () => {
+    // `scenario_id` обнулился вместе со сценарием, но название в журнале
+    // осталось: настройка с тех пор изменилась, и молчать не из-за чего.
+    const deps = dependencies({
+      loadSettings: vi.fn(async () => ({
+        isEnabled: true,
+        delayMinutes: 5,
+        fallbackTemplateId: "tpl-1",
+      })),
+      classify: vi.fn(async () => ({
+        scenarioIndex: null,
+        confidence: 90,
+        language: "ru",
+      })),
+      loadPreviousAutoReply: vi.fn(async () => ({
+        scenarioId: null,
+        scenarioName: "Удалённый сценарий",
+        humanRepliedSince: false,
+        ageMs: 60 * 60 * 1000,
+      })),
+    });
+
+    const result = await runAutoReplyPipeline(INPUT, new TestSteps(), deps);
+
+    expect(result.outcome).toBe("sent");
   });
 
   it("does not send when the RPC refused under the conversation lock", async () => {
