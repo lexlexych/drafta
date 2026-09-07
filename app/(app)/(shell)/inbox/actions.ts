@@ -34,6 +34,7 @@ import {
   type CurrentWorkspace,
 } from "@/lib/db/workspace";
 import {
+  emitAutoReplyCancelled,
   emitDraftGenerateCancelled,
   emitDraftGenerateRequested,
   emitMessageSendRequested,
@@ -314,6 +315,15 @@ export async function sendManualMessageAction(
   if (!created.ok) {
     return created;
   }
+
+  // Оператор ответил сам — ждущему автоответу больше нечего делать. Событие
+  // fail-safe и не решает исхода: прогон всё равно перечитывает беседу после
+  // паузы, а RPC отказывается вставлять за исходящим. Оно лишь экономит вызов
+  // модели (docs/architecture/07-data-flows.md#67-автоответ).
+  await emitAutoReplyCancelled({
+    workspaceId: context.workspace.id,
+    conversationId,
+  });
 
   return requestMessageSend(context, conversationId, created.messageId);
 }

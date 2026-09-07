@@ -12,6 +12,7 @@ import type {
 } from "@/lib/channels/types";
 import { isAvatarStale } from "@/lib/avatars";
 import {
+  emitAutoReplyRequested,
   emitContactAvatarSyncRequested,
   emitPostThumbnailSyncRequested,
   emitPushNotifyRequested,
@@ -288,7 +289,7 @@ async function processIncomingDirectMessage(params: {
       event.conversation.externalId,
     );
 
-    const messageId = await insertIncomingMessage(
+    const { messageId, isNew } = await insertIncomingMessage(
       supabase,
       workspaceId,
       conversationId,
@@ -298,11 +299,23 @@ async function processIncomingDirectMessage(params: {
 
     await markProcessed(null);
 
+    // Контур выключен у подавляющего большинства workspace, а событие стоит
+    // денег: один индексный lookup здесь дешевле оплаченного прогона Inngest на
+    // каждое входящее, который тут же вышел бы на первом шаге. Правило 6 не
+    // нарушено — это тот же дешёвый запрос к своей же БД, что и остальные в
+    // пайплайне, без LLM и без внешних вызовов.
+    const autoReplyEnabled = isNew
+      ? await isAutoReplyEnabled(supabase, workspaceId)
+      : false;
+
     // Fail-safe by design (docs/architecture/14-vibecoding-rules.md#7) —
     // never allowed to turn a persisted message into a failed webhook. The
     // event payload is IDs-only.
     await Promise.all([
       emitPushNotifyRequested({ messageId, conversationId, workspaceId }),
+      ...(autoReplyEnabled
+        ? [emitAutoReplyRequested({ workspaceId, conversationId, messageId })]
+        : []),
       ...(isAvatarStale(avatarFetchedAt)
         ? [
             emitContactAvatarSyncRequested({
@@ -1120,13 +1133,20 @@ async function upsertPost(
   return created.id;
 }
 
+/**
+ * Возвращает и id, и признак «это действительно новое сообщение»: повторная
+ * доставка того же сообщения под другим `external_event_id` доходит сюда и
+ * находит существующую строку. Счётчики она уже не двигает — и автоответ
+ * запускать тоже не должна, иначе один и тот же вопрос клиента порождал бы два
+ * прогона и два оплаченных вызова модели.
+ */
 async function insertIncomingMessage(
   supabase: SupabaseClient,
   workspaceId: string,
   conversationId: string,
   contactIdentityId: string,
   event: NormalizedDirectMessageEvent,
-): Promise<string> {
+): Promise<{ messageId: string; isNew: boolean }> {
   const { data: created, error: insertError } = await supabase
     .from("messages")
     .insert({
@@ -1147,7 +1167,7 @@ async function insertIncomingMessage(
     // Genuinely new message — and only a genuinely new message — bumps the
     // conversation's counters. A duplicate (below) must not double-count.
     await bumpConversationOnNewIncomingMessage(supabase, conversationId);
-    return created.id;
+    return { messageId: created.id, isNew: true };
   }
 
   if (isUniqueViolation(insertError)) {
@@ -1160,7 +1180,7 @@ async function insertIncomingMessage(
       .eq("external_id", event.message.externalId)
       .single();
     if (selectError || !existing) throw selectError ?? insertError;
-    return existing.id;
+    return { messageId: existing.id, isNew: false };
   }
 
   throw insertError;
@@ -1207,6 +1227,32 @@ async function insertIncomingComment(
   }
 
   throw insertError;
+}
+
+/**
+ * Включён ли контур автоответов у workspace.
+ *
+ * Строки может не быть вовсе: настройки не создаются при онбординге, и её
+ * отсутствие означает то же, что выключенный переключатель. Ошибку чтения тоже
+ * трактуем как «выключено» — молчание безопаснее, чем автоответ, отправленный
+ * потому что запрос настроек не удался.
+ */
+async function isAutoReplyEnabled(
+  supabase: SupabaseClient,
+  workspaceId: string,
+): Promise<boolean> {
+  const { data, error } = await supabase
+    .from("auto_reply_settings")
+    .select("is_enabled")
+    .eq("workspace_id", workspaceId)
+    .maybeSingle();
+
+  if (error) {
+    console.error("[webhooks] failed to read auto-reply settings", error);
+    return false;
+  }
+
+  return data?.is_enabled === true;
 }
 
 async function bumpConversationOnNewIncomingMessage(

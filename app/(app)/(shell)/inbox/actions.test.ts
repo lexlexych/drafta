@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   emitDraftGenerateRequested: vi.fn(),
   emitDraftGenerateCancelled: vi.fn(),
   emitMessageSendRequested: vi.fn(),
+  emitAutoReplyCancelled: vi.fn(),
   createManualOutgoingMessage: vi.fn(),
   retryFailedOutgoingMessage: vi.fn(),
   markOutgoingMessageFailedAfterEmit: vi.fn(),
@@ -38,6 +39,7 @@ vi.mock("@/lib/inngest/events", () => ({
   emitDraftGenerateRequested: mocks.emitDraftGenerateRequested,
   emitDraftGenerateCancelled: mocks.emitDraftGenerateCancelled,
   emitMessageSendRequested: mocks.emitMessageSendRequested,
+  emitAutoReplyCancelled: mocks.emitAutoReplyCancelled,
 }));
 vi.mock("@/lib/db/outgoing", () => ({
   createManualOutgoingMessage: mocks.createManualOutgoingMessage,
