@@ -678,6 +678,89 @@ set
   sort_order = excluded.sort_order,
   updated_at = now();
 
+-- Автоответы: контур настроен, но выключен — сид не должен ни в одном
+-- окружении начать сам писать клиентам (20260907100000_auto_reply.sql).
+insert into public.auto_reply_settings (
+  id,
+  workspace_id,
+  is_enabled,
+  delay_minutes,
+  fallback_template_id
+)
+values
+  (
+    'a0000000-0000-4000-8000-000000000901',
+    'a0000000-0000-4000-8000-000000000001',
+    false,
+    5,
+    null
+  ),
+  (
+    'b0000000-0000-4000-8000-000000000901',
+    'b0000000-0000-4000-8000-000000000001',
+    false,
+    10,
+    null
+  )
+on conflict (id) do update
+set
+  is_enabled = excluded.is_enabled,
+  delay_minutes = excluded.delay_minutes,
+  fallback_template_id = excluded.fallback_template_id,
+  updated_at = now();
+
+insert into public.auto_reply_scenarios (
+  id,
+  workspace_id,
+  name,
+  condition,
+  examples,
+  action,
+  reply_template_id,
+  sort_order
+)
+values
+  (
+    'a0000000-0000-4000-8000-000000000902',
+    'a0000000-0000-4000-8000-000000000001',
+    'Versand',
+    'Der Kunde fragt nach Lieferzeit oder Versandkosten.',
+    '["Wann kommt meine Bestellung?","Wie lange dauert der Versand?"]'::jsonb,
+    'reply',
+    'a0000000-0000-4000-8000-000000000801',
+    0
+  ),
+  (
+    'a0000000-0000-4000-8000-000000000903',
+    'a0000000-0000-4000-8000-000000000001',
+    'Werbung',
+    'Kaltakquise, Linktausch, Kooperationsangebote.',
+    '["Wir bieten Ihnen eine Zusammenarbeit an"]'::jsonb,
+    -- Сценарий распознаётся, но ответа не будет: «не отвечать автоматически».
+    'ignore',
+    null,
+    1
+  ),
+  (
+    'b0000000-0000-4000-8000-000000000902',
+    'b0000000-0000-4000-8000-000000000001',
+    'Öffnungszeiten',
+    'Der Kunde fragt, wann wir erreichbar sind.',
+    '["Bis wann habt ihr offen?"]'::jsonb,
+    'reply',
+    'b0000000-0000-4000-8000-000000000801',
+    0
+  )
+on conflict (id) do update
+set
+  name = excluded.name,
+  condition = excluded.condition,
+  examples = excluded.examples,
+  action = excluded.action,
+  reply_template_id = excluded.reply_template_id,
+  sort_order = excluded.sort_order,
+  updated_at = now();
+
 insert into public.webhook_events (
   id,
   workspace_id,

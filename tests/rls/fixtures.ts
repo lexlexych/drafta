@@ -34,6 +34,8 @@ export const workspaceSeededTables = [
   { column: "workspace_id", name: "message_translations" },
   { column: "workspace_id", name: "comment_translations" },
   { column: "workspace_id", name: "comment_private_replies" },
+  { column: "workspace_id", name: "auto_reply_settings" },
+  { column: "workspace_id", name: "auto_reply_scenarios" },
 ] as const;
 
 /**
@@ -70,6 +72,9 @@ export const publicClientTables = [
   "message_translations",
   "comment_translations",
   "comment_private_replies",
+  "auto_reply_settings",
+  "auto_reply_scenarios",
+  "auto_reply_runs",
   "conversation_message_previews",
   "post_comment_previews",
 ] as const;
