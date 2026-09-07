@@ -180,6 +180,40 @@
   gap: 12px;
 }
 
+/* Общий вид полей редактора.
+   `ui.module.css` оформляет только `select` и `input[type="text"]`, а textarea
+   там нет — «Условие» доставалось браузерному дефолту: прямые углы и текст
+   впритык к рамке. Селектор с `form` внутри намеренно: он специфичнее
+   `.field input[type="text"]` из общего кита, и порядок импорта модулей на
+   результат больше не влияет. */
+.editorDialog form input[type="text"],
+.editorDialog form textarea {
+  width: 100%;
+  max-width: none;
+  box-sizing: border-box;
+  font: inherit;
+  font-size: 13.5px;
+  line-height: 1.45;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--line2);
+  border-radius: 10px;
+  padding: 9px 12px;
+  transition: border-color 0.15s;
+}
+
+.editorDialog form input[type="text"]:focus-visible,
+.editorDialog form textarea:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.editorDialog form textarea {
+  min-height: 84px;
+  /* Тянуть можно только по высоте: шире диалога поле всё равно не поедет. */
+  resize: vertical;
+}
+
 .examples {
   display: flex;
   flex-direction: column;
@@ -198,15 +232,11 @@
   gap: 6px;
 }
 
+/* Только раскладка: рамку, скругление и отступы поле берёт из общего правила
+   для полей редактора выше — примеры и «Условие» должны выглядеть одинаково. */
 .exampleRow input {
   flex: 1;
   min-width: 0;
-  padding: 7px 10px;
-  border: 1px solid var(--line2);
-  border-radius: 8px;
-  background: var(--surface);
-  color: var(--ink);
-  font: inherit;
 }
 
 .error {

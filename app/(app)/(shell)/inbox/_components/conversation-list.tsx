@@ -22,7 +22,7 @@ import type {
 import { countWithNoun } from "@/lib/mock/plural";
 
 import { Avatar } from "../../_components/avatar";
-import { AutoReplyBadgeIcon, AutoReplyIcon } from "../../_components/icons";
+import { AutoReplyIcon } from "../../_components/icons";
 import { LinkActivity } from "../../_components/activity";
 import { CategoryChip, ChannelChip } from "../../_components/chips";
 import { ListFilters, scopeLabel } from "../../_components/list-filters";
@@ -185,7 +185,7 @@ export function ConversationList({
                     title="Последний ответ отправлен автоматически"
                     aria-label="Последний ответ отправлен автоматически"
                   >
-                    <AutoReplyBadgeIcon />
+                    <AutoReplyIcon size={15} />
                   </span>
                 ) : null}
                 {item.preview}
