@@ -45,6 +45,15 @@ export const AUTO_REPLY_CONTEXT_MESSAGE_LIMIT = 10;
 
 export const AUTO_REPLY_MAX_TOKENS = 32;
 
+/**
+ * Сколько времени тот же сценарий считается повтором.
+ *
+ * Клиент, написавший через час после шаблона, уточняет полученный ответ — это к
+ * человеку. Тот же вопрос через неделю — новое обращение, и молчать на него уже
+ * незачем. Сутки — граница между этими двумя случаями.
+ */
+export const AUTO_REPLY_REPEAT_WINDOW_MS = 24 * 60 * 60 * 1000;
+
 export type AutoReplyPipelineInput = {
   workspaceId: string;
   conversationId: string;
@@ -61,6 +70,7 @@ export type AutoReplyOutcome =
   | "template_missing"
   | "no_template_language"
   | "cancelled_by_operator"
+  | "repeat_scenario"
   | "superseded"
   | "failed";
 
@@ -112,6 +122,22 @@ export type ClassificationResult = {
   language: string | null;
 };
 
+/**
+ * Прошлый отправленный автоответ этой беседы — основание не повторяться.
+ *
+ * `ageMs` считается внутри шага, а не в теле пайплайна: шаг мемоизируется,
+ * поэтому ретрай через час не переоценит окно заново (тот же приём, что
+ * `capture-now` в `./push-digest-pipeline.ts`).
+ */
+export type PreviousAutoReplySnapshot = {
+  scenarioId: string | null;
+  /** Копия названия из журнала: переживает удаление сценария. */
+  scenarioName: string | null;
+  /** После того автоответа в диалоге уже писал человек. */
+  humanRepliedSince: boolean;
+  ageMs: number;
+};
+
 export type TemplateSnapshot = {
   id: string;
   bodies: Record<string, string>;
@@ -143,6 +169,10 @@ export type AutoReplyDependencies = {
     messages: { direction: "incoming" | "outgoing"; text: string }[];
     scenarios: AutoReplyScenarioSnapshot[];
   }): Promise<ClassificationResult>;
+  loadPreviousAutoReply(input: {
+    workspaceId: string;
+    conversationId: string;
+  }): Promise<PreviousAutoReplySnapshot | null>;
   loadTemplate(input: {
     workspaceId: string;
     templateId: string;
@@ -162,6 +192,30 @@ export type AutoReplyDependencies = {
   minConfidence(): number;
   random(): number;
 };
+
+/**
+ * Тот же ли это сценарий, что у прошлого автоответа.
+ *
+ * Сравниваем по тому, что журнал уже хранит:
+ *
+ * - у прошлого есть `scenarioId` — сравнение по нему;
+ * - `scenarioId` и `scenarioName` пусты оба — прошлый ответ был по «иначе»;
+ *   значит повтор, если и сейчас выпало «иначе». Fallback повторять нельзя ровно
+ *   так же: клиенту уйдёт тот же самый текст;
+ * - `scenarioId` пуст, а `scenarioName` остался — сценарий удалили уже после
+ *   отправки. Настройка с тех пор изменилась, сравнивать не с чем, и молчать
+ *   из-за исчезнувшего сценария мы не вправе.
+ */
+function isRepeatOfPreviousScenario(
+  previous: PreviousAutoReplySnapshot,
+  scenario: AutoReplyScenarioSnapshot | null,
+): boolean {
+  if (previous.scenarioId !== null) {
+    return previous.scenarioId === scenario?.id;
+  }
+
+  return previous.scenarioName === null && scenario === null;
+}
 
 function deadlineFrom(isoTimestamp: string, delayMinutes: number): string {
   return new Date(
@@ -315,6 +369,28 @@ export async function runAutoReplyPipeline(
 
   if (scenario?.action === "ignore") {
     return finish("no_template", journalBase);
+  }
+
+  // Клиент уже получил этот шаблон и пишет снова — значит шаблон не помог.
+  // Второй раз тот же текст не отправляем: уточнение разбирает человек.
+  //
+  // Блокировка снимается сама: ответом оператора (диалог уже у человека) или
+  // сутками тишины (это уже новое обращение, а не уточнение полученного
+  // ответа) — см. AUTO_REPLY_REPEAT_WINDOW_MS.
+  const previous = await steps.run("load-previous-auto-reply", () =>
+    dependencies.loadPreviousAutoReply({
+      workspaceId: input.workspaceId,
+      conversationId: input.conversationId,
+    }),
+  );
+
+  if (
+    previous !== null &&
+    !previous.humanRepliedSince &&
+    previous.ageMs < AUTO_REPLY_REPEAT_WINDOW_MS &&
+    isRepeatOfPreviousScenario(previous, scenario)
+  ) {
+    return finish("repeat_scenario", journalBase);
   }
 
   const templateId = scenario
@@ -611,6 +687,81 @@ async function classify(input: {
   }
 }
 
+/**
+ * Прошлый отправленный автоответ беседы и то, что могло снять с него блокировку.
+ *
+ * Источник — журнал: только он знает, каким сценарием отвечали. Ответ человека
+ * определяется по самим сообщениям, а не по журналу: оператор мог ответить и из
+ * приложения провайдера, такое исходящее приезжает вебхуком `message.sent`.
+ * Автоответ от ручного отличает `messages.auto_reply_for_message_id` — отдельный
+ * признак заводить не нужно.
+ */
+async function loadPreviousAutoReply(input: {
+  workspaceId: string;
+  conversationId: string;
+}): Promise<PreviousAutoReplySnapshot | null> {
+  const supabase = createAdminSupabaseClient();
+
+  const { data: runs, error: runsError } = await supabase
+    .from("auto_reply_runs")
+    .select("scenario_id, scenario_name, created_at, reply_message_id")
+    .eq("workspace_id", input.workspaceId)
+    .eq("conversation_id", input.conversationId)
+    .eq("outcome", "sent")
+    .order("created_at", { ascending: false })
+    .limit(1);
+  assertQuerySucceeded(runsError, "Loading the previous auto reply");
+
+  const previous = (runs ?? [])[0] as
+    | {
+        scenario_id: string | null;
+        scenario_name: string | null;
+        created_at: string;
+        reply_message_id: string | null;
+      }
+    | undefined;
+
+  if (!previous) {
+    return null;
+  }
+
+  // Отсчёт ведём от самого сообщения, когда оно известно: строка журнала
+  // пишется после вставки, и её `created_at` на доли секунды позже.
+  let sentAt = previous.created_at;
+
+  if (previous.reply_message_id) {
+    const { data: replyRow, error: replyError } = await supabase
+      .from("messages")
+      .select("created_at")
+      .eq("workspace_id", input.workspaceId)
+      .eq("id", previous.reply_message_id)
+      .maybeSingle();
+    assertQuerySucceeded(replyError, "Loading the previous auto reply message");
+
+    if (replyRow?.created_at) {
+      sentAt = replyRow.created_at as string;
+    }
+  }
+
+  const { data: manual, error: manualError } = await supabase
+    .from("messages")
+    .select("id")
+    .eq("workspace_id", input.workspaceId)
+    .eq("conversation_id", input.conversationId)
+    .eq("direction", "outgoing")
+    .is("auto_reply_for_message_id", null)
+    .gt("created_at", sentAt)
+    .limit(1);
+  assertQuerySucceeded(manualError, "Loading operator replies");
+
+  return {
+    scenarioId: previous.scenario_id,
+    scenarioName: previous.scenario_name,
+    humanRepliedSince: (manual ?? []).length > 0,
+    ageMs: Date.now() - new Date(sentAt).getTime(),
+  };
+}
+
 async function loadTemplate(input: {
   workspaceId: string;
   templateId: string;
@@ -683,6 +834,7 @@ export const autoReplyDependencies: AutoReplyDependencies = {
   loadConversationState,
   loadScenarios,
   classify,
+  loadPreviousAutoReply,
   loadTemplate,
   createReply,
   requestSend: async (input) => {
