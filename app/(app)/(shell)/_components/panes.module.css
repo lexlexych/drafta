@@ -672,7 +672,7 @@
   display: inline-flex;
   align-items: center;
   color: var(--ink2);
-  vertical-align: -2px;
+  vertical-align: -3px;
 }
 
 .listPreview .autoReplyMark {
@@ -681,6 +681,16 @@
 
 .bubbleFooter .autoReplyMark {
   margin-right: auto;
+  /* Наследуем цвет пузыря — по той же причине, что и `.translateToggle`:
+     `.bubbleOut` рисуется на --out-bg с --out-ink, и фиксированный --ink2
+     сливался с тёмным фоном именно там, где значок и нужен. */
+  color: inherit;
+  opacity: 0.75;
+}
+
+.bubbleIn .autoReplyMark {
+  color: var(--ink3);
+  opacity: 0.9;
 }
 
 .bubbleFooter .translateToggle ~ .autoReplyMark {

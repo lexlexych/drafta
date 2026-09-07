@@ -22,7 +22,7 @@ import {
 
 import { translateMessageAction } from "../inbox/actions";
 import { Spinner } from "./activity";
-import { AutoReplyBadgeIcon, PictureIcon, TranslateIcon, UndoIcon } from "./icons";
+import { AutoReplyIcon, PictureIcon, TranslateIcon, UndoIcon } from "./icons";
 import { RetrySendButton } from "./retry-send-button";
 import { showToast } from "./stub";
 import styles from "./panes.module.css";
@@ -147,7 +147,7 @@ export function MessageBubble({
             title="Отправлено автоматически"
             aria-label="Отправлено автоматически"
           >
-            <AutoReplyBadgeIcon />
+            <AutoReplyIcon size={16} />
           </span>
         ) : null}
         <time className={`${styles.bubbleMeta} ${uiStyles.num}`}>
