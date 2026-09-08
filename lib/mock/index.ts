@@ -211,6 +211,7 @@ export type SettingsSectionId =
   | "ai"
   | "knowledge"
   | "templates"
+  | "autoreply"
   | "team"
   | "notifications"
   | "app"
@@ -919,6 +920,11 @@ export const SETTINGS_SECTIONS: SettingsSectionView[] = [
     id: "templates",
     title: "Шаблоны ответов",
     description: "Готовые тексты ответов по языкам",
+  },
+  {
+    id: "autoreply",
+    title: "Автоответы",
+    description: "Сценарии и задержка автоматических ответов",
   },
   {
     id: "team",

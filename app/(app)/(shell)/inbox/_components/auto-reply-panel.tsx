@@ -82,10 +82,16 @@ export function AutoReplyPanel({
   settings: serverSettings,
   scenarios: serverScenarios,
   templates,
+  backHref = "/inbox",
 }: {
   settings: AutoReplySettingsView;
   scenarios: AutoReplyScenarioView[];
   templates: AutoReplyTemplateOption[];
+  /**
+   * Куда ведёт «Назад» в шапке: панель открывается и на месте беседы
+   * (`/inbox?autoreply=1`), и разделом настроек (`/settings?section=autoreply`).
+   */
+  backHref?: string;
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -192,7 +198,7 @@ export function AutoReplyPanel({
   return (
     <>
       <div className={panes.threadHead}>
-        <Link className={panes.backButton} href="/inbox" aria-label="Назад">
+        <Link className={panes.backButton} href={backHref} aria-label="Назад">
           <BackIcon />
         </Link>
         <div className={panes.threadWho}>

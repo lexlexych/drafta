@@ -13,6 +13,10 @@ import {
   type AiSettingsRow,
 } from "@/lib/db/ai-settings";
 import {
+  getAutoReplySettings,
+  listAutoReplyScenarios,
+} from "@/lib/db/auto-reply";
+import {
   getNotificationSettings,
   type NotificationSettingsView,
 } from "@/lib/db/notification-settings";
@@ -21,6 +25,7 @@ import {
   type KnowledgeFileRow,
 } from "@/lib/db/knowledge-base";
 import {
+  listActiveReplyTemplates,
   listReplyTemplates,
   type ReplyTemplateRow,
 } from "@/lib/db/reply-templates";
@@ -41,6 +46,7 @@ import { LinkActivity } from "../_components/activity";
 import { Avatar } from "../_components/avatar";
 import {
   AccountIcon,
+  AutoReplyIcon,
   BackIcon,
   BellIcon,
   BookIcon,
@@ -69,6 +75,12 @@ import {
   ReplyTemplatesPanel,
   type ReplyTemplateListItem,
 } from "./templates/templates-panel";
+import {
+  AutoReplyPanel,
+  type AutoReplyScenarioView,
+  type AutoReplySettingsView,
+  type AutoReplyTemplateOption,
+} from "../inbox/_components/auto-reply-panel";
 import { AiSettingsForm } from "./ai/ai-settings-form";
 import { AppInstallPanel } from "./app/app-install-panel";
 import { LanguageCard } from "./app/language-card";
@@ -85,6 +97,7 @@ const SECTION_ICONS: Record<SettingsSectionId, typeof PlugIcon> = {
   ai: SparkIcon,
   knowledge: BookIcon,
   templates: TemplateIcon,
+  autoreply: AutoReplyIcon,
   team: TeamIcon,
   notifications: BellIcon,
   app: DeviceIcon,
@@ -104,6 +117,16 @@ type AccountSectionData = {
 type AppSectionData = {
   language: WorkspaceLanguage;
   canManageLanguage: boolean;
+};
+
+/**
+ * Раздел «Автоответы» показывает ту же панель, что и `/inbox?autoreply=1`,
+ * поэтому данные ей нужны те же: настройки, сценарии и активные шаблоны.
+ */
+type AutoReplySectionData = {
+  settings: AutoReplySettingsView;
+  scenarios: AutoReplyScenarioView[];
+  templates: AutoReplyTemplateOption[];
 };
 
 type AiSectionData = {
@@ -211,6 +234,47 @@ async function loadTemplatesSectionData(): Promise<TemplatesSectionData | null> 
     workspaceLanguage: defaultTemplateLanguage(
       await getWorkspaceLanguage(supabase, workspace.id),
     ),
+  };
+}
+
+/**
+ * Раздел «Автоответы» — те же данные, что грузит `/inbox?autoreply=1`
+ * (app/(app)/(shell)/inbox/page.tsx) для той же панели.
+ */
+async function loadAutoReplySectionData(): Promise<AutoReplySectionData | null> {
+  const user = await getAuthenticatedUser();
+
+  if (!user) {
+    return null;
+  }
+
+  const workspace = await getCurrentWorkspace(user.id);
+
+  if (!workspace) {
+    return null;
+  }
+
+  const supabase = await createServerSupabaseClient();
+  const [settings, scenarios, templates] = await Promise.all([
+    getAutoReplySettings(supabase, workspace.id),
+    listAutoReplyScenarios(supabase, workspace.id),
+    listActiveReplyTemplates(supabase, workspace.id, "message"),
+  ]);
+
+  return {
+    settings,
+    scenarios: scenarios.map((scenario) => ({
+      id: scenario.id,
+      name: scenario.name,
+      condition: scenario.condition,
+      examples: scenario.examples,
+      action: scenario.action,
+      replyTemplateId: scenario.reply_template_id,
+    })),
+    templates: templates.map((template) => ({
+      id: template.id,
+      name: template.name,
+    })),
   };
 }
 
@@ -344,6 +408,8 @@ export default async function SettingsPage({
   const templatesData =
     sectionId === "templates" ? await loadTemplatesSectionData() : null;
   const aiData = sectionId === "ai" ? await loadAiSectionData() : null;
+  const autoReplyData =
+    sectionId === "autoreply" ? await loadAutoReplySectionData() : null;
   const notificationsData =
     sectionId === "notifications" ? await loadNotificationsSectionData() : null;
   const accountData =
@@ -384,29 +450,54 @@ export default async function SettingsPage({
       </section>
 
       <section className={styles.paneDetail}>
-        <div className={styles.threadHead}>
-          <Link className={styles.backButton} href={PATHNAME} aria-label="Назад">
-            <BackIcon />
-          </Link>
-          <div className={styles.threadWho}>
-            <b>{section?.title}</b>
-          </div>
-        </div>
-        <div className={setStyles.pane}>
-          <div className={setStyles.inner}>
-            <SectionDetail
-              sectionId={sectionId}
-              accountData={accountData}
-              aiData={aiData}
-              appData={appData}
-              notificationsData={notificationsData}
-              channels={channels}
-              connectResult={connectResult}
-              knowledgeFiles={knowledgeFiles}
-              templatesData={templatesData}
+        {sectionId === "autoreply" ? (
+          autoReplyData ? (
+            // Панель рисует свою шапку и прокрутку сама, поэтому общий каркас
+            // раздела вокруг неё не нужен — иначе шапки задвоятся.
+            <AutoReplyPanel
+              settings={autoReplyData.settings}
+              scenarios={autoReplyData.scenarios}
+              templates={autoReplyData.templates}
+              backHref={PATHNAME}
             />
-          </div>
-        </div>
+          ) : (
+            <div className={setStyles.pane}>
+              <div className={setStyles.inner}>
+                <p className={setStyles.formError}>Автоответы недоступны.</p>
+              </div>
+            </div>
+          )
+        ) : (
+          <>
+            <div className={styles.threadHead}>
+              <Link
+                className={styles.backButton}
+                href={PATHNAME}
+                aria-label="Назад"
+              >
+                <BackIcon />
+              </Link>
+              <div className={styles.threadWho}>
+                <b>{section?.title}</b>
+              </div>
+            </div>
+            <div className={setStyles.pane}>
+              <div className={setStyles.inner}>
+                <SectionDetail
+                  sectionId={sectionId}
+                  accountData={accountData}
+                  aiData={aiData}
+                  appData={appData}
+                  notificationsData={notificationsData}
+                  channels={channels}
+                  connectResult={connectResult}
+                  knowledgeFiles={knowledgeFiles}
+                  templatesData={templatesData}
+                />
+              </div>
+            </div>
+          </>
+        )}
       </section>
     </div>
   );
@@ -454,6 +545,10 @@ function SectionDetail({
       );
     case "templates":
       return <TemplatesSection data={templatesData} />;
+    // «Автоответы» рисуются выше — своей панелью на всю детальную часть,
+    // без общей шапки раздела.
+    case "autoreply":
+      return null;
     case "team":
       return <TeamSection />;
     case "notifications":
