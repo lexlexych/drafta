@@ -44,7 +44,7 @@ cssclass: architecture-doc
 | 8 | [AI-подсистема](08-ai-subsystem.md) | Mistral (резерв — OpenRouter), маскирование идентификаторов, база знаний в промпте, контракт ответа, структура промпта |
 | 9 | [Категории и база знаний](09-categories.md) | Категория = запись базы знаний: markdown в промпт, названия обратно из ответа модели, фильтр бесед |
 | 10 | [UI и навигация](10-ui.md) | Десктопное меню и мобильная панель, счётчики новых, каналы-источники, разделы настроек |
-| 11 | [Realtime, Web Push, PWA](11-realtime-pwa.md) | Realtime-подписки, режимы push (мгновенно/дайджест), ограничения iOS |
+| 11 | [Realtime, Web Push, PWA](11-realtime-pwa.md) | Realtime-подписки, push на каждое входящее, ограничения iOS |
 
 ### Часть III. Инженерная практика
 
@@ -97,9 +97,9 @@ cssclass: architecture-doc
 [контракт ответа `CATEGORIES:`](08-ai-subsystem.md#контракт-ответа-categories) ·
 [настройки и чипы в UI](10-ui.md#разделы-настроек)
 
-**Push-уведомления** — [режимы «мгновенно» и «дайджест»](11-realtime-pwa.md#частота-уведомлений--настройка-пользователя) ·
-[`notification_settings`](06-data-model.md#notification_settings) ·
-[функции `send-push` и `push-digest`](07-data-flows.md#66-полный-список-inngest-функций)
+**Push-уведомления** — [push на каждое входящее](11-realtime-pwa.md#частота-уведомлений) ·
+[`push_subscriptions`](06-data-model.md#push_subscriptions) ·
+[функция `send-push`](07-data-flows.md#66-полный-список-inngest-функций)
 
 **Регион ЕС** — [Supabase Frankfurt и Vercel fra1](03-stack.md) ·
 [Mistral как европейский LLM](08-ai-subsystem.md) ·

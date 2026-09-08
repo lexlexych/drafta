@@ -90,60 +90,21 @@ function mapRecord(row: Record<string, unknown>): PushSubscriptionRecord {
 }
 
 /**
- * Подписки получателей мгновенных push в workspace: пользователи в режиме
- * `instant` **или** без строки настроек (дефолт — instant, §11). Admin-клиент
+ * Все подписки workspace — получатели push о новом входящем. Отдельного режима
+ * частоты у контура нет: push приходит на каждое входящее (§11). Admin-клиент
  * (обходит RLS) — вызывается только из Inngest-функции `send-push`.
  */
-export async function listInstantSubscriptions(
+export async function listWorkspaceSubscriptions(
   workspaceId: string,
-): Promise<PushSubscriptionRecord[]> {
-  const supabase = createAdminSupabaseClient();
-
-  const [{ data: subscriptions, error: subsError }, { data: settings, error: settingsError }] =
-    await Promise.all([
-      supabase
-        .from("push_subscriptions")
-        .select("id, user_id, endpoint, p256dh, auth_key")
-        .eq("workspace_id", workspaceId),
-      supabase
-        .from("notification_settings")
-        .select("user_id, mode")
-        .eq("workspace_id", workspaceId),
-    ]);
-
-  if (subsError) {
-    throw new Error(`Loading push subscriptions failed (${subsError.code ?? ""}).`);
-  }
-  if (settingsError) {
-    throw new Error(`Loading notification settings failed (${settingsError.code ?? ""}).`);
-  }
-
-  // По умолчанию instant; в digest-режиме мгновенные push не шлём (§11).
-  const digestUsers = new Set(
-    ((settings ?? []) as { user_id: string; mode: string }[])
-      .filter((row) => row.mode === "digest")
-      .map((row) => row.user_id),
-  );
-
-  return ((subscriptions ?? []) as Record<string, unknown>[])
-    .map(mapRecord)
-    .filter((record) => !digestUsers.has(record.userId));
-}
-
-/** Все подписки конкретного пользователя в workspace — для дайджеста. */
-export async function listUserSubscriptions(
-  workspaceId: string,
-  userId: string,
 ): Promise<PushSubscriptionRecord[]> {
   const supabase = createAdminSupabaseClient();
   const { data, error } = await supabase
     .from("push_subscriptions")
     .select("id, user_id, endpoint, p256dh, auth_key")
-    .eq("workspace_id", workspaceId)
-    .eq("user_id", userId);
+    .eq("workspace_id", workspaceId);
 
   if (error) {
-    throw new Error(`Loading user push subscriptions failed (${error.code ?? ""}).`);
+    throw new Error(`Loading push subscriptions failed (${error.code ?? ""}).`);
   }
 
   return ((data ?? []) as Record<string, unknown>[]).map(mapRecord);

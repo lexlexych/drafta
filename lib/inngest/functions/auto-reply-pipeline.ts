@@ -126,8 +126,7 @@ export type ClassificationResult = {
  * Прошлый отправленный автоответ этой беседы — основание не повторяться.
  *
  * `ageMs` считается внутри шага, а не в теле пайплайна: шаг мемоизируется,
- * поэтому ретрай через час не переоценит окно заново (тот же приём, что
- * `capture-now` в `./push-digest-pipeline.ts`).
+ * поэтому ретрай через час не переоценит окно заново.
  */
 export type PreviousAutoReplySnapshot = {
   scenarioId: string | null;

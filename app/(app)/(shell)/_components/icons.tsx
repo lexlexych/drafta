@@ -141,16 +141,6 @@ export function TeamIcon(props: IconProps) {
   );
 }
 
-/** Уведомления: колокольчик. */
-export function BellIcon(props: IconProps) {
-  return (
-    <Icon {...stroke} strokeLinecap="round" strokeLinejoin="round" {...props}>
-      <path d="M6.5 10a5.5 5.5 0 0 1 11 0c0 3.2.7 5 1.8 6.5H4.7C5.8 15 6.5 13.2 6.5 10Z" />
-      <path d="M10 19.5a2.2 2.2 0 0 0 4 0" />
-    </Icon>
-  );
-}
-
 /** Приложение: телефон со стрелкой установки. */
 export function DeviceIcon(props: IconProps) {
   return (

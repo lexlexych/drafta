@@ -41,7 +41,7 @@ app/
 ├── sw.ts                         # Serwist
 lib/
 ├── channels/                     # types, registry, zernio/, postmark/, meta/(будущее)
-├── inngest/functions/            # generate-draft, send-message, send-push, push-digest, ...
+├── inngest/functions/            # generate-draft, send-message, send-push, auto-reply, ...
 ├── ai/                           # клиент LLM, сборка промпта и разбор ответа, masking.ts, бюджет базы знаний
 └── db/                           # типизированные запросы; клиенты supabase (publishable/secret)
 supabase/migrations/              # вся схема и RLS — только миграциями

@@ -65,7 +65,6 @@ export const publicClientTables = [
   "reply_templates",
   "webhook_events",
   "push_subscriptions",
-  "notification_settings",
   "ai_settings",
   "ai_usage",
   "ai_request_log",

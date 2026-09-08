@@ -17,10 +17,6 @@ import {
   listAutoReplyScenarios,
 } from "@/lib/db/auto-reply";
 import {
-  getNotificationSettings,
-  type NotificationSettingsView,
-} from "@/lib/db/notification-settings";
-import {
   listKnowledgeFiles,
   type KnowledgeFileRow,
 } from "@/lib/db/knowledge-base";
@@ -48,7 +44,6 @@ import {
   AccountIcon,
   AutoReplyIcon,
   BackIcon,
-  BellIcon,
   BookIcon,
   DeviceIcon,
   PlugIcon,
@@ -84,7 +79,7 @@ import {
 import { AiSettingsForm } from "./ai/ai-settings-form";
 import { AppInstallPanel } from "./app/app-install-panel";
 import { LanguageCard } from "./app/language-card";
-import { NotificationsForm } from "./notifications/notifications-form";
+import { PushCard } from "./app/push-card";
 import setStyles from "./settings.module.css";
 import styles from "../_components/panes.module.css";
 import uiStyles from "../_components/ui.module.css";
@@ -99,7 +94,6 @@ const SECTION_ICONS: Record<SettingsSectionId, typeof PlugIcon> = {
   templates: TemplateIcon,
   autoreply: AutoReplyIcon,
   team: TeamIcon,
-  notifications: BellIcon,
   app: DeviceIcon,
   account: AccountIcon,
 };
@@ -278,24 +272,6 @@ async function loadAutoReplySectionData(): Promise<AutoReplySectionData | null> 
   };
 }
 
-async function loadNotificationsSectionData(): Promise<NotificationSettingsView | null> {
-  const user = await getAuthenticatedUser();
-
-  if (!user) {
-    return null;
-  }
-
-  const workspace = await getCurrentWorkspace(user.id);
-
-  if (!workspace) {
-    return null;
-  }
-
-  const supabase = await createServerSupabaseClient();
-
-  return getNotificationSettings(supabase, workspace.id, user.id);
-}
-
 /**
  * Раздел «Аккаунт»: те же данные, что уходят в меню пользователя левого меню —
  * список workspace'ов пользователя и текущий workspace.
@@ -410,8 +386,6 @@ export default async function SettingsPage({
   const aiData = sectionId === "ai" ? await loadAiSectionData() : null;
   const autoReplyData =
     sectionId === "autoreply" ? await loadAutoReplySectionData() : null;
-  const notificationsData =
-    sectionId === "notifications" ? await loadNotificationsSectionData() : null;
   const accountData =
     sectionId === "account" ? await loadAccountSectionData() : null;
   const appData = sectionId === "app" ? await loadAppSectionData() : null;
@@ -488,7 +462,6 @@ export default async function SettingsPage({
                   accountData={accountData}
                   aiData={aiData}
                   appData={appData}
-                  notificationsData={notificationsData}
                   channels={channels}
                   connectResult={connectResult}
                   knowledgeFiles={knowledgeFiles}
@@ -508,7 +481,6 @@ function SectionDetail({
   accountData,
   aiData,
   appData,
-  notificationsData,
   channels,
   connectResult,
   knowledgeFiles,
@@ -518,7 +490,6 @@ function SectionDetail({
   accountData: AccountSectionData | null;
   aiData: AiSectionData | null;
   appData: AppSectionData | null;
-  notificationsData: NotificationSettingsView | null;
   channels: ChannelConnectionListItem[] | null;
   connectResult: ChannelConnectResult | null;
   knowledgeFiles: KnowledgeFileListItem[] | null;
@@ -551,8 +522,6 @@ function SectionDetail({
       return null;
     case "team":
       return <TeamSection />;
-    case "notifications":
-      return <NotificationsSection data={notificationsData} />;
     case "app":
       return <AppSection data={appData} />;
     case "account":
@@ -673,34 +642,6 @@ function TeamSection() {
   );
 }
 
-function NotificationsSection({
-  data,
-}: {
-  data: NotificationSettingsView | null;
-}) {
-  if (!data) {
-    return (
-      <p className={setStyles.formError}>Настройки уведомлений недоступны.</p>
-    );
-  }
-
-  return (
-    <>
-      <p className={setStyles.description}>
-        Push приходят на устройства, где включены уведомления. В режиме
-        «дайджест» вместо мгновенных push приходит сводка о новых входящих по
-        заданному интервалу.
-      </p>
-      <NotificationsForm
-        initialValue={{
-          mode: data.mode,
-          digestIntervalMinutes: data.digestIntervalMinutes,
-        }}
-      />
-    </>
-  );
-}
-
 function AppSection({ data }: { data: AppSectionData | null }) {
   return (
     <>
@@ -709,6 +650,7 @@ function AppSection({ data }: { data: AppSectionData | null }) {
         как обычное — в отдельном окне, с поддержкой push-уведомлений.
       </p>
       <AppInstallPanel />
+      <PushCard />
       {data ? (
         <LanguageCard
           initialLanguage={data.language}

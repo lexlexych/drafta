@@ -42,7 +42,6 @@ export type DraftStatus =
   | "discarded"
   | "superseded";
 
-export type NotificationMode = "instant" | "digest";
 
 export type InvitationStatus = "pending" | "accepted" | "expired";
 
@@ -208,15 +207,6 @@ export type AiSettings = {
   auto_draft_comments: boolean;
 };
 
-/** `notification_settings` — частота push на пару пользователь+workspace. */
-export type NotificationSettings = {
-  workspace_id: string;
-  user_id: string;
-  mode: NotificationMode;
-  digest_interval_minutes: number;
-  last_digest_at: string | null;
-};
-
 /** Полный набор mock-данных одного workspace. */
 export type MockWorkspaceData = {
   now: string;
@@ -232,5 +222,4 @@ export type MockWorkspaceData = {
   messages: Message[];
   drafts: Draft[];
   aiSettings: AiSettings;
-  notificationSettings: NotificationSettings;
 };

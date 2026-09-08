@@ -27,7 +27,6 @@ import type {
   DraftStatus,
   Invitation,
   Message,
-  NotificationSettings,
   Platform,
   Workspace,
   WorkspaceMember,
@@ -213,7 +212,6 @@ export type SettingsSectionId =
   | "templates"
   | "autoreply"
   | "team"
-  | "notifications"
   | "app"
   | "account";
 
@@ -932,11 +930,10 @@ export const SETTINGS_SECTIONS: SettingsSectionView[] = [
     description: "Участники и приглашения",
     hidden: true,
   },
-  { id: "notifications", title: "Уведомления", description: "Частота push" },
   {
     id: "app",
     title: "Приложение",
-    description: "Установка на устройство и язык",
+    description: "Установка, push-уведомления и язык",
   },
   {
     id: "account",
@@ -958,10 +955,6 @@ export function getSettingsChannels(): SettingsChannelRowView[] {
       channel.status === "connected" ? "подключён" : "отключён"
     } · через ${channel.provider === "zernio" ? "Zernio" : channel.provider}`,
   }));
-}
-
-export function getNotificationSettings(): NotificationSettings {
-  return data.notificationSettings;
 }
 
 export function getSettingsTeam(): SettingsTeamRowView[] {

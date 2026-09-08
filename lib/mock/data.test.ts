@@ -32,7 +32,6 @@ describe("mock data referential integrity", () => {
       ...data.messages,
       ...data.drafts,
       data.aiSettings,
-      data.notificationSettings,
     ];
 
     rows.forEach((row) => {

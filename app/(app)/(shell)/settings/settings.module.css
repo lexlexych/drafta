@@ -305,21 +305,6 @@
   flex-wrap: wrap;
 }
 
-.aiDebounceField {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.aiDebounceField input {
-  width: min(140px, 100%);
-}
-
-.aiDebounceField span {
-  color: var(--ink3);
-  font-size: 12.5px;
-}
-
 .aiFormFooter {
   display: flex;
   align-items: center;

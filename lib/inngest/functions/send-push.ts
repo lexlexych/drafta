@@ -25,10 +25,11 @@ function stepAdapter(step: unknown): SendPushSteps {
 }
 
 /**
- * `send-push` (docs/architecture/11-realtime-pwa.md#web-push): instant Web Push
- * for users in the «каждое входящее» mode. Runs through Inngest with retries
- * (vibecoding rule 8). A missed push is not fatal — the digest covers it — so
- * there is no failure-marking onFailure like send-message has.
+ * `send-push` (docs/architecture/11-realtime-pwa.md#web-push): Web Push on every
+ * incoming message — the contour has no other cadence. Runs through Inngest with
+ * retries (vibecoding rule 8). A missed push is not fatal (the message is in the
+ * inbox either way), so there is no failure-marking onFailure like send-message
+ * has.
  */
 export const sendPush = inngest.createFunction(
   {

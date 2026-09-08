@@ -6,7 +6,7 @@ import webpush from "web-push";
  * Обёртка над библиотекой `web-push` (docs/architecture/11-realtime-pwa.md#web-push).
  * VAPID-ключи — серверные секреты (`VAPID_PRIVATE_KEY` только на сервере,
  * vibecoding rule 5); публичный ключ дублируется в `NEXT_PUBLIC_VAPID_PUBLIC_KEY`
- * для браузера. Отправка идёт только из Inngest-функций `send-push`/`push-digest`
+ * для браузера. Отправка идёт только из Inngest-функции `send-push`
  * (rule 8), не из запросов.
  */
 

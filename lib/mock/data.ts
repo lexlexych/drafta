@@ -1024,14 +1024,6 @@ export const mockWorkspaceData: MockWorkspaceData = {
     auto_draft_dm: true,
     auto_draft_comments: true,
   },
-
-  notificationSettings: {
-    workspace_id: WORKSPACE_ID,
-    user_id: CURRENT_USER_ID,
-    mode: "digest",
-    digest_interval_minutes: 30,
-    last_digest_at: "2026-07-19T14:30:00.000Z",
-  },
 };
 
 /**

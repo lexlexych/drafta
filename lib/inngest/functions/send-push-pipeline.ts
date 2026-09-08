@@ -2,7 +2,7 @@ import "server-only";
 
 import { createAdminSupabaseClient } from "@/lib/db/admin";
 import {
-  listInstantSubscriptions,
+  listWorkspaceSubscriptions,
   pruneSubscription,
   type PushSubscriptionRecord,
 } from "@/lib/db/push-subscriptions";
@@ -92,7 +92,7 @@ async function loadContext(
     return { status: "skip", reason: "message-not-found" };
   }
 
-  const recipients = await listInstantSubscriptions(input.workspaceId);
+  const recipients = await listWorkspaceSubscriptions(input.workspaceId);
   if (recipients.length === 0) {
     return { status: "skip", reason: "no-recipients" };
   }
@@ -155,10 +155,10 @@ async function loadContext(
  *
  * It announces the arrival itself, not a draft: drafts are generated on request
  * from the thread composer, so there is nothing ready to announce when the
- * message lands. Instant pushes stay a direct-message thing — a comment draft
- * only ever exists because the user asked for it while looking at the post.
+ * message lands. Pushes stay a direct-message thing — a comment draft only
+ * ever exists because the user asked for it while looking at the post.
  */
-export function buildInstantPayload(
+export function buildPushPayload(
   context: LoadedPushContext,
 ): WebPushPayload {
   return {
@@ -178,7 +178,7 @@ export const sendPushDependencies: SendPushDependencies = {
 
 /**
  * `send-push` pipeline (docs/architecture/11-realtime-pwa.md#web-push): load
- * names/channel + instant recipients → send one push each → prune dead
+ * names/channel + workspace recipients → send one push each → prune dead
  * subscriptions (404/410). Sends run through Inngest with retries (vibecoding
  * rule 8). A dead-subscription prune is not an error; a genuine send error is
  * left to surface so the function's retry can re-attempt.
@@ -195,7 +195,7 @@ export async function runSendPushPipeline(
     return { status: "skipped", reason: loaded.reason };
   }
 
-  const payload = buildInstantPayload(loaded.context);
+  const payload = buildPushPayload(loaded.context);
 
   const outcome = await steps.run("send", async () => {
     let delivered = 0;
@@ -215,8 +215,8 @@ export async function runSendPushPipeline(
         await dependencies.prune(recipient.id);
         pruned += 1;
       } else {
-        // Log and continue: one bad endpoint must not block the rest. The
-        // digest still covers anyone missed here.
+        // Log and continue: one bad endpoint must not block the rest — the
+        // remaining devices still get the push.
         console.error("[send-push] delivery error", {
           endpoint: recipient.endpoint,
           message: result.message,
