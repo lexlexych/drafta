@@ -25,7 +25,7 @@ import { Spinner } from "./activity";
 import {
   AutoReplyIcon,
   PictureIcon,
-  RefreshIcon,
+  RegenerateIcon,
   TranslateIcon,
   UndoIcon,
 } from "./icons";
@@ -141,7 +141,7 @@ export function MessageBubble({
             aria-label="Перевести заново"
             title="Перевести заново"
           >
-            {isTranslating ? <Spinner size={12} /> : <RefreshIcon />}
+            {isTranslating ? <Spinner size={12} /> : <RegenerateIcon />}
           </button>
         ) : null}
         {canTranslate ? (

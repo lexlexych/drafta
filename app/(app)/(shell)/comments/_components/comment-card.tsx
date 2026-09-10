@@ -16,7 +16,7 @@ import { LinkActivity, Spinner } from "../../_components/activity";
 import { Avatar } from "../../_components/avatar";
 import {
   CheckIcon,
-  RefreshIcon,
+  RegenerateIcon,
   TranslateIcon,
   UndoIcon,
 } from "../../_components/icons";
@@ -220,7 +220,7 @@ export function CommentCard({
               aria-label="Перевести заново"
               title="Перевести заново"
             >
-              {isTranslating ? <Spinner size={12} /> : <RefreshIcon />}
+              {isTranslating ? <Spinner size={12} /> : <RegenerateIcon />}
             </button>
           ) : null}
           {canTranslate ? (
