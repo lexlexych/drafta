@@ -28,7 +28,10 @@ import {
 } from "react";
 
 import type { ActiveDraftView } from "@/lib/drafts/types";
-import type { TemplateLanguage } from "@/lib/i18n/template-languages";
+import {
+  templateLanguageLabel,
+  type TemplateLanguage,
+} from "@/lib/i18n/template-languages";
 import {
   DRAFT_REALTIME_EVENT,
   reduceActiveDraft,
@@ -40,6 +43,7 @@ import {
   discardDraftAction,
   generateDraftAction,
   sendManualMessageAction,
+  translateDraftAction,
 } from "../inbox/actions";
 import { Spinner } from "./activity";
 import {
@@ -48,6 +52,8 @@ import {
   SparkIcon,
   StopIcon,
   TrashIcon,
+  TranslateIcon,
+  UndoIcon,
   WarningIcon,
 } from "./icons";
 import { showToast } from "./stub";
@@ -114,6 +120,15 @@ export function Composer({
   const [value, setValue] = useState<string | null>(null);
   const [editedDraftId, setEditedDraftId] = useState<string | null>(null);
   const [isSending, setIsSending] = useState(false);
+  const [isTranslating, setIsTranslating] = useState(false);
+  const [translation, setTranslation] = useState<{
+    key: string;
+    originalText: string;
+    text: string;
+    sourceLanguage: string | null;
+    visible: boolean;
+  } | null>(null);
+  const translationKeyRef = useRef<string | null>(null);
   // Оптимистичная блокировка: значок нажат, строка `generating` из базы ещё не
   // приехала, но поле уже не должно принимать ввод.
   const [isRequesting, setIsRequesting] = useState(false);
@@ -124,7 +139,7 @@ export function Composer({
     latestDraft && latestDraft.id !== dismissedDraftId ? latestDraft : null;
   const isGenerating =
     activeDraft?.status === "generating" || (isRequesting && !activeDraft);
-  const isLocked = isGenerating || isSending;
+  const isLocked = isGenerating || isSending || isTranslating;
 
   // Черновик, готовый лечь в поле. Отказ модели текста не даёт — там оператор
   // пишет сам, поэтому поле остаётся пустым.
@@ -134,13 +149,67 @@ export function Composer({
     !activeDraft.manualReviewReason
       ? activeDraft
       : null;
-  const text = value ?? readyDraft?.text ?? "";
+  const originalText = value ?? readyDraft?.text ?? "";
+  const translationKey = readyDraft
+    ? JSON.stringify([
+        workspaceId,
+        conversationId,
+        readyDraft.id,
+        readyDraft.updatedAt,
+        readyDraft.text,
+        workspaceLanguage,
+      ])
+    : null;
+  const currentTranslation =
+    translation?.key === translationKey && translation?.originalText === originalText
+      ? translation
+      : null;
+  const text = currentTranslation?.visible ? currentTranslation.text : originalText;
+  const originLabel = currentTranslation?.sourceLanguage
+    ? templateLanguageLabel(currentTranslation.sourceLanguage)
+    : "Оригинал";
   // Отправка текста, пришедшего из черновика, закрывает его как использованный.
   const sourceDraftId = value === null ? (readyDraft?.id ?? null) : editedDraftId;
 
   const clearField = () => {
     setValue(null);
     setEditedDraftId(null);
+    setTranslation(null);
+  };
+
+  useLayoutEffect(() => {
+    translationKeyRef.current = translationKey;
+    return () => {
+      translationKeyRef.current = null;
+    };
+  }, [translationKey]);
+
+  const toggleTranslation = async () => {
+    if (isLocked || !readyDraft || !translationKey || !originalText.trim()) return;
+    if (currentTranslation) {
+      setTranslation({ ...currentTranslation, visible: !currentTranslation.visible });
+      return;
+    }
+    setIsTranslating(true);
+    try {
+      const result = await translateDraftAction(
+        conversationId,
+        readyDraft.id,
+        originalText,
+      );
+      if (translationKeyRef.current !== translationKey) return;
+      if (!result.ok) {
+        showToast(result.error);
+        return;
+      }
+      setTranslation({ ...result, key: translationKey, originalText, visible: true });
+    } catch {
+      if (translationKeyRef.current === translationKey) {
+        showToast("Не удалось перевести — попробуйте ещё раз.");
+      }
+    } finally {
+      setIsTranslating(false);
+    }
   };
 
   // Поле растёт по содержимому до половины экрана, дальше скроллится внутри.
@@ -333,6 +402,14 @@ export function Composer({
           onCancel={() => void cancelGeneration()}
           onRegenerate={() => void generate()}
           onDiscard={() => void discard()}
+          onTranslate={
+            readyDraft && originalText.trim()
+              ? () => void toggleTranslation()
+              : undefined
+          }
+          isTranslating={isTranslating}
+          originLabel={currentTranslation?.visible ? originLabel : null}
+          disabled={isLocked}
         />
       ) : null}
 
@@ -371,6 +448,11 @@ export function Composer({
           value={text}
           disabled={isLocked}
           onChange={(event) => {
+            if (currentTranslation?.visible) {
+              setTranslation({ ...currentTranslation, text: event.target.value });
+              return;
+            }
+            setTranslation(null);
             // Момент, когда текст черновика становится текстом оператора.
             if (value === null) {
               setEditedDraftId(readyDraft?.id ?? null);
@@ -404,12 +486,25 @@ function DraftNote({
   onCancel,
   onRegenerate,
   onDiscard,
+  onTranslate,
+  isTranslating,
+  originLabel,
+  disabled,
 }: {
   draft: ActiveDraftView | null;
   onCancel: () => void;
   onRegenerate: () => void;
   onDiscard: () => void;
+  onTranslate?: () => void;
+  isTranslating: boolean;
+  originLabel: string | null;
+  disabled: boolean;
 }) {
+  const translateLabel = isTranslating
+    ? "Переводим черновик…"
+    : originLabel
+      ? `Показать оригинал — ${originLabel}`
+      : "Перевести черновик";
   return (
     <section className={draftStyles.note} aria-live="polite">
       <div className={draftStyles.noteBody}>
@@ -446,12 +541,33 @@ function DraftNote({
       <div className={draftStyles.noteActions}>
         {draft ? (
           <>
+            {onTranslate ? (
+              <button
+                type="button"
+                className={`${draftStyles.noteButton} ${draftStyles.translationButton}`}
+                aria-label={translateLabel}
+                title={translateLabel}
+                aria-busy={isTranslating}
+                disabled={disabled}
+                onClick={onTranslate}
+              >
+                {isTranslating ? (
+                  <Spinner size={14} />
+                ) : originLabel ? (
+                  <UndoIcon />
+                ) : (
+                  <TranslateIcon />
+                )}
+                {originLabel ? <span>{originLabel}</span> : null}
+              </button>
+            ) : null}
             <button
               type="button"
               className={draftStyles.noteButton}
               aria-label="Сгенерировать заново"
               title="Сгенерировать заново"
               onClick={onRegenerate}
+              disabled={disabled}
             >
               <RegenerateIcon />
             </button>
@@ -462,6 +578,7 @@ function DraftNote({
                 aria-label="Удалить черновик"
                 title="Удалить черновик"
                 onClick={onDiscard}
+                disabled={disabled}
               >
                 <TrashIcon />
               </button>

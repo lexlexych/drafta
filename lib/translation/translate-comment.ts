@@ -3,24 +3,13 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import {
-  AiConfigurationError,
-  AiProviderError,
-  buildTranslationPrompt,
-  generateCompletionWithUsage,
-  maskText,
-  parseTranslationCompletion,
-  unmaskText,
-} from "@/lib/ai";
-import { recordAiRequest } from "@/lib/db/ai-request-log";
-import { recordAiUsage } from "@/lib/db/ai-usage";
-import {
   getCommentTranslation,
   saveCommentTranslation,
   type CommentTranslationView,
 } from "@/lib/db/comment-translations";
-import { templateLanguageLabel } from "@/lib/i18n/template-languages";
 
-import { TRANSLATION_MAX_SOURCE_LENGTH, completionBudget } from "./budget";
+import { TRANSLATION_MAX_SOURCE_LENGTH } from "./budget";
+import { translateText } from "./translate-text";
 
 /**
  * Перевод одного комментария на язык workspace: кэш → маскирование → LLM →
@@ -72,6 +61,7 @@ export async function translateComment(
   postId: string,
   commentId: string,
   targetLanguage: string,
+  forceRefresh = false,
 ): Promise<TranslateCommentResult> {
   const comment = await loadComment(supabase, workspaceId, postId, commentId);
 
@@ -89,99 +79,33 @@ export async function translateComment(
     return { ok: false, error: "Комментарий слишком длинный для перевода." };
   }
 
-  const cached = await getCommentTranslation(
-    supabase,
-    workspaceId,
-    commentId,
-    targetLanguage,
-  );
-
-  if (cached) {
-    return { ok: true, ...cached };
-  }
-
-  // Правило 9: наружу уходит только замаскированный текст, и восстановить его
-  // можно лишь по этой карте плейсхолдеров.
-  const masked = maskText(source);
-  const prompt = buildTranslationPrompt({
-    maskedText: masked.maskedText,
-    targetLanguage,
-    targetLanguageName: templateLanguageLabel(targetLanguage),
-  });
-
-  let completion;
-
-  try {
-    completion = await generateCompletionWithUsage(prompt, {
-      temperature: 0,
-      maxTokens: completionBudget(source.length),
-    });
-  } catch (error) {
-    if (error instanceof AiConfigurationError) {
-      console.error("[translation] AI provider is not configured", error);
-      return { ok: false, error: "Перевод недоступен: AI-провайдер не настроен." };
-    }
-
-    if (error instanceof AiProviderError) {
-      // Учёт ведём и на провале — иначе неудачные вызовы исчезают из журнала
-      // ровно тогда, когда он нужнее всего (см. draft-pipeline.ts).
-      await recordAiRequest({
-        workspaceId,
-        operation: "translation",
-        surface: "comment",
-        provider: error.provider,
-        model: error.model ?? "unknown",
-        exchange: error.exchange ?? null,
-        usage: null,
-        errorCode: error.code,
-      });
-      console.error("[translation] provider call failed", error);
-      return { ok: false, error: "Не удалось перевести — попробуйте ещё раз." };
-    }
-
-    console.error("[translation] unexpected failure", error);
-    return { ok: false, error: "Не удалось перевести — попробуйте ещё раз." };
-  }
-
-  await Promise.all([
-    recordAiUsage({
+  if (!forceRefresh) {
+    const cached = await getCommentTranslation(
+      supabase,
       workspaceId,
-      operation: "translation",
-      surface: "comment",
-      provider: completion.provider,
-      model: completion.model,
-      usage: completion.usage,
-    }),
-    recordAiRequest({
-      workspaceId,
-      operation: "translation",
-      surface: "comment",
-      provider: completion.provider,
-      model: completion.model,
-      exchange: completion.exchange,
-      usage: completion.usage,
-    }),
-  ]);
+      commentId,
+      targetLanguage,
+    );
 
-  const parsed = parseTranslationCompletion(completion.text);
-  const text = unmaskText(parsed.text, masked.entities).trim();
-
-  if (text.length === 0) {
-    // Модель прислала один заголовок `SOURCE:` и ничего под ним.
-    console.error("[translation] completion carried no translated text");
-    return { ok: false, error: "Не удалось перевести — попробуйте ещё раз." };
+    if (cached) {
+      return { ok: true, ...cached };
+    }
   }
+
+  const result = await translateText(workspaceId, source, targetLanguage, "comment");
+  if (!result.ok) return result;
+  const { text, sourceLanguage, provider, model } = result;
 
   await saveCommentTranslation(supabase, {
     workspaceId,
     postId,
     commentId,
     targetLanguage,
-    sourceLanguage: parsed.sourceLanguage,
+    sourceLanguage,
     text,
-    provider: completion.provider,
-    model: completion.model,
+    provider,
+    model,
   });
 
-  return { ok: true, text, sourceLanguage: parsed.sourceLanguage };
+  return { ok: true, text, sourceLanguage };
 }

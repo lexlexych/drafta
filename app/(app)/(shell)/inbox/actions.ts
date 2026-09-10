@@ -28,6 +28,7 @@ import {
 import { createServerSupabaseClient } from "@/lib/db/server";
 import { getWorkspaceLanguage } from "@/lib/db/workspace-language";
 import { translateMessage } from "@/lib/translation/translate-message";
+import { translateDraft } from "@/lib/translation/translate-draft";
 import {
   getAuthenticatedUser,
   getCurrentWorkspace,
@@ -438,6 +439,7 @@ export async function cancelDraftGenerationAction(conversationId: string) {
 export async function translateMessageAction(
   conversationId: string,
   messageId: string,
+  forceRefresh = false,
 ) {
   const context = await getDraftActionContext();
 
@@ -455,6 +457,30 @@ export async function translateMessageAction(
     context.workspace.id,
     conversationId,
     messageId,
+    targetLanguage,
+    forceRefresh === true,
+  );
+}
+
+export async function translateDraftAction(
+  conversationId: string,
+  draftId: string,
+  text: string,
+) {
+  const context = await getDraftActionContext();
+  if ("error" in context) {
+    return { ok: false as const, error: context.error };
+  }
+  const targetLanguage = await getWorkspaceLanguage(
+    context.supabase,
+    context.workspace.id,
+  );
+  return translateDraft(
+    context.supabase,
+    context.workspace.id,
+    conversationId,
+    draftId,
+    text,
     targetLanguage,
   );
 }

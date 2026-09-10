@@ -201,6 +201,7 @@ export async function markPostReadAction(
 export async function translateCommentAction(
   postId: string,
   commentId: string,
+  forceRefresh = false,
 ): Promise<TranslateCommentResult> {
   const context = await getActionContext();
 
@@ -219,6 +220,7 @@ export async function translateCommentAction(
     postId,
     commentId,
     targetLanguage,
+    forceRefresh === true,
   );
 }
 

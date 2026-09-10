@@ -25,6 +25,7 @@ vi.mock("../inbox/actions", () => ({
   discardDraftAction: vi.fn(),
   generateDraftAction: vi.fn(),
   sendManualMessageAction: vi.fn(),
+  translateDraftAction: vi.fn(),
 }));
 
 const {
@@ -32,6 +33,7 @@ const {
   discardDraftAction,
   generateDraftAction,
   sendManualMessageAction,
+  translateDraftAction,
 } = await import("../inbox/actions");
 
 const WORKSPACE_ID = "workspace-1";
@@ -118,6 +120,60 @@ beforeEach(() => {
 });
 
 describe("Composer", () => {
+  it("translates the draft, restores the original and reuses the translation", async () => {
+    vi.mocked(translateDraftAction).mockResolvedValue({ ok: true, text: "Guten Tag! Lieferung morgen.", sourceLanguage: "ru" });
+    renderComposer(draft());
+    fireEvent.click(screen.getByRole("button", { name: "Перевести черновик" }));
+    await waitFor(() => expect(field().value).toBe("Guten Tag! Lieferung morgen."));
+    expect(translateDraftAction).toHaveBeenCalledWith(CONVERSATION_ID, "draft-1", "Здравствуйте! Доставим завтра.");
+    fireEvent.click(screen.getByRole("button", { name: "Показать оригинал — Русский" }));
+    expect(field().value).toBe("Здравствуйте! Доставим завтра.");
+    fireEvent.click(screen.getByRole("button", { name: "Перевести черновик" }));
+    expect(field().value).toBe("Guten Tag! Lieferung morgen.");
+    expect(translateDraftAction).toHaveBeenCalledTimes(1);
+  });
+
+  it("preserves edits in both versions and sends the visible translation with its draft id", async () => {
+    vi.mocked(translateDraftAction).mockResolvedValue({ ok: true, text: "Übersetzung", sourceLanguage: "ru" });
+    vi.mocked(sendManualMessageAction).mockResolvedValue({ ok: true, messageId: "message-1" });
+    renderComposer(draft());
+    fireEvent.change(field(), { target: { value: "Изменённый оригинал" } });
+    fireEvent.click(screen.getByRole("button", { name: "Перевести черновик" }));
+    await waitFor(() => expect(field().value).toBe("Übersetzung"));
+    fireEvent.change(field(), { target: { value: "Bearbeitete Übersetzung" } });
+    fireEvent.click(screen.getByRole("button", { name: "Показать оригинал — Русский" }));
+    expect(field().value).toBe("Изменённый оригинал");
+    fireEvent.click(screen.getByRole("button", { name: "Перевести черновик" }));
+    fireEvent.click(screen.getByRole("button", { name: "Отправить" }));
+    await waitFor(() => expect(sendManualMessageAction).toHaveBeenCalledWith(CONVERSATION_ID, "Bearbeitete Übersetzung", "draft-1"));
+  });
+
+  it("unlocks after a network failure and keeps the original available for retry", async () => {
+    vi.mocked(translateDraftAction).mockRejectedValueOnce(new Error("Network error"));
+    renderComposer(draft());
+    fireEvent.click(screen.getByRole("button", { name: "Перевести черновик" }));
+    expect(field().disabled).toBe(true);
+    await waitFor(() => expect(field().disabled).toBe(false));
+    expect(field().value).toBe("Здравствуйте! Доставим завтра.");
+    expect(screen.getByRole("button", { name: "Перевести черновик" })).toBeDefined();
+  });
+
+  it("ignores a translation that arrives after a newer draft", async () => {
+    let resolve!: (result: Awaited<ReturnType<typeof translateDraftAction>>) => void;
+    vi.mocked(translateDraftAction).mockReturnValue(new Promise((done) => { resolve = done; }));
+    renderComposer(draft());
+    fireEvent.click(screen.getByRole("button", { name: "Перевести черновик" }));
+    emitDraftRow({ id: "draft-2", status: "ready", text: "Новый черновик", created_at: "2026-08-26T11:00:00.000Z", updated_at: "2026-08-26T11:00:05.000Z" });
+    await act(async () => { resolve({ ok: true, text: "Stale translation", sourceLanguage: "ru" }); });
+    expect(field().value).toBe("Новый черновик");
+    expect(screen.queryByRole("button", { name: /Показать оригинал/ })).toBeNull();
+  });
+
+  it("does not offer translation for a manual review refusal", () => {
+    renderComposer(draft({ text: "", manualReviewReason: "Недостаточно фактов" }));
+    expect(screen.queryByRole("button", { name: "Перевести черновик" })).toBeNull();
+  });
+
   it("offers generation only while the field is empty", () => {
     renderComposer();
 

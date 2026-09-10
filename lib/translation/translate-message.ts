@@ -3,24 +3,13 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import {
-  AiConfigurationError,
-  AiProviderError,
-  buildTranslationPrompt,
-  generateCompletionWithUsage,
-  maskText,
-  parseTranslationCompletion,
-  unmaskText,
-} from "@/lib/ai";
-import { recordAiRequest } from "@/lib/db/ai-request-log";
-import { recordAiUsage } from "@/lib/db/ai-usage";
-import {
   getMessageTranslation,
   saveMessageTranslation,
   type MessageTranslationView,
 } from "@/lib/db/message-translations";
-import { templateLanguageLabel } from "@/lib/i18n/template-languages";
 
-import { TRANSLATION_MAX_SOURCE_LENGTH, completionBudget } from "./budget";
+import { TRANSLATION_MAX_SOURCE_LENGTH } from "./budget";
+import { translateText } from "./translate-text";
 
 /**
  * Перевод одного сообщения на язык workspace: кэш → маскирование → LLM →
@@ -74,6 +63,7 @@ export async function translateMessage(
   conversationId: string,
   messageId: string,
   targetLanguage: string,
+  forceRefresh = false,
 ): Promise<TranslateMessageResult> {
   const message = await loadMessage(
     supabase,
@@ -96,105 +86,33 @@ export async function translateMessage(
     return { ok: false, error: "Сообщение слишком длинное для перевода." };
   }
 
-  const cached = await getMessageTranslation(
-    supabase,
-    workspaceId,
-    messageId,
-    targetLanguage,
-  );
-
-  if (cached) {
-    return { ok: true, ...cached };
-  }
-
-  // Правило 9: наружу уходит только замаскированный текст, и восстановить его
-  // можно лишь по этой карте плейсхолдеров.
-  const masked = maskText(source);
-  const prompt = buildTranslationPrompt({
-    maskedText: masked.maskedText,
-    targetLanguage,
-    targetLanguageName: templateLanguageLabel(targetLanguage),
-  });
-
-  let completion;
-
-  try {
-    completion = await generateCompletionWithUsage(prompt, {
-      // Перевод — механическая задача: разброс здесь означает только то, что
-      // одно и то же сообщение переведётся по-разному.
-      temperature: 0,
-      maxTokens: completionBudget(source.length),
-      // Модель не задаём: `selectProviderModel` возьмёт провайдерский дефолт.
-      // Модель из настроек workspace выбрана под генерацию черновиков, а
-      // перевод — дешёвая операция, которой незачем ехать на дорогой модели.
-    });
-  } catch (error) {
-    if (error instanceof AiConfigurationError) {
-      console.error("[translation] AI provider is not configured", error);
-      return { ok: false, error: "Перевод недоступен: AI-провайдер не настроен." };
-    }
-
-    if (error instanceof AiProviderError) {
-      // Учёт ведём и на провале — иначе неудачные вызовы исчезают из журнала
-      // ровно тогда, когда он нужнее всего (см. draft-pipeline.ts).
-      await recordAiRequest({
-        workspaceId,
-        operation: "translation",
-        surface: "message",
-        provider: error.provider,
-        model: error.model ?? "unknown",
-        exchange: error.exchange ?? null,
-        usage: null,
-        errorCode: error.code,
-      });
-      console.error("[translation] provider call failed", error);
-      return { ok: false, error: "Не удалось перевести — попробуйте ещё раз." };
-    }
-
-    console.error("[translation] unexpected failure", error);
-    return { ok: false, error: "Не удалось перевести — попробуйте ещё раз." };
-  }
-
-  await Promise.all([
-    recordAiUsage({
+  if (!forceRefresh) {
+    const cached = await getMessageTranslation(
+      supabase,
       workspaceId,
-      operation: "translation",
-      surface: "message",
-      provider: completion.provider,
-      model: completion.model,
-      usage: completion.usage,
-    }),
-    recordAiRequest({
-      workspaceId,
-      operation: "translation",
-      surface: "message",
-      provider: completion.provider,
-      model: completion.model,
-      exchange: completion.exchange,
-      usage: completion.usage,
-    }),
-  ]);
+      messageId,
+      targetLanguage,
+    );
 
-  const parsed = parseTranslationCompletion(completion.text);
-  const text = unmaskText(parsed.text, masked.entities).trim();
-
-  if (text.length === 0) {
-    // Модель прислала один заголовок `SOURCE:` и ничего под ним. Пустой пузырь
-    // выглядел бы как удалённое сообщение, поэтому это ошибка, а не результат.
-    console.error("[translation] completion carried no translated text");
-    return { ok: false, error: "Не удалось перевести — попробуйте ещё раз." };
+    if (cached) {
+      return { ok: true, ...cached };
+    }
   }
+
+  const result = await translateText(workspaceId, source, targetLanguage, "message");
+  if (!result.ok) return result;
+  const { text, sourceLanguage, provider, model } = result;
 
   await saveMessageTranslation(supabase, {
     workspaceId,
     conversationId,
     messageId,
     targetLanguage,
-    sourceLanguage: parsed.sourceLanguage,
+    sourceLanguage,
     text,
-    provider: completion.provider,
-    model: completion.model,
+    provider,
+    model,
   });
 
-  return { ok: true, text, sourceLanguage: parsed.sourceLanguage };
+  return { ok: true, text, sourceLanguage };
 }

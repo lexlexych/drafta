@@ -14,7 +14,12 @@ import {
 
 import { LinkActivity, Spinner } from "../../_components/activity";
 import { Avatar } from "../../_components/avatar";
-import { CheckIcon, TranslateIcon, UndoIcon } from "../../_components/icons";
+import {
+  CheckIcon,
+  RefreshIcon,
+  TranslateIcon,
+  UndoIcon,
+} from "../../_components/icons";
 import { showToast } from "../../_components/stub";
 import type { ReplyTemplateOption } from "../../_components/template-picker";
 import paneStyles from "../../_components/panes.module.css";
@@ -74,29 +79,33 @@ export function CommentCard({
       ? `Показать оригинал — ${originLabel}`
       : "Перевести";
 
-  const toggleTranslation = async () => {
-    if (isTranslated) {
+  const toggleTranslation = async (forceRefresh = false) => {
+    if (isTranslating) return;
+    if (isTranslated && !forceRefresh) {
       setIsTranslated(false);
       return;
     }
 
     // Уже переведённый комментарий переключается без сети и без спиннера.
-    if (translation) {
+    if (translation && !forceRefresh) {
       setIsTranslated(true);
       return;
     }
 
     setIsTranslating(true);
-    const result = await translateCommentAction(postId, comment.id);
-    setIsTranslating(false);
-
-    if (!result.ok) {
-      showToast(result.error);
-      return;
+    try {
+      const result = await translateCommentAction(postId, comment.id, forceRefresh);
+      if (!result.ok) {
+        showToast(result.error);
+        return;
+      }
+      setFetched({ text: result.text, sourceLanguage: result.sourceLanguage });
+      setIsTranslated(true);
+    } catch {
+      showToast("Не удалось перевести — попробуйте ещё раз.");
+    } finally {
+      setIsTranslating(false);
     }
-
-    setFetched({ text: result.text, sourceLanguage: result.sourceLanguage });
-    setIsTranslated(true);
   };
 
   const submitReply = async (text: string): Promise<boolean> => {
@@ -201,6 +210,19 @@ export function CommentCard({
         />
       ) : (
         <div className={styles.commentActions}>
+          {canTranslate && isTranslated ? (
+            <button
+              type="button"
+              className={styles.commentAction}
+              onClick={() => void toggleTranslation(true)}
+              disabled={isTranslating}
+              aria-busy={isTranslating}
+              aria-label="Перевести заново"
+              title="Перевести заново"
+            >
+              {isTranslating ? <Spinner size={12} /> : <RefreshIcon />}
+            </button>
+          ) : null}
           {canTranslate ? (
             <button
               type="button"
@@ -211,7 +233,7 @@ export function CommentCard({
               aria-label={translateLabel}
               title={translateLabel}
             >
-              {isTranslating ? (
+              {isTranslating && !isTranslated ? (
                 <Spinner size={12} />
               ) : isTranslated ? (
                 <UndoIcon />

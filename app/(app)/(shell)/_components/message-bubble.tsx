@@ -22,7 +22,13 @@ import {
 
 import { translateMessageAction } from "../inbox/actions";
 import { Spinner } from "./activity";
-import { AutoReplyIcon, PictureIcon, TranslateIcon, UndoIcon } from "./icons";
+import {
+  AutoReplyIcon,
+  PictureIcon,
+  RefreshIcon,
+  TranslateIcon,
+  UndoIcon,
+} from "./icons";
 import { RetrySendButton } from "./retry-send-button";
 import { showToast } from "./stub";
 import styles from "./panes.module.css";
@@ -74,29 +80,33 @@ export function MessageBubble({
       ? templateLanguageLabel(translation.sourceLanguage)
       : "Оригинал";
 
-  const toggle = async () => {
-    if (isTranslated) {
+  const toggle = async (forceRefresh = false) => {
+    if (isTranslating) return;
+    if (isTranslated && !forceRefresh) {
       setIsTranslated(false);
       return;
     }
 
-    if (translation) {
+    if (translation && !forceRefresh) {
       // Перевод уже в кэше — ни запроса, ни спиннера.
       setIsTranslated(true);
       return;
     }
 
     setIsTranslating(true);
-    const result = await translateMessageAction(conversationId, message.id);
-    setIsTranslating(false);
-
-    if (!result.ok) {
-      showToast(result.error);
-      return;
+    try {
+      const result = await translateMessageAction(conversationId, message.id, forceRefresh);
+      if (!result.ok) {
+        showToast(result.error);
+        return;
+      }
+      setFetched({ text: result.text, sourceLanguage: result.sourceLanguage });
+      setIsTranslated(true);
+    } catch {
+      showToast("Не удалось перевести — попробуйте ещё раз.");
+    } finally {
+      setIsTranslating(false);
     }
-
-    setFetched({ text: result.text, sourceLanguage: result.sourceLanguage });
-    setIsTranslated(true);
   };
 
   const label = isTranslating
@@ -121,6 +131,19 @@ export function MessageBubble({
       ) : null}
       {isTranslated && translation ? translation.text : message.text}
       <div className={styles.bubbleFooter}>
+        {canTranslate && isTranslated ? (
+          <button
+            type="button"
+            className={styles.translateToggle}
+            onClick={() => void toggle(true)}
+            disabled={isTranslating}
+            aria-busy={isTranslating}
+            aria-label="Перевести заново"
+            title="Перевести заново"
+          >
+            {isTranslating ? <Spinner size={12} /> : <RefreshIcon />}
+          </button>
+        ) : null}
         {canTranslate ? (
           <button
             type="button"
@@ -131,7 +154,7 @@ export function MessageBubble({
             aria-label={label}
             title={label}
           >
-            {isTranslating ? (
+            {isTranslating && !isTranslated ? (
               <Spinner size={12} />
             ) : isTranslated ? (
               <UndoIcon />
