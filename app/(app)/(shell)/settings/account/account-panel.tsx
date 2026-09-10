@@ -22,6 +22,7 @@ import {
 } from "../../workspace-actions";
 import styles from "../settings.module.css";
 import { useActivityTransition } from "../../_components/activity";
+import { PasswordCard } from "./password-card";
 
 export type AccountWorkspaceOption = {
   id: string;
@@ -97,6 +98,8 @@ export function AccountPanel({
           <LogoutIcon /> Выйти
         </button>
       </form>
+
+      <PasswordCard />
 
       <div className={uiStyles.card}>
         <h3>Рабочие пространства</h3>

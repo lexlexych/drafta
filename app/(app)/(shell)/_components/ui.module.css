@@ -227,7 +227,8 @@
 }
 
 .field select,
-.field input[type="text"] {
+.field input[type="text"],
+.field input[type="password"] {
   font: inherit;
   font-size: 13.5px;
   color: var(--ink);
