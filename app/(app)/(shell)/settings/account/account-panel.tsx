@@ -89,6 +89,15 @@ export function AccountPanel({
         Вы вошли как <b>{userName}</b> · {userRole}.
       </p>
 
+      <form action="/auth/sign-out" method="post">
+        <button
+          className={`${uiStyles.button} ${uiStyles.buttonSecondary} ${uiStyles.buttonDanger}`}
+          type="submit"
+        >
+          <LogoutIcon /> Выйти
+        </button>
+      </form>
+
       <div className={uiStyles.card}>
         <h3>Рабочие пространства</h3>
         {workspaces.map((workspace) => {
@@ -157,15 +166,6 @@ export function AccountPanel({
           {error}
         </p>
       ) : null}
-
-      <form action="/auth/sign-out" method="post">
-        <button
-          className={`${uiStyles.button} ${uiStyles.buttonSecondary} ${uiStyles.buttonDanger}`}
-          type="submit"
-        >
-          <LogoutIcon /> Выйти
-        </button>
-      </form>
 
       <div className={`${uiStyles.card} ${uiStyles.cardStack}`}>
         <h3>Удаление рабочего пространства</h3>
