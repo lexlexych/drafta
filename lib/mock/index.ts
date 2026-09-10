@@ -908,6 +908,7 @@ export const SETTINGS_SECTIONS: SettingsSectionView[] = [
     id: "ai",
     title: "AI",
     description: "Системные промпты, модель, дебаунс",
+    hidden: true,
   },
   {
     id: "knowledge",
