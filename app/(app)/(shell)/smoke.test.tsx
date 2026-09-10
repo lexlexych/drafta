@@ -123,6 +123,12 @@ vi.mock("@/lib/db/channel-connections", () => ({
   listChannelConnections: async () => INBOX_CHANNELS,
 }));
 
+// Список исключённых отправителей грузится вместе с каналами; в этих сценариях
+// он пуст — его собственное поведение проверяет `ignored-senders.test.tsx`.
+vi.mock("@/lib/db/ignored-senders", () => ({
+  listIgnoredSenders: async () => [],
+}));
+
 const KNOWLEDGE_FILES = [
   {
     id: "cat_spam",

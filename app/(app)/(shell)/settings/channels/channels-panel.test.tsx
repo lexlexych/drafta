@@ -28,6 +28,11 @@ vi.mock("./actions", () => ({
     setChannelConnectionStatusAction(...args),
   deleteChannelConnectionAction: (...args: unknown[]) =>
     deleteChannelConnectionAction(...args),
+  // Список исключений живёт в том же файле экшенов; его собственное поведение
+  // проверяет `ignored-senders.test.tsx`.
+  createIgnoredSenderAction: vi.fn(),
+  updateIgnoredSenderAction: vi.fn(),
+  deleteIgnoredSenderAction: vi.fn(),
 }));
 
 const refresh = vi.fn();
@@ -429,5 +434,73 @@ describe("ChannelsPanel", () => {
     expect(screen.getByRole("button", { name: "Включить" })).toBeDefined();
     expect(screen.getByText(/отключён/)).toBeDefined();
     expect(container.querySelector('[data-disconnected="true"]')).not.toBeNull();
+  });
+
+  describe("список исключённых отправителей", () => {
+    const whatsapp: ChannelConnectionListItem = {
+      id: "chc_whatsapp",
+      name: "+1 555-431-9357",
+      platform: "whatsapp",
+      status: "active",
+    };
+    const instagram: ChannelConnectionListItem = {
+      id: "chc_instagram",
+      name: "@drafta.shop",
+      platform: "instagram",
+      status: "active",
+    };
+
+    it("показывает список у подключённых WhatsApp и Instagram", () => {
+      render(<ChannelsPanel channels={[whatsapp, instagram]} />);
+
+      expect(
+        screen.getByRole("button", { name: /Добавить номер/ }),
+      ).toBeDefined();
+      expect(
+        screen.getByRole("button", { name: /Добавить аккаунт/ }),
+      ).toBeDefined();
+    });
+
+    it("раскладывает записи по блокам их платформы", () => {
+      render(
+        <ChannelsPanel
+          channels={[whatsapp, instagram]}
+          ignoredSenders={[
+            {
+              id: "ign_1",
+              platform: "whatsapp",
+              identifier: "491512345678",
+              label: "Анна",
+            },
+            {
+              id: "ign_2",
+              platform: "instagram",
+              identifier: "lena.fischer",
+              label: "",
+            },
+          ]}
+        />,
+      );
+
+      expect(screen.getByText("Анна: +491512345678")).toBeDefined();
+      expect(screen.getByText("@lena.fischer")).toBeDefined();
+    });
+
+    it("не показывает список у платформ без него и у неподключённого канала", () => {
+      render(<ChannelsPanel channels={baseChannels} />);
+
+      expect(screen.queryByRole("button", { name: /Добавить номер/ })).toBeNull();
+      expect(screen.queryByRole("button", { name: /Добавить аккаунт/ })).toBeNull();
+    });
+
+    it("сохраняет список у отключённого канала — он переживает переподключение", () => {
+      render(
+        <ChannelsPanel channels={[{ ...whatsapp, status: "disconnected" }]} />,
+      );
+
+      expect(
+        screen.getByRole("button", { name: /Добавить номер/ }),
+      ).toBeDefined();
+    });
   });
 });

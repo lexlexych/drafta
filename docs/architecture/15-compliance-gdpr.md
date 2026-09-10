@@ -85,6 +85,7 @@ updated: 2026-09-01
 | Ретенция `ai_request_log` — 30 дней, cron `cleanup-ai-request-log` | [`ai_request_log`](06-data-model.md#ai_request_log), [§7.6](07-data-flows.md#66-полный-список-inngest-функций) |
 | Журналы с контентом недоступны через Data API (`webhook_events`, `ai_request_log`) | [§6](06-data-model.md) |
 | Журнал автоответов хранит только ID, оценку и код языка — ни текста входящего, ни текста ответа | [`auto_reply_runs`](06-data-model.md#auto_reply_settings-auto_reply_scenarios-auto_reply_runs) |
+| Сообщения исключённых отправителей не сохраняются вовсе — событие отбрасывается до записи в `webhook_events` (Art. 5(1)(c)) | [`ignored_senders`](06-data-model.md#ignored_senders), [§7.1](07-data-flows.md#61-входящее-dm-или-комментарий) |
 | Каскадное удаление workspace = право на удаление (Art. 17) | [§6](06-data-model.md) |
 | Экспорт данных workspace (Art. 15/20) | простой JSON-дамп по `workspace_id`, раздел «Приватность» в настройках — [§10](10-ui.md#разделы-настроек) |
 | HTTPS везде, санитизация HTML писем | [§7.4](07-data-flows.md#64-email-этап-после-mvp) |

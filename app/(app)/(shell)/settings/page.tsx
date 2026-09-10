@@ -8,6 +8,7 @@ import {
 } from "@/lib/mock";
 import { getAiModelOptions, type AiModelOption } from "@/lib/ai/config";
 import { listChannelConnections } from "@/lib/db/channel-connections";
+import { listIgnoredSenders } from "@/lib/db/ignored-senders";
 import {
   getWorkspaceAiSettings,
   type AiSettingsRow,
@@ -62,6 +63,7 @@ import {
   type ChannelConnectionListItem,
   type ChannelConnectResult,
 } from "./channels/channels-panel";
+import type { IgnoredSenderListItem } from "./channels/ignored-senders";
 import {
   KnowledgeBasePanel,
   type KnowledgeFileListItem,
@@ -128,6 +130,12 @@ type AiSectionData = {
   modelOptions: AiModelOption[];
 };
 
+type ChannelsSectionData = {
+  channels: ChannelConnectionListItem[];
+  /** По всему workspace: исключения привязаны к платформе, а не к подключению. */
+  ignoredSenders: IgnoredSenderListItem[];
+};
+
 type TemplatesSectionData = {
   templates: ReplyTemplateListItem[];
   /** Язык из «Аккаунта» — первая вкладка нового шаблона. */
@@ -142,28 +150,43 @@ type TemplatesSectionData = {
  * sections are loaded independently so opening one settings panel does not
  * query data owned by another panel.
  */
-async function loadChannelsSectionData(): Promise<ChannelConnectionListItem[]> {
+async function loadChannelsSectionData(): Promise<ChannelsSectionData> {
+  const empty: ChannelsSectionData = { channels: [], ignoredSenders: [] };
   const user = await getAuthenticatedUser();
 
   if (!user) {
-    return [];
+    return empty;
   }
 
   const workspace = await getCurrentWorkspace(user.id);
 
   if (!workspace) {
-    return [];
+    return empty;
   }
 
   const supabase = await createServerSupabaseClient();
-  const rows = await listChannelConnections(supabase, workspace.id);
+  const [rows, ignored] = await Promise.all([
+    listChannelConnections(supabase, workspace.id),
+    listIgnoredSenders(supabase, workspace.id),
+  ]);
 
-  return rows.map((row) => ({
-    id: row.id,
-    name: row.name,
-    platform: row.platform,
-    status: row.status,
-  }));
+  return {
+    channels: rows.map((row) => ({
+      id: row.id,
+      name: row.name,
+      platform: row.platform,
+      status: row.status,
+    })),
+    // Список привязан к платформе, а не к подключению, поэтому в
+    // `ChannelConnectionListItem` он не встраивается — панель раскладывает его
+    // по блокам сама.
+    ignoredSenders: ignored.map((row) => ({
+      id: row.id,
+      platform: row.platform,
+      identifier: row.identifier,
+      label: row.label,
+    })),
+  };
 }
 
 async function loadKnowledgeSectionData(): Promise<KnowledgeFileListItem[]> {
@@ -377,7 +400,7 @@ export default async function SettingsPage({
     sectionParam && isSettingsSectionId(sectionParam) ? sectionParam : "channels";
   const isDetail = sectionParam !== null;
   const section = SETTINGS_SECTIONS.find((entry) => entry.id === sectionId);
-  const channels =
+  const channelsData =
     sectionId === "channels" ? await loadChannelsSectionData() : null;
   const knowledgeFiles =
     sectionId === "knowledge" ? await loadKnowledgeSectionData() : null;
@@ -462,7 +485,7 @@ export default async function SettingsPage({
                   accountData={accountData}
                   aiData={aiData}
                   appData={appData}
-                  channels={channels}
+                  channelsData={channelsData}
                   connectResult={connectResult}
                   knowledgeFiles={knowledgeFiles}
                   templatesData={templatesData}
@@ -481,7 +504,7 @@ function SectionDetail({
   accountData,
   aiData,
   appData,
-  channels,
+  channelsData,
   connectResult,
   knowledgeFiles,
   templatesData,
@@ -490,7 +513,7 @@ function SectionDetail({
   accountData: AccountSectionData | null;
   aiData: AiSectionData | null;
   appData: AppSectionData | null;
-  channels: ChannelConnectionListItem[] | null;
+  channelsData: ChannelsSectionData | null;
   connectResult: ChannelConnectResult | null;
   knowledgeFiles: KnowledgeFileListItem[] | null;
   templatesData: TemplatesSectionData | null;
@@ -498,7 +521,7 @@ function SectionDetail({
   switch (sectionId) {
     case "channels":
       return (
-        <ChannelsSection channels={channels ?? []} connectResult={connectResult} />
+        <ChannelsSection data={channelsData} connectResult={connectResult} />
       );
     case "ai":
       return <AiSection data={aiData} />;
@@ -545,10 +568,10 @@ function AccountSection({ data }: { data: AccountSectionData | null }) {
 }
 
 function ChannelsSection({
-  channels,
+  data,
   connectResult,
 }: {
-  channels: ChannelConnectionListItem[];
+  data: ChannelsSectionData | null;
   connectResult: ChannelConnectResult | null;
 }) {
   return (
@@ -558,7 +581,11 @@ function ChannelsSection({
         платформы. Имя канала подставляется из имени аккаунта и видно в
         списках, тредах и меню — переименовать его можно в любой момент.
       </p>
-      <ChannelsPanel channels={channels} connectResult={connectResult} />
+      <ChannelsPanel
+        channels={data?.channels ?? []}
+        ignoredSenders={data?.ignoredSenders ?? []}
+        connectResult={connectResult}
+      />
     </>
   );
 }

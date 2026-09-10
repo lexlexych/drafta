@@ -25,6 +25,7 @@ import { useRouter } from "next/navigation";
 
 import { CHANNEL_PLATFORM_LABELS } from "@/lib/channels/labels";
 import type { ChannelPlatform } from "@/lib/channels/types";
+import { isIgnoredSenderPlatform } from "@/lib/ignored-senders/validation";
 
 import {
   FacebookIcon,
@@ -43,6 +44,10 @@ import {
   startChannelConnectionAction,
 } from "./actions";
 import { useActivityTransition } from "../../_components/activity";
+import {
+  IgnoredSendersField,
+  type IgnoredSenderListItem,
+} from "./ignored-senders";
 
 export type ChannelConnectionListItem = {
   id: string;
@@ -169,9 +174,12 @@ const CONNECT_RESULT_PARAMS = ["connect", "reason"] as const;
 
 export function ChannelsPanel({
   channels,
+  ignoredSenders = [],
   connectResult = null,
 }: {
   channels: ChannelConnectionListItem[];
+  /** По всему workspace: список привязан к платформе, а не к подключению. */
+  ignoredSenders?: IgnoredSenderListItem[];
   connectResult?: ChannelConnectResult | null;
 }) {
   const router = useRouter();
@@ -429,6 +437,22 @@ export function ChannelsPanel({
                   ) : null}
                 </>
               )}
+
+              {/* Список привязан к платформе, а не к подключению, поэтому
+                  показывается и у отключённого канала: он переживает
+                  переподключение — в этом весь его смысл. Прячется только на
+                  экране подтверждения удаления, чтобы не спорить с ним за
+                  внимание. */}
+              {channel &&
+              deletingId !== channel.id &&
+              isIgnoredSenderPlatform(block.key) ? (
+                <IgnoredSendersField
+                  platform={block.key}
+                  entries={ignoredSenders.filter(
+                    (entry) => entry.platform === block.key,
+                  )}
+                />
+              ) : null}
             </section>
           );
         })}

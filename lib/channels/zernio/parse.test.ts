@@ -81,7 +81,13 @@ describe("parseZernioWebhook", () => {
         platformExternalId: "55210",
         text: "Здравствуйте! Подскажите, пожалуйста, режим работы сегодня?",
         attachments: [],
-        sender: { externalId: "tg_user_44310", displayName: "Anna Keller" },
+        sender: {
+          externalId: "tg_user_44310",
+          displayName: "Anna Keller",
+          // Публичные адреса участника — их сверяет список исключений. У
+          // Telegram это лишь ID чата, сопоставлять его не с чем.
+          handles: ["77120"],
+        },
       },
       rawMetadata: JSON.parse(rawBody),
     };
@@ -172,6 +178,9 @@ describe("parseZernioWebhook", () => {
         externalId: "ig_user_31220",
         displayName: "Lena Fischer",
         avatarUrl: "https://cdn.zernio.com/ig/ig_user_31220.jpg",
+        // Хэндл — то, что пользователь вводит в исключения; `externalId` у
+        // Instagram внутренний (`ig_user_…`).
+        handles: ["lena.fischer", "ig_thread_77120"],
       },
       rawMetadata: JSON.parse(rawBody),
     });
@@ -195,6 +204,9 @@ describe("parseZernioWebhook", () => {
         externalId: "ig_user_31220",
         displayName: "Lena Fischer",
         avatarUrl: "https://cdn.zernio.com/ig/ig_user_31220.jpg",
+        // Хэндл — то, что пользователь вводит в исключения; `externalId` у
+        // Instagram внутренний (`ig_user_…`).
+        handles: ["lena.fischer", "ig_thread_77120"],
       },
       message: {
         externalId: "zm_msg_88250",
@@ -250,6 +262,8 @@ describe("parseZernioWebhook", () => {
       externalId: "491512345678",
       displayName: undefined,
       avatarUrl: undefined,
+      // Именем номер не становится — но адресом для списка исключений остаётся.
+      handles: ["491512345678"],
     });
   });
 
@@ -449,6 +463,9 @@ describe("parseZernioWebhook", () => {
         sender: {
           externalId: "wa_user_60214",
           displayName: "+49 151 2345678",
+          // Номер, по которому пользователь узнаёт контакт: `externalId` у
+          // Zernio внутренний, и в список исключений его никто не введёт.
+          handles: ["+49 151 2345678", "491512345678"],
         },
       },
       rawMetadata: JSON.parse(rawBody),
@@ -489,6 +506,18 @@ describe("parseZernioWebhook", () => {
     expect(unparsed[0].rawEnvelope).toMatchObject({
       event: "reaction.received",
     });
+    // Отказ несёт те же персональные данные, что и разобранное событие,
+    // поэтому журналу нужно то, по чему сверяется список исключений.
+    expect(unparsed[0].platform).toBe("telegram");
+  });
+
+  it("не приписывает платформу конверту, который её не назвал", () => {
+    const rawBody = readFixture("unsupported-platform.json");
+
+    const { unparsed } = parseZernioWebhook({ rawBody, headers: {} });
+
+    expect(unparsed[0].platform).toBeNull();
+    expect(unparsed[0].participantHandles).toEqual([]);
   });
 
   it("skips a message.received event for a platform this product doesn't support", () => {

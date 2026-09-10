@@ -22,6 +22,14 @@ import {
 import type { ChannelPlatform } from "@/lib/channels/types";
 import { createAdminSupabaseClient } from "@/lib/db/admin";
 import {
+  createIgnoredSender,
+  deleteIgnoredSender,
+  updateIgnoredSender,
+  type IgnoredSenderResult,
+  type IgnoredSenderRow,
+} from "@/lib/db/ignored-senders";
+import { validateIgnoredSender } from "@/lib/ignored-senders/validation";
+import {
   getProviderProfileId,
 } from "@/lib/db/channel-provider-profile";
 import {
@@ -325,6 +333,101 @@ export async function setChannelConnectionStatusAction(input: {
     workspace.workspaceId,
     input.id,
     input.status,
+  );
+
+  if (result.ok) {
+    revalidatePath(SETTINGS_PATH);
+  }
+
+  return result;
+}
+
+/**
+ * Исключённые отправители: адреса, чьи личные сообщения drafta не сохраняет
+ * (docs/architecture/05-channels.md#исключённые-отправители).
+ *
+ * Валидация повторяется здесь, хотя форма уже проверила ввод: клиентскую
+ * проверку никто не обязан исполнять, а в БД адрес должен попасть только
+ * нормализованным — иначе гейт вебхука его не найдёт.
+ */
+export async function createIgnoredSenderAction(input: {
+  platform: string;
+  identifier: string;
+  label: string;
+}): Promise<IgnoredSenderResult<IgnoredSenderRow>> {
+  const workspace = await requireCurrentWorkspaceId();
+
+  if (!workspace.ok) {
+    return workspace;
+  }
+
+  const validation = validateIgnoredSender(input);
+
+  if (!validation.ok) {
+    return { ok: false, error: validation.error };
+  }
+
+  const supabase = await createServerSupabaseClient();
+  const result = await createIgnoredSender(
+    supabase,
+    workspace.workspaceId,
+    validation.value,
+  );
+
+  if (result.ok) {
+    revalidatePath(SETTINGS_PATH);
+  }
+
+  return result;
+}
+
+export async function updateIgnoredSenderAction(input: {
+  id: string;
+  platform: string;
+  identifier: string;
+  label: string;
+}): Promise<IgnoredSenderResult<IgnoredSenderRow>> {
+  const workspace = await requireCurrentWorkspaceId();
+
+  if (!workspace.ok) {
+    return workspace;
+  }
+
+  const validation = validateIgnoredSender(input);
+
+  if (!validation.ok) {
+    return { ok: false, error: validation.error };
+  }
+
+  const supabase = await createServerSupabaseClient();
+  const result = await updateIgnoredSender(
+    supabase,
+    workspace.workspaceId,
+    input.id,
+    validation.value,
+  );
+
+  if (result.ok) {
+    revalidatePath(SETTINGS_PATH);
+  }
+
+  return result;
+}
+
+export async function deleteIgnoredSenderAction(input: {
+  id: string;
+}): Promise<IgnoredSenderResult<{ id: string }>> {
+  const workspace = await requireCurrentWorkspaceId();
+
+  if (!workspace.ok) {
+    return workspace;
+  }
+
+  const supabase = await createServerSupabaseClient();
+  const result = await deleteIgnoredSender(
+    supabase,
+    workspace.workspaceId,
+    input.id,
   );
 
   if (result.ok) {

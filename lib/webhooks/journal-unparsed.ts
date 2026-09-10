@@ -3,6 +3,9 @@ import { createHash } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { UnparsedEnvelope } from "@/lib/channels/types";
+import { isIgnoredSender } from "@/lib/db/ignored-senders";
+import { isIgnoredSenderPlatform } from "@/lib/ignored-senders/validation";
+import { normalizeCandidates } from "@/lib/webhooks/ignored-sender-gate";
 
 /**
  * Journals one envelope the adapter refused into `webhook_events`.
@@ -35,6 +38,25 @@ export async function journalUnparsedEnvelope(
       provider,
       envelope.externalAccountId,
     );
+
+    // The ignored-senders list applies here too. A refused envelope carries the
+    // same phone number, name and text a processed one does, so journaling it
+    // would keep exactly the data the list exists to keep out — through the one
+    // path that was never meant to carry it. The diagnostic value of the row is
+    // worth less than its contents.
+    if (
+      workspaceId &&
+      envelope.platform &&
+      isIgnoredSenderPlatform(envelope.platform) &&
+      (await isIgnoredSender(
+        supabase,
+        workspaceId,
+        envelope.platform,
+        normalizeCandidates(envelope.platform, envelope.participantHandles),
+      ))
+    ) {
+      return;
+    }
 
     const { error } = await supabase.from("webhook_events").insert({
       workspace_id: workspaceId,

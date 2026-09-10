@@ -283,8 +283,15 @@ function pendingOutgoingRow(overrides: Partial<Row> = {}): Row {
 }
 
 const WHATSAPP_ACCOUNT_ID = "acct_wa_31207";
-/** У WhatsApp внешний ID участника — это `wa_id`, то есть сам номер телефона. */
-const WHATSAPP_PARTICIPANT_ID = "491512345678";
+/**
+ * Внешний ID участника — внутренний идентификатор Zernio, а НЕ номер телефона
+ * (фикстура `whatsapp-dm.json`: `message.sender.id = "wa_user_60214"`). Номер
+ * приходит отдельными полями и попадает в нормализованное событие как
+ * `sender.handles` — см. `participantHandles` в адаптере.
+ */
+const WHATSAPP_PARTICIPANT_ID = "wa_user_60214";
+/** Тот же человек, но как его знает пользователь: это и вводят в исключения. */
+const WHATSAPP_PHONE = "+49 151 2345678";
 
 function whatsappTables(): Record<string, Row[]> {
   return {
@@ -318,7 +325,7 @@ function whatsappThreadSynced(): NormalizedEvent {
     platform: "whatsapp",
     externalAccountId: WHATSAPP_ACCOUNT_ID,
     conversation: { externalId: "zc_wa_conv_1" },
-    participant: { externalId: WHATSAPP_PARTICIPANT_ID },
+    participant: { externalId: WHATSAPP_PARTICIPANT_ID, handles: [WHATSAPP_PHONE] },
     rawMetadata: {},
   };
 }
@@ -336,7 +343,11 @@ function whatsappIncoming(displayName: string): NormalizedEvent {
       externalId: `zm_wa_${displayName}`,
       text: "Добрый день!",
       attachments: [],
-      sender: { externalId: WHATSAPP_PARTICIPANT_ID, displayName },
+      sender: {
+        externalId: WHATSAPP_PARTICIPANT_ID,
+        displayName,
+        handles: [WHATSAPP_PHONE],
+      },
     },
     rawMetadata: {},
   };
@@ -670,5 +681,205 @@ describe("processInboundEvent — запуск автоответа", () => {
     await run({ ...first, providerEventId: "wh_wa_msg_redelivery" });
 
     expect(emitted.autoReply).toHaveLength(1);
+  });
+});
+
+describe("processInboundEvent — исключённые отправители", () => {
+  let stub: ReturnType<typeof createSupabaseStub>;
+
+  const run = (event: NormalizedEvent) =>
+    processInboundEvent(stub.client as unknown as SupabaseClient, event);
+
+  /** Пользователь ввёл номер в человеческом виде — в базе он лежит нормализованным. */
+  const ignoreWhatsAppPhone = () =>
+    stub.tables.ignored_senders.push({
+      id: "ign_wa",
+      workspace_id: "wsp_a",
+      platform: "whatsapp",
+      identifier: "491512345678",
+    });
+
+  beforeEach(() => {
+    stub = createSupabaseStub({ ...whatsappTables(), ignored_senders: [] });
+  });
+
+  /** Ни одной строки — ровно то, что обещано пользователю. */
+  const expectNothingStored = () => {
+    expect(stub.tables.webhook_events).toHaveLength(0);
+    expect(stub.tables.contacts).toHaveLength(0);
+    expect(stub.tables.contact_identities).toHaveLength(0);
+    expect(stub.tables.conversations).toHaveLength(0);
+    expect(stub.tables.messages).toHaveLength(0);
+  };
+
+  it("не сохраняет входящее сообщение с исключённого номера — включая журнал вебхуков", async () => {
+    ignoreWhatsAppPhone();
+
+    await run(whatsappIncoming("Анна"));
+
+    expectNothingStored();
+  });
+
+  it("сопоставляет по номеру, а не по внутреннему ID провайдера", async () => {
+    // Тот же человек, но `externalId` у Zernio свой (`wa_user_…`): совпасть
+    // может только `handles`.
+    stub.tables.ignored_senders.push({
+      id: "ign_wa",
+      workspace_id: "wsp_a",
+      platform: "whatsapp",
+      identifier: WHATSAPP_PARTICIPANT_ID,
+    });
+
+    await run(whatsappIncoming("Анна"));
+
+    expect(stub.tables.messages).toHaveLength(1);
+  });
+
+  it("обрабатывает сообщение как обычно, когда номера в списке нет", async () => {
+    stub.tables.ignored_senders.push({
+      id: "ign_wa",
+      workspace_id: "wsp_a",
+      platform: "whatsapp",
+      identifier: "491599999999",
+    });
+
+    await run(whatsappIncoming("Анна"));
+
+    expect(stub.tables.messages).toHaveLength(1);
+    expect(stub.tables.contacts).toHaveLength(1);
+  });
+
+  it("гасит и синхронизацию треда, и наши исходящие в этот тред", async () => {
+    ignoreWhatsAppPhone();
+
+    await run(whatsappThreadSynced());
+    await run({
+      type: "message.sent",
+      providerEventId: "wh_wa_sent_1",
+      provider: "zernio",
+      platform: "whatsapp",
+      externalAccountId: WHATSAPP_ACCOUNT_ID,
+      conversation: { externalId: "zc_wa_conv_1" },
+      participant: { externalId: WHATSAPP_PARTICIPANT_ID, handles: [WHATSAPP_PHONE] },
+      message: {
+        externalId: "zm_wa_out_1",
+        text: "Здравствуйте!",
+        attachments: [],
+      },
+      rawMetadata: {},
+    } as NormalizedEvent);
+
+    expectNothingStored();
+  });
+
+  it("гасит статусы доставки того же отправителя", async () => {
+    ignoreWhatsAppPhone();
+
+    await run({
+      ...whatsappIncoming("Анна"),
+      type: "message.delivered",
+      providerEventId: "wh_wa_delivered_1",
+    } as NormalizedEvent);
+
+    expectNothingStored();
+  });
+
+  it("сопоставляет хэндл Instagram без учёта регистра и решётки", async () => {
+    stub.tables.channel_connections.push({
+      id: "chc_ig",
+      workspace_id: "wsp_a",
+      provider: "zernio",
+      external_id: ACCOUNT_ID,
+      status: "active",
+    });
+    stub.tables.ignored_senders.push({
+      id: "ign_ig",
+      workspace_id: "wsp_a",
+      platform: "instagram",
+      identifier: "lena.fischer",
+    });
+
+    await run({
+      type: "message.received",
+      providerEventId: "wh_ig_msg_1",
+      provider: "zernio",
+      platform: "instagram",
+      externalAccountId: ACCOUNT_ID,
+      conversation: { externalId: "zc_ig_conv_1" },
+      message: {
+        externalId: "zm_ig_1",
+        text: "Привет!",
+        attachments: [],
+        sender: { externalId: "ig_user_31220", handles: ["@Lena.Fischer"] },
+      },
+      rawMetadata: {},
+    } as NormalizedEvent);
+
+    expectNothingStored();
+  });
+
+  it("не трогает комментарии: они публичные и относятся к бизнесу", async () => {
+    stub.tables.ignored_senders.push({
+      id: "ign_ig",
+      workspace_id: "wsp_a",
+      platform: "instagram",
+      identifier: "lena.fischer",
+    });
+    stub.tables.channel_connections.push({
+      id: "chc_ig",
+      workspace_id: "wsp_a",
+      provider: "zernio",
+      external_id: ACCOUNT_ID,
+      status: "active",
+    });
+    stub.tables.posts = [];
+    stub.tables.comments = [];
+
+    await run({
+      type: "comment.received",
+      providerEventId: "wh_ig_comment_1",
+      provider: "zernio",
+      platform: "instagram",
+      externalAccountId: ACCOUNT_ID,
+      post: { externalId: "ig_post_88401" },
+      comment: {
+        externalId: "ig_comment_1",
+        text: "Красиво!",
+        author: { externalId: "ig_user_31220", handles: ["lena.fischer"] },
+      },
+      rawMetadata: {},
+    } as NormalizedEvent);
+
+    expect(stub.tables.comments).toHaveLength(1);
+  });
+
+  it("не спрашивает список для платформы, у которой исключений нет", async () => {
+    stub.tables.ignored_senders.push({
+      id: "ign_wa",
+      workspace_id: "wsp_a",
+      platform: "telegram",
+      identifier: "491512345678",
+    });
+
+    await run({
+      ...whatsappIncoming("Анна"),
+      platform: "telegram",
+      providerEventId: "wh_tg_msg_1",
+    } as NormalizedEvent);
+
+    expect(stub.tables.messages).toHaveLength(1);
+  });
+
+  it("не применяет исключение чужого workspace", async () => {
+    stub.tables.ignored_senders.push({
+      id: "ign_other",
+      workspace_id: "wsp_b",
+      platform: "whatsapp",
+      identifier: "491512345678",
+    });
+
+    await run(whatsappIncoming("Анна"));
+
+    expect(stub.tables.messages).toHaveLength(1);
   });
 });

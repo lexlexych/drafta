@@ -199,6 +199,12 @@ interface ZernioRawSender {
   id: string;
   name?: string | null;
   picture?: string | null;
+  /**
+   * WhatsApp only: the sender's phone number in E.164. Not mapped into the
+   * contact — `participantHandles` carries it for the ignored-senders list,
+   * which is the only reader that needs a human-recognizable address.
+   */
+  phoneNumber?: string | null;
 }
 
 interface ZernioRawMessage {
@@ -430,6 +436,9 @@ function nonEmptyString(value: string | null | undefined): string | null {
 interface UnparsedOutcome {
   type: "unparsed";
   reason: string;
+  /** Filled in by `parseSingleEnvelope` once the envelope is known to be well-formed. */
+  platform?: ChannelPlatform;
+  participantHandles?: string[];
 }
 
 type EnvelopeOutcome = NormalizedEvent | UnparsedOutcome;
@@ -453,29 +462,54 @@ function parseSingleEnvelope(raw: unknown): EnvelopeOutcome {
     return unparsed(`Unsupported platform "${raw.account.platform}"`);
   }
 
+  const outcome = dispatchEnvelope(raw, raw.account.platform);
+
+  if (outcome.type !== "unparsed") {
+    return outcome;
+  }
+
+  // A refused envelope carries the same personal data a processed one does, so
+  // the journal needs what the ignored-senders gate matches on. Attached here
+  // rather than at every refusal site: this is the one place that already knows
+  // the envelope is well-formed enough to read those fields from.
+  return {
+    ...outcome,
+    platform: raw.account.platform,
+    participantHandles: participantHandles(
+      raw.message?.sender,
+      raw.comment?.author,
+      raw.conversation,
+    ),
+  };
+}
+
+function dispatchEnvelope(
+  raw: ZernioWebhookEnvelope,
+  platform: ChannelPlatform,
+): EnvelopeOutcome {
   if (raw.event === COMMENT_EVENT) {
-    return buildCommentEvent(raw, raw.account.platform);
+    return buildCommentEvent(raw, platform);
   }
 
   if (raw.event === CONVERSATION_STARTED_EVENT) {
-    return buildConversationStartedEvent(raw, raw.account.platform);
+    return buildConversationStartedEvent(raw, platform);
   }
 
   if (raw.event === OUTGOING_MESSAGE_EVENT) {
-    return buildOutgoingMessageEvent(raw, raw.account.platform);
+    return buildOutgoingMessageEvent(raw, platform);
   }
 
   if (EXTERNAL_POST_EVENTS.has(raw.event)) {
-    return buildExternalPostEvent(raw, raw.account.platform);
+    return buildExternalPostEvent(raw, platform);
   }
 
   if (raw.event === POST_PLATFORM_PUBLISHED_EVENT) {
-    return buildPostPlatformEvent(raw, raw.account.platform);
+    return buildPostPlatformEvent(raw, platform);
   }
 
   const dmType = DM_EVENT_TYPES[raw.event];
   if (dmType) {
-    return buildDmEvent(raw, dmType, raw.account.platform);
+    return buildDmEvent(raw, dmType, platform);
   }
 
   // Reactions, account lifecycle, calls, etc. — real Zernio event types this
@@ -503,6 +537,46 @@ function meaningfulName(
 }
 
 /**
+ * The addresses the platform knows the participant by publicly — the phone
+ * number on WhatsApp, the handle on Instagram.
+ *
+ * Zernio spreads them across three different fields depending on the event, so
+ * all of them are collected and handed over as a list. `externalId` is not
+ * among them: it is Zernio's internal id (`wa_user_60214`), and the gate adds
+ * it to the candidates itself.
+ *
+ * Note this deliberately overlaps with what `meaningfulName` throws away.
+ * `participantUsername` equal to the participant's own id is not a name — but
+ * on WhatsApp it *is* the phone number, which is precisely the address the
+ * ignored-senders list matches on.
+ */
+function participantHandles(
+  sender: Pick<ZernioRawSender, "phoneNumber"> | undefined,
+  author: Pick<ZernioRawCommentAuthor, "username"> | undefined,
+  conversation: ZernioRawConversation | undefined,
+): string[] {
+  const candidates = [
+    sender?.phoneNumber,
+    author?.username,
+    conversation?.participantUsername,
+    conversation?.platformConversationId,
+  ];
+
+  return [
+    ...new Set(
+      candidates
+        .map((value) => nonEmptyString(value))
+        .filter((value): value is string => value !== null),
+    ),
+  ];
+}
+
+/** `handles` is omitted rather than left empty: an empty key would be noise in every `toEqual`. */
+function withHandles(handles: string[]): { handles?: string[] } {
+  return handles.length > 0 ? { handles } : {};
+}
+
+/**
  * The contact on the other side of a thread, from the envelope's `conversation`
  * block. Undefined when the provider did not name them — the thread is still
  * worth creating, it just has no contact attached yet.
@@ -521,6 +595,7 @@ function conversationParticipant(
       meaningfulName(conversation.participantName, externalId) ??
       meaningfulName(conversation.participantUsername, externalId),
     avatarUrl: nonEmptyString(conversation.participantPicture) ?? undefined,
+    ...withHandles(participantHandles(undefined, undefined, conversation)),
   };
 }
 
@@ -623,6 +698,9 @@ function buildDmEvent(
           nonEmptyString(raw.conversation.participantPicture) ??
           nonEmptyString(raw.message.sender.picture) ??
           undefined,
+        ...withHandles(
+          participantHandles(raw.message.sender, undefined, raw.conversation),
+        ),
       },
     },
     // Kept in full per docs/architecture/05-channels.md#нормализованное-событие.
@@ -850,6 +928,8 @@ export function parseZernioWebhook(input: ParseWebhookInput): ParseWebhookResult
       externalAccountId: refusedEnvelopeAccountId(envelope),
       reason: outcome.reason,
       rawEnvelope: toRawEnvelope(envelope),
+      platform: outcome.platform ?? null,
+      participantHandles: outcome.participantHandles ?? [],
     });
   }
 

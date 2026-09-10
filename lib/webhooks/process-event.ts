@@ -11,6 +11,9 @@ import type {
   NormalizedSender,
 } from "@/lib/channels/types";
 import { isAvatarStale } from "@/lib/avatars";
+import { isIgnoredSender } from "@/lib/db/ignored-senders";
+import { isIgnoredSenderPlatform } from "@/lib/ignored-senders/validation";
+import { ignoredSenderCandidates } from "@/lib/webhooks/ignored-sender-gate";
 import {
   emitAutoReplyRequested,
   emitContactAvatarSyncRequested,
@@ -80,6 +83,27 @@ export async function processInboundEvent(
   }
 
   const workspaceId: string | null = channelConnection?.workspace_id ?? null;
+
+  // The ignored-senders list is checked here rather than inside the
+  // `message.received` branch: the insert right below journals the whole raw
+  // envelope — phone number, name, message text — into `webhook_events.payload`,
+  // and `insertIncomingMessage` copies it again into `provider_metadata`. Past
+  // this line "the message is not stored" is no longer achievable.
+  //
+  // The same cheap indexed lookup `isAutoReplyEnabled` does further down: one
+  // query on the unique key's own prefix, and only for the platforms that offer
+  // the list in settings — Telegram and Facebook events never pay for it.
+  // Idempotent, and it leaves no journal row a redelivery could trip over.
+  if (workspaceId && isIgnoredSenderPlatform(event.platform)) {
+    const candidates = ignoredSenderCandidates(event);
+
+    if (
+      candidates.length > 0 &&
+      (await isIgnoredSender(supabase, workspaceId, event.platform, candidates))
+    ) {
+      return;
+    }
+  }
 
   const { data: webhookEventRow, error: insertError } = await supabase
     .from("webhook_events")

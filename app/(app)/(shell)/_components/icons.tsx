@@ -244,6 +244,22 @@ export function RefreshIcon(props: IconProps) {
   );
 }
 
+/** Редактирование: карандаш. */
+export function PencilIcon(props: IconProps) {
+  return (
+    <Icon
+      size={13}
+      {...stroke}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      {...props}
+    >
+      <path d="M4.5 19.5h4l10-10a2.12 2.12 0 0 0-3-3l-10 10v3Z" />
+      <path d="m14.5 6.5 3 3" />
+    </Icon>
+  );
+}
+
 /** Удаление: корзина. */
 export function TrashIcon(props: IconProps) {
   return (

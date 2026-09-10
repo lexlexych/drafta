@@ -58,6 +58,22 @@ export interface NormalizedSender {
   displayName?: string;
   /** Provider-hosted profile picture URL, when the provider exposes one. */
   avatarUrl?: string;
+  /**
+   * The addresses the platform knows this person by publicly: the phone number
+   * on WhatsApp, the handle on Instagram.
+   *
+   * `externalId` cannot serve that purpose — at Zernio it is an internal id
+   * (`wa_user_60214`, `ig_user_31220`), which a user does not recognize and
+   * would never type into a settings form. The ignored-senders list is the only
+   * reader (`lib/webhooks/ignored-sender-gate.ts`); nothing writes these values
+   * to `contacts` or `messages`, or the number would settle exactly where the
+   * list exists to keep it out of.
+   *
+   * Values are passed through as the provider reported them — the core
+   * canonicalizes them (`lib/ignored-senders/validation.ts`), with the same
+   * implementation the settings form uses.
+   */
+  handles?: string[];
 }
 
 /** The direct-message body carried by a `message.*` event. */
@@ -272,6 +288,17 @@ export interface UnparsedEnvelope {
   reason: string;
   /** The envelope exactly as received, for the journal's `payload`. */
   rawEnvelope: Record<string, unknown>;
+  /**
+   * The platform the envelope named, when the adapter recognized it.
+   *
+   * Together with `participantHandles` this lets the journal apply the
+   * ignored-senders list too: a refused envelope carries the same number, name
+   * and text a processed one does, and journaling it would break the promise
+   * through the one path that was never meant to carry it.
+   */
+  platform: ChannelPlatform | null;
+  /** Public addresses of the participant, when the envelope structurally named them. */
+  participantHandles: string[];
 }
 
 /**
