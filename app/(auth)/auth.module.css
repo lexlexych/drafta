@@ -87,3 +87,12 @@
   color: inherit;
   text-decoration: underline;
 }
+
+.footer {
+  margin-top: 1rem;
+  font-size: 0.85rem;
+}
+
+.footer a {
+  color: color-mix(in srgb, var(--foreground) 60%, transparent);
+}

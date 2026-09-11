@@ -112,6 +112,26 @@ describe("updateSession", () => {
     expect(response.status).toBe(200);
   });
 
+  it("serves the privacy policy to anonymous and signed-in visitors alike", async () => {
+    mocks.getClaims.mockResolvedValueOnce({ data: null, error: null });
+    mocks.getClaims.mockResolvedValueOnce({
+      data: {
+        claims: {
+          sub: "5ba5cb5b-826a-4aa2-bfab-2a0b38f2d170",
+        },
+      },
+      error: null,
+    });
+
+    for (let visit = 0; visit < 2; visit += 1) {
+      const response = await updateSession(
+        new NextRequest("https://drafta.test/privacy"),
+      );
+
+      expect(response.status).toBe(200);
+    }
+  });
+
   it("lets both exact email callback routes exchange their PKCE code", async () => {
     mocks.getClaims.mockResolvedValue({ data: null, error: null });
 

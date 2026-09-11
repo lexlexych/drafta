@@ -1,0 +1,128 @@
+.page {
+  min-height: 100vh;
+  padding: 3rem 1.25rem 4rem;
+  background: var(--bg);
+  color: var(--ink);
+}
+
+.document {
+  max-width: 44rem;
+  margin: 0 auto;
+  line-height: 1.6;
+}
+
+.header {
+  margin-bottom: 2rem;
+}
+
+.brand {
+  display: inline-block;
+  margin-bottom: 1.5rem;
+  color: var(--accent);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.title {
+  font-size: 2rem;
+  line-height: 1.2;
+}
+
+.meta {
+  margin-top: 0.4rem;
+  color: var(--ink3);
+  font-size: 0.9rem;
+}
+
+.toc {
+  margin-bottom: 2.5rem;
+  padding: 1.25rem 1.5rem;
+  border: 1px solid var(--line);
+  border-radius: 0.75rem;
+  background: var(--surface);
+}
+
+.toc ol {
+  columns: 2 16rem;
+  column-gap: 2rem;
+  padding-left: 1.25rem;
+  font-size: 0.92rem;
+}
+
+.toc a {
+  color: var(--ink2);
+}
+
+.section {
+  margin-bottom: 2.25rem;
+  scroll-margin-top: 1.5rem;
+}
+
+.section h2 {
+  margin-bottom: 0.75rem;
+  font-size: 1.2rem;
+}
+
+.section p,
+.section ul {
+  margin-bottom: 0.75rem;
+  color: var(--ink2);
+}
+
+.section ul {
+  padding-left: 1.25rem;
+}
+
+.section li + li {
+  margin-top: 0.35rem;
+}
+
+.section strong {
+  color: var(--ink);
+}
+
+.address {
+  display: grid;
+  margin-bottom: 0.75rem;
+  padding: 1rem 1.25rem;
+  border-left: 3px solid var(--accent);
+  background: var(--surface);
+  font-style: normal;
+}
+
+.tableWrap {
+  margin-bottom: 0.75rem;
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 0.75rem;
+  background: var(--surface);
+}
+
+.table {
+  width: 100%;
+  min-width: 36rem;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.table th,
+.table td {
+  padding: 0.65rem 0.85rem;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  vertical-align: top;
+}
+
+.table thead th {
+  color: var(--ink3);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.table tbody tr:last-child > * {
+  border-bottom: 0;
+}
+
+.table td {
+  color: var(--ink2);
+}

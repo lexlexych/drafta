@@ -13,6 +13,7 @@ const authenticationPagePaths = new Set([
 const unauthenticatedPaths = new Set([
   ...authenticationPagePaths,
   "/kb-preview",
+  "/privacy",
   "/update-password",
   "/auth/confirm",
   "/auth/recovery",
