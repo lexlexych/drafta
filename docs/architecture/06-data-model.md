@@ -24,6 +24,10 @@ updated: 2026-09-03
 
 # 6. Модель данных
 
+Модель создания публикаций (`publication_drafts`, `publication_assets`,
+`gpt_oauth_grants`, `publication_imports`) описана в
+[18. Создание публикаций](18-publication-authoring.md). Эти сущности отделены от `posts`.
+
 > [!info] Навигация
 > ⬅️ [5. Слой абстракции каналов](05-channels.md) · ⬆️ [Оглавление](_index.md) · ➡️ [7. Потоки данных](07-data-flows.md)
 

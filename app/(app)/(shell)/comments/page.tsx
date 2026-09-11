@@ -16,6 +16,7 @@ import styles from "../_components/panes.module.css";
 import { MarkPostRead } from "./_components/mark-post-read";
 import { PostList } from "./_components/post-list";
 import { PostThread } from "./_components/post-thread";
+import { PublicationPanel } from "./_components/publication-panel";
 
 const PATHNAME = "/comments";
 
@@ -29,6 +30,7 @@ export default async function CommentsPage({
   const params = await searchParams;
   // Фильтр по каналу — клиентское состояние `PostList`, не query-параметр.
   const postId = firstParam(params[QUERY_KEYS.post]);
+  const draftId = firstParam(params.draft);
 
   const user = await getAuthenticatedUser();
   const workspace = user ? await getCurrentWorkspace(user.id) : null;
@@ -77,7 +79,7 @@ export default async function CommentsPage({
         workspaceLanguage,
       )
     : null;
-  const isDetail = postId !== null;
+  const isDetail = postId !== null || draftId !== null;
 
   return (
     <div className={styles.panes} data-detail={isDetail}>
@@ -88,10 +90,11 @@ export default async function CommentsPage({
         channels={filterChannels}
         openedId={postId}
         hasCommentChannels={hasCommentChannels}
+        selectedDraftId={draftId}
       />
 
       <section className={styles.paneDetail}>
-        {post ? (
+        {draftId ? <PublicationPanel key={`${workspace.id}:${draftId}`} draftId={draftId} workspaceId={workspace.id} /> : post ? (
           <>
             <MarkPostRead postId={post.postId} />
             <PostThread

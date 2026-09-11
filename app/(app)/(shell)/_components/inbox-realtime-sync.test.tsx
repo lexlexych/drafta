@@ -28,7 +28,7 @@ vi.mock("@/lib/db/browser", () => ({
 }));
 
 const unsubscribe = vi.fn();
-const subscribeToInboxRealtime = vi.fn(() => unsubscribe);
+const subscribeToInboxRealtime = vi.fn<(...args: unknown[]) => typeof unsubscribe>(() => unsubscribe);
 
 vi.mock("@/lib/realtime/inbox-sync", () => ({
   subscribeToInboxRealtime: (...args: unknown[]) =>

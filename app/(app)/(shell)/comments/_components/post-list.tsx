@@ -22,6 +22,7 @@ import { usePagedList } from "../../_components/use-paged-list";
 import styles from "../../_components/panes.module.css";
 import uiStyles from "../../_components/ui.module.css";
 import { loadPostsAction } from "../actions";
+import { PublicationDraftLinks } from "./publication-panel";
 
 const PATHNAME = "/comments";
 
@@ -35,6 +36,7 @@ export function PostList({
   channels,
   openedId,
   hasCommentChannels,
+  selectedDraftId,
 }: {
   items: PostListItemView[];
   total: number;
@@ -42,6 +44,7 @@ export function PostList({
   channels: readonly ChannelFilterView[];
   openedId: string | null;
   hasCommentChannels: boolean;
+  selectedDraftId?: string | null;
 }) {
   const {
     filter: channelIds,
@@ -79,10 +82,15 @@ export function PostList({
       <div className={styles.paneHead}>
         <div className={styles.paneHeadRow}>
           <h2>Публикации</h2>
+          <Link className={`${uiStyles.button} ${uiStyles.buttonSmall}`} href="/comments?draft=new">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+            Создать
+          </Link>
         </div>
         <span className={styles.paneSubtitle}>{subtitle}</span>
       </div>
 
+      <PublicationDraftLinks selectedId={selectedDraftId} />
       <ListFilters
         channels={channels}
         selectedChannelIds={channelIds}

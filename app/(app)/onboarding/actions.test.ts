@@ -7,7 +7,7 @@ const getCurrentWorkspace = vi.fn();
 const createZernioWorkspaceProfile = vi.fn();
 const deleteZernioWorkspaceProfile = vi.fn();
 const rpc = vi.fn();
-const redirect = vi.fn(() => {
+const redirect = vi.fn<(...args: unknown[]) => never>(() => {
   throw new Error("NEXT_REDIRECT");
 });
 

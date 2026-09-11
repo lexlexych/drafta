@@ -44,6 +44,7 @@ function item(id: string, title: string, channelId = "chc_ig"): ConversationList
     preview: "…",
     time: "12:00",
     unreadCount: 0,
+    isAutoReplyPreview: false,
     channel: {
       id: channelId,
       name: channelId === "chc_ig" ? "Instagram Магазин" : "Facebook Страница",
@@ -66,6 +67,8 @@ function renderList(props: { hasMore: boolean }) {
       categories={[]}
       openedId={null}
       hasChannels
+      autoReplyEnabled={false}
+      autoReplyOpen={false}
     />,
   );
 }
