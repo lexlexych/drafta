@@ -5,6 +5,7 @@ import { generateCommentDrafts } from "./generate-comment-drafts";
 import { generateDraft } from "./generate-draft";
 import { postThumbnail } from "./post-thumbnail";
 import { publicationImport, recoverPublicationImports, cleanupPublicationAssets } from "./publication-import";
+import { publicationGeneration, recoverPublicationGenerations } from "./publication-generation";
 import { sendComment } from "./send-comment";
 import { sendCommentPrivateReply } from "./send-comment-private-reply";
 import { sendMessage } from "./send-message";
@@ -23,6 +24,8 @@ export { sendPush } from "./send-push";
 
 /** All functions served by app/api/inngest/route.ts. */
 export const inngestFunctions = [
+  publicationGeneration,
+  recoverPublicationGenerations,
   publicationImport,
   recoverPublicationImports,
   cleanupPublicationAssets,

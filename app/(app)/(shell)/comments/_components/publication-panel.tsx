@@ -8,6 +8,7 @@ import { createBrowserSupabaseClient } from "@/lib/db/browser";
 import { DEFAULT_CONTEXT, MAX_UPLOAD_BYTES, type PublicationContext, type PublicationDraft } from "@/lib/publications/types";
 import styles from "./publication-panel.module.css";
 import ui from "../../_components/ui.module.css";
+import { PublicationWizard } from "./publication-wizard";
 
 type PanelData = { drafts: PublicationDraft[]; selectedDraft?: PublicationDraft | null; categories: { id: string; name: string }[]; connected: boolean; authorizedKbIds: string[]; gptUrl: string | null };
 const button = `${ui.button} ${ui.buttonSmall}`;
@@ -52,7 +53,7 @@ export function PublicationPanel({ draftId, workspaceId }: { draftId: string; wo
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const sync = useCallback((item: PublicationDraft) => {
-    setDraft(item); setContext(item.context); setTitle(item.title); setKind(item.kind);
+    setDraft(item); setContext(item.context); setTitle(item.title); setKind(item.kind === "carousel" ? "carousel" : "image");
     setBody(item.body); setAssets(item.asset_ids); setEditing(!!item.edited_at);
   }, []);
   const refresh = useCallback(async () => {
@@ -106,17 +107,22 @@ export function PublicationPanel({ draftId, workspaceId }: { draftId: string; wo
     change();
   }
   const frozen = busy || draft?.status === "importing";
+  if (draft?.source === "draft") return <PublicationWizard key={draft.id} draftId={draft.id} onClose={() => router.push("/comments")} />;
   return <div className={styles.panel}>
     <div className={styles.header}><h2>{draft ? "Черновик публикации" : "Создание публикации"}</h2>
       <button className={button} disabled={busy} onClick={() => void perform(async () => { if (dirty) await save(); router.push("/comments"); })}>Закрыть</button>
     </div>
     {error && <p role="alert" className={styles.error}>{error}</p>}
     {message && <p role="status">{message}</p>}
-    {!draft && draftId === "new" && <><p>Создайте текст и изображения с помощью ChatGPT, затем отредактируйте результат здесь.</p>
+    {!draft && draftId === "new" && <><p>Подготовьте публикацию в Drafta: выберите каналы, знания и идею. Или воспользуйтесь ChatGPT.</p>
+      <div className={styles.actions}><button className={primary} disabled={busy} onClick={() => void perform(async () => {
+        const created = await api("/api/publications?source=draft", { method: "POST" });
+        router.replace(`/comments?draft=${created.id}`);
+      })}>Создать через draft</button>
       <button className={primary} disabled={busy} onClick={() => void perform(async () => {
         const created = await api("/api/publications", { method: "POST" });
         router.replace(`/comments?draft=${created.id}`);
-      })}>Создать через ChatGPT</button></>}
+      })}>Создать через ChatGPT</button></div></>}
     {draft && <div className={styles.form}>
       <p className={styles.notice} role="status">{statusLabel[draft.status]}{draft.edited_at && " · Ручное редактирование: ChatGPT больше не может перезаписать этот черновик."}</p>
       <fieldset disabled={frozen}>

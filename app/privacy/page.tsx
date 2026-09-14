@@ -21,7 +21,7 @@ const controller = {
   email: "info@drafta.online",
 };
 
-const lastUpdated = "11. September 2026";
+const lastUpdated = "14. September 2026";
 
 export const metadata: Metadata = {
   title: `Datenschutzerklärung · ${appName}`,
@@ -29,6 +29,12 @@ export const metadata: Metadata = {
 };
 
 const processors = [
+  {
+    name: "OpenAI API (Beitragsassistent)",
+    purpose: "Ideen, Beitragstexte und Bilder auf Nutzeranfrage",
+    data: "Ausgewählte Wissensinhalte und Vorgaben, maskierte Textkennungen, ausgewählte Referenzbilder",
+    location: "Verarbeitung außerhalb der EU möglich",
+  },
   {
     name: "Supabase",
     purpose: "Datenbank, Anmeldung, Dateispeicher",
@@ -88,6 +94,7 @@ export default function PrivacyPage() {
             <li><a href="#nachrichten">Nachrichten, Kommentare und Kontakte</a></li>
             <li><a href="#ki">KI-Antwortentwürfe und Übersetzungen</a></li>
             <li><a href="#chatgpt">Optionale ChatGPT-Verbindung</a></li>
+            <li><a href="#beitragsassistent">Beitragsassistent mit OpenAI API</a></li>
             <li><a href="#push">Push-Benachrichtigungen</a></li>
             <li><a href="#cookies">Cookies und lokale Speicherung</a></li>
             <li><a href="#empfaenger">Empfänger und Auftragsverarbeiter</a></li>
@@ -261,6 +268,28 @@ export default function PrivacyPage() {
             {appName} jederzeit widerrufen. Aus ChatGPT übernommene Bilder speichern
             wir in unserem Dateispeicher. Rechtsgrundlage ist Art. 6 Abs. 1 lit. b
             DSGVO.
+          </p>
+        </section>
+
+        <section className={styles.section} id="beitragsassistent">
+          <h2>7a. Beitragsassistent mit OpenAI API</h2>
+          <p>
+            Bei der Erstellung von Beiträgen direkt in Drafta übermitteln wir die
+            ausgewählten Wissensinhalte und Vorgaben an die OpenAI API. Erkennbare
+            Telefonnummern, E-Mail-Adressen und Zahlungskennungen werden im Text
+            zuvor maskiert. Ein ausdrücklich ausgewähltes Referenzbild wird als
+            Bild übermittelt; eine Textmaskierung anonymisiert seinen Inhalt nicht.
+            Fertig hochgeladene Beitragsbilder werden ohne KI-Bearbeitung gespeichert.
+          </p>
+          <p>
+            OpenAI verwendet API-Daten standardmäßig nicht zum Modelltraining.
+            Wir deaktivieren die Speicherung von Responses-Antworten für den
+            Gesprächsverlauf; dies schließt Sicherheitsprotokolle beim Anbieter
+            nicht aus. Eine Verarbeitung ausschließlich in der EU wird nicht zugesagt.
+            Aufgabenprotokolle einschließlich Eingaben, Zwischenergebnissen und
+            Verbrauchsdaten löschen wir in Drafta nach 30 Tagen. Gespeicherte
+            Entwürfe und ihre Materialien bleiben bis zur Löschung des Workspace erhalten.
+            Dieser Dienst ist von der optionalen Verbindung zum eigenen ChatGPT-Konto getrennt.
           </p>
         </section>
 

@@ -7,7 +7,8 @@ export type PublicationContext = {
   textOnImages: boolean;
 };
 export type PublicationDraft = {
-  id: string; title: string; body: string; kind: "image" | "carousel";
+  id: string; title: string; body: string; kind: "image" | "carousel" | "text";
+  source?: "chatgpt" | "draft";
   status: "waiting" | "importing" | "ready" | "error";
   context: PublicationContext; asset_ids: string[]; edited_at: string | null;
   updated_at: string;

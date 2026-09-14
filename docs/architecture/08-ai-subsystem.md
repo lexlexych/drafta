@@ -28,6 +28,15 @@ updated: 2026-07-29
 
 ## Клиент и выбор провайдера
 
+Исключение для генерации публикаций: мастер Drafta использует отдельный прямой
+клиент OpenAI в `lib/ai/publications.ts` с `OPENAI_API_KEY`. Он не участвует в
+выборе Mistral/OpenRouter для переписки. Текст идей/постов — Responses API,
+картинки — Image API. Все вызовы выполняются в Inngest, с маскированием текстовых
+идентификаторов и `store: false` для Responses. Счётчики `usage` сохраняются
+в `publication_generation_jobs`, без двоичного тела изображений и HTTP-заголовков;
+в общий журнал HTTP-обменов этот сценарий не пишет. Контракт CATEGORIES ниже
+относится только к ответам инбокса. Подробности: [создание публикаций](18-publication-authoring.md).
+
 **Клиент** — стандартный OpenAI-совместимый SDK; провайдер по умолчанию — **Mistral**
 (`baseURL` La Plateforme, ключ `MISTRAL_API_KEY` —
 см. [13. Секреты](13-environments-secrets.md#секреты-vercel-env)).

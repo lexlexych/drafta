@@ -10,7 +10,7 @@ export async function POST(request: Request) {
     const payload = await readJson(request);
     if (!validateImport(payload)) throw new PublicationError(400, "Нужны текст, заголовок, draft_id, request_id и 1 изображение либо 2–10 слайдов с file_order.");
     const { data: draft, error } = await db.from("publication_drafts").select("id")
-      .eq("workspace_id", grant.workspace_id).eq("created_by", grant.user_id).eq("id", payload.draft_id).maybeSingle();
+      .eq("workspace_id", grant.workspace_id).eq("created_by", grant.user_id).eq("source", "chatgpt").eq("id", payload.draft_id).maybeSingle();
     check(error);
     if (!draft) throw new PublicationError(404, "Черновик не найден.");
     const { data: importId, error: reserveError } = await db.rpc("reserve_publication_import", {

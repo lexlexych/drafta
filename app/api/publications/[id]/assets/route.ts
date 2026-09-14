@@ -9,11 +9,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const { db, workspace } = await memberContext(); const { id } = await params;
     if (!validId(id)) throw new PublicationError(400, "Некорректный черновик.");
     // Raw bytes avoid buffering arbitrarily large multipart bodies.
-    const { data: draft, error } = await db.from("publication_drafts").select("id,status")
+    const { data: draft, error } = await db.from("publication_drafts").select("id,status,source")
       .eq("workspace_id", workspace.id).eq("id", id).maybeSingle();
     check(error); if (!draft) throw new PublicationError(404, "Черновик не найден.");
     if (draft.status === "importing") throw new PublicationError(409, "Дождитесь завершения импорта.");
-    if (new URL(request.url).searchParams.get("purpose") !== "logo") {
+    if (draft.source === "draft") {
+      const { data: state, error: stateError } = await db.from("publication_authoring").select("active_job_id").eq("workspace_id", workspace.id).eq("draft_id", id).single();
+      check(stateError); if (state?.active_job_id) throw new PublicationError(409, "Дождитесь завершения генерации.");
+    } else if (new URL(request.url).searchParams.get("purpose") !== "logo") {
       const { error: lockError } = await db.rpc("edit_publication_draft", { w: workspace.id, d: id });
       if (lockError) throw new PublicationError(409, "Не удалось начать редактирование. Обновите черновик.");
     }

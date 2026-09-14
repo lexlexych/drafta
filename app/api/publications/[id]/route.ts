@@ -7,9 +7,10 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     const { db, workspace } = await memberContext(); const { id } = await params;
     if (!validId(id)) throw new PublicationError(400, "Некорректный черновик.");
     const input = await readJson(request);
-    const { data: draft, error: loadError } = await db.from("publication_drafts").select("id,status")
+    const { data: draft, error: loadError } = await db.from("publication_drafts").select("id,status,source")
       .eq("workspace_id", workspace.id).eq("id", id).maybeSingle();
     check(loadError); if (!draft) throw new PublicationError(404, "Черновик не найден.");
+    if (draft.source === "draft") throw new PublicationError(409, "Используйте редактор Drafta для этого черновика.");
     if (input.action === "context" || input.action === "save") {
       if (!validateContext(input.context) || !["image","carousel"].includes(input.kind)
         || typeof input.title !== "string" || !input.title.trim() || input.title.length > 200) throw new PublicationError(400, "Проверьте настройки публикации.");

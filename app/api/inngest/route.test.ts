@@ -32,10 +32,13 @@ const { AUTO_REPLY_CONCURRENCY } = await import(
   "@/lib/inngest/functions/auto-reply"
 );
 const { publicationImport, recoverPublicationImports, cleanupPublicationAssets } = await import("@/lib/inngest/functions/publication-import");
+const { publicationGeneration, recoverPublicationGenerations } = await import("@/lib/inngest/functions/publication-generation");
 
 describe("Inngest serve route", () => {
   it("registers generation and send functions", () => {
     expect(inngestFunctions).toEqual([
+      publicationGeneration,
+      recoverPublicationGenerations,
       publicationImport,
       recoverPublicationImports,
       cleanupPublicationAssets,

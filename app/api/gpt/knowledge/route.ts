@@ -8,14 +8,14 @@ export async function GET(request: Request) {
     const draftId = new URL(request.url).searchParams.get("draft_id");
     if (!draftId) {
       const { data, error } = await db.from("publication_drafts").select("id,title,status,created_at,edited_at")
-        .eq("workspace_id", grant.workspace_id).eq("created_by", grant.user_id)
+        .eq("workspace_id", grant.workspace_id).eq("created_by", grant.user_id).eq("source", "chatgpt")
         .order("created_at", { ascending: false }).limit(20);
       check(error);
       return json({ drafts: data, instruction: "Выберите черновик, созданный пользователем в Drafta. При нескольких вариантах уточните выбор. Затем вызовите этот endpoint с draft_id." });
     }
     if (!validId(draftId)) throw new PublicationError(400, "Некорректный draft_id.");
     const { data: draft, error } = await db.from("publication_drafts").select("id,title,context,kind,edited_at")
-      .eq("workspace_id", grant.workspace_id).eq("created_by", grant.user_id).eq("id", draftId).maybeSingle();
+      .eq("workspace_id", grant.workspace_id).eq("created_by", grant.user_id).eq("source", "chatgpt").eq("id", draftId).maybeSingle();
     check(error);
     if (!draft) throw new PublicationError(404, "Черновик не найден. Создайте его в Drafta.");
     const context = draft.context as PublicationContext;
