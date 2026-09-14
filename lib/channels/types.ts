@@ -11,11 +11,18 @@
  * never import a provider SDK or provider-specific type.
  */
 
+import type { ChannelCapabilities } from "./capabilities";
+
 /** Providers that implement the channel adapter interface. */
 export type ChannelProvider = "zernio" | "postmark" | "meta";
 
 /** Social/messaging platforms normalized events and channel_connections reference. */
-export type ChannelPlatform = "telegram" | "whatsapp" | "instagram" | "facebook";
+export type ChannelPlatform =
+  | "telegram"
+  | "whatsapp"
+  | "instagram"
+  | "facebook"
+  | "linkedin";
 
 /** Normalized event type — see docs/architecture/05-channels.md#нормализованное-событие. */
 export type NormalizedEventType =
@@ -26,7 +33,8 @@ export type NormalizedEventType =
   | "message.failed"
   | "conversation.started"
   | "comment.received"
-  | "post.published";
+  | "post.published"
+  | "account.disconnected";
 
 /**
  * Whether an outgoing send addresses a DM thread or a comment on a post. Kept
@@ -238,6 +246,18 @@ export interface NormalizedPostPublishedEvent extends NormalizedEventBase {
 }
 
 /**
+ * The provider stopped serving the connected account. `unintentional` is the
+ * one that matters: the platform token expired or was revoked (LinkedIn tokens
+ * live ~60 days), and nothing arrives or sends until the user reconnects.
+ * `intentional` is a disconnect someone made on purpose — including drafta's
+ * own `disconnectAccount` when the channel is deleted.
+ */
+export interface NormalizedAccountDisconnectedEvent extends NormalizedEventBase {
+  type: "account.disconnected";
+  disconnection: "intentional" | "unintentional";
+}
+
+/**
  * A single provider webhook payload normalizes to zero or more of these.
  * This is the contract every adapter's `parseWebhook` must produce, and the
  * one every consumer downstream of `lib/channels` (webhook route, inbox)
@@ -248,7 +268,8 @@ export type NormalizedEvent =
   | NormalizedConversationStartedEvent
   | NormalizedOutgoingMessageEvent
   | NormalizedCommentEvent
-  | NormalizedPostPublishedEvent;
+  | NormalizedPostPublishedEvent
+  | NormalizedAccountDisconnectedEvent;
 
 /** Input to `verifyWebhook` — the exact bytes/headers the provider sent, needed for signature checks. */
 export interface VerifyWebhookInput {
@@ -458,6 +479,14 @@ export interface ConnectCallbackResult {
    * holds the platform tokens; drafta only stores the account ID.
    */
   credentials?: Record<string, unknown>;
+  /**
+   * Capabilities of *this* account that differ from the platform defaults
+   * (`lib/channels/capabilities.ts`) — e.g. a LinkedIn personal profile has no
+   * comments API, while a company page does. Merged over the defaults into the
+   * connection's `capabilities` snapshot, so the core never learns what a
+   * "company page" is.
+   */
+  capabilityOverrides?: Partial<ChannelCapabilities>;
 }
 
 /**

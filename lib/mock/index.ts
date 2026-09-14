@@ -251,6 +251,7 @@ const PLATFORM_LABELS: Record<Platform, string> = {
   whatsapp: "WhatsApp",
   instagram: "Instagram",
   facebook: "Facebook",
+  linkedin: "LinkedIn",
 };
 
 const DELIVERY_LABELS = {

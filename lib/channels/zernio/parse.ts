@@ -9,6 +9,7 @@ import type {
   ParseWebhookResult,
   UnparsedEnvelope,
 } from "../types";
+import { isChannelPlatform } from "../capabilities";
 
 /**
  * Raw Zernio webhook envelope — this adapter's model of the inbox webhook
@@ -97,6 +98,8 @@ interface ZernioRawAccount {
   id?: string;
   accountId?: string;
   platform: string;
+  /** Present on `account.disconnected` only. */
+  disconnectionType?: string;
 }
 
 interface ZernioRawConversation {
@@ -306,17 +309,13 @@ const EXTERNAL_POST_EVENTS: ReadonlySet<string> = new Set([
 
 const POST_PLATFORM_PUBLISHED_EVENT = "post.platform.published" as const;
 
-/** Platforms this product supports — epic E-002 scope ("Zernio покрывает платформы: Telegram, WhatsApp, Facebook, Instagram (DM)"). */
-const KNOWN_PLATFORMS: ReadonlySet<ChannelPlatform> = new Set([
-  "telegram",
-  "whatsapp",
-  "instagram",
-  "facebook",
-]);
-
-function isKnownPlatform(platform: string): platform is ChannelPlatform {
-  return KNOWN_PLATFORMS.has(platform as ChannelPlatform);
-}
+/**
+ * The connected account stopped working at Zernio (`WebhookPayloadAccountDisconnected`,
+ * docs.zernio.com/webhooks/accounts): its `account` block carries `accountId`,
+ * `platform`, and `disconnectionType` — `unintentional` when the platform token
+ * expired or was revoked, `intentional` when someone disconnected it on purpose.
+ */
+const ACCOUNT_DISCONNECTED_EVENT = "account.disconnected" as const;
 
 function isZernioEnvelope(value: unknown): value is ZernioWebhookEnvelope {
   if (typeof value !== "object" || value === null) {
@@ -458,7 +457,7 @@ function parseSingleEnvelope(raw: unknown): EnvelopeOutcome {
     return unparsed("Malformed envelope: missing id, event or account");
   }
 
-  if (!isKnownPlatform(raw.account.platform)) {
+  if (!isChannelPlatform(raw.account.platform)) {
     return unparsed(`Unsupported platform "${raw.account.platform}"`);
   }
 
@@ -507,12 +506,29 @@ function dispatchEnvelope(
     return buildPostPlatformEvent(raw, platform);
   }
 
+  if (raw.event === ACCOUNT_DISCONNECTED_EVENT) {
+    return {
+      type: "account.disconnected",
+      providerEventId: raw.id,
+      provider: "zernio",
+      platform,
+      externalAccountId: envelopeAccountId(raw),
+      // Anything but an explicit `intentional` is treated as the token having
+      // died: flagging a channel for reconnection is the safe side to err on.
+      disconnection:
+        raw.account.disconnectionType === "intentional"
+          ? "intentional"
+          : "unintentional",
+      rawMetadata: raw as unknown as Record<string, unknown>,
+    };
+  }
+
   const dmType = DM_EVENT_TYPES[raw.event];
   if (dmType) {
     return buildDmEvent(raw, dmType, platform);
   }
 
-  // Reactions, account lifecycle, calls, etc. — real Zernio event types this
+  // Reactions, account.connected, calls, etc. — real Zernio event types this
   // adapter does not map. Not an error: refuse it and keep processing the
   // batch. Journaled all the same, which is how "does Zernio even send us
   // this?" stops being a question only the provider's own log can answer.

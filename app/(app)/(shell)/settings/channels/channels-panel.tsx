@@ -2,10 +2,10 @@
 
 /**
  * Настройки → Каналы: по блоку на платформу, разделённых горизонтальной
- * чертой (Instagram, Telegram, WhatsApp, Facebook, Email).
+ * чертой (Instagram, Telegram, WhatsApp, Facebook, LinkedIn, Email).
  *
  * Пока платформа не подключена, блок — это одна кнопка «Подключить <канал>»
- * со значком мессенджера. Для Instagram и WhatsApp она раскрывает короткий
+ * со значком мессенджера. Для Instagram, WhatsApp и LinkedIn она раскрывает короткий
  * онбординг с предусловиями платформы и кнопкой «Войти через <канал>», которая
  * запускает OAuth-флоу: `startChannelConnectionAction` возвращает ссылку
  * авторизации провайдера, и мы уходим на неё
@@ -23,6 +23,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 
+import { DEFAULT_CHANNEL_CAPABILITIES } from "@/lib/channels/capabilities";
 import { CHANNEL_PLATFORM_LABELS } from "@/lib/channels/labels";
 import type { ChannelPlatform } from "@/lib/channels/types";
 import { isIgnoredSenderPlatform } from "@/lib/ignored-senders/validation";
@@ -30,6 +31,7 @@ import { isIgnoredSenderPlatform } from "@/lib/ignored-senders/validation";
 import {
   FacebookIcon,
   InstagramIcon,
+  LinkedInIcon,
   MailIcon,
   TelegramIcon,
   TrashIcon,
@@ -54,6 +56,8 @@ export type ChannelConnectionListItem = {
   name: string;
   platform: ChannelPlatform;
   status: "active" | "disconnected" | "error";
+  /** Из снимка capabilities подключения; не передано — как у платформы. */
+  supportsComments?: boolean;
 };
 
 /** Result banner after returning from the OAuth connect flow (callback route). */
@@ -106,6 +110,12 @@ const CHANNEL_BLOCKS: readonly ChannelBlock[] = [
     Icon: FacebookIcon,
     connect: null,
   },
+  {
+    key: "linkedin",
+    label: CHANNEL_PLATFORM_LABELS.linkedin,
+    Icon: LinkedInIcon,
+    connect: "linkedin",
+  },
   { key: "email", label: "Email", Icon: MailIcon, connect: null },
 ];
 
@@ -129,12 +139,18 @@ const CONNECT_PREREQUISITES: Readonly<Record<ChannelPlatform, string[]>> = {
     "В этом браузере вы уже вошли именно в тот аккаунт Meta, к которому относится бизнес, — иначе на следующем шаге легко подключить чужой.",
   ],
   facebook: [],
+  linkedin: [
+    "Отвечать на комментарии можно только от страницы компании: на следующем шаге выберите её, а не личный профиль. С личного профиля LinkedIn комментарии не отдаёт — такой канал подойдёт только для публикаций.",
+    "Вы администратор этой страницы компании в LinkedIn.",
+    "В этом браузере вы уже вошли именно в тот аккаунт LinkedIn, через который управляете страницей.",
+    "Доступ LinkedIn действует ограниченное время. Если он истечёт, канал получит статус «ошибка подключения» — тогда удалите его и подключите заново.",
+  ],
 };
 
 const STATUS_LABELS: Record<ChannelConnectionListItem["status"], string> = {
   active: "подключён",
   disconnected: "отключён",
-  error: "ошибка подключения",
+  error: "ошибка подключения — удалите канал и подключите заново",
 };
 
 const CONNECT_ERROR_MESSAGES: Record<string, string> = {
@@ -146,7 +162,21 @@ const CONNECT_ERROR_MESSAGES: Record<string, string> = {
 };
 
 function statusLine(channel: ChannelConnectionListItem): string {
-  return `${CHANNEL_PLATFORM_LABELS[channel.platform]} · ${STATUS_LABELS[channel.status]}`;
+  const parts = [
+    CHANNEL_PLATFORM_LABELS[channel.platform],
+    STATUS_LABELS[channel.status],
+  ];
+
+  // Платформа умеет комментарии, а этот аккаунт — нет (личный профиль LinkedIn):
+  // без пометки пустой раздел «Комментарии» выглядел бы поломкой.
+  if (
+    channel.supportsComments === false &&
+    DEFAULT_CHANNEL_CAPABILITIES[channel.platform].supportsComments
+  ) {
+    parts.push("без комментариев");
+  }
+
+  return parts.join(" · ");
 }
 
 type ConnectBanner = { kind: "success" | "error"; text: string };

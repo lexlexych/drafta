@@ -191,8 +191,8 @@ export default function PrivacyPage() {
         <section className={styles.section} id="nachrichten">
           <h2>5. Nachrichten, Kommentare und Kontakte</h2>
           <p>
-            Verbindet ein Unternehmen einen Kanal (etwa Instagram, Facebook, WhatsApp
-            oder Telegram), verarbeiten wir als Auftragsverarbeiter:
+            Verbindet ein Unternehmen einen Kanal (etwa Instagram, Facebook, WhatsApp,
+            Telegram oder LinkedIn), verarbeiten wir als Auftragsverarbeiter:
           </p>
           <ul>
             <li>Inhalte von Direktnachrichten und Kommentaren;</li>
@@ -354,7 +354,7 @@ export default function PrivacyPage() {
           </div>
           <p>
             Nachrichten stammen von Plattformen wie Meta (Instagram, Facebook,
-            WhatsApp) und Telegram; für die Verarbeitung dort gelten deren eigene
+            WhatsApp), Telegram und LinkedIn; für die Verarbeitung dort gelten deren eigene
             Datenschutzbestimmungen. OpenAI erhält Daten nur bei der optionalen
             ChatGPT-Verbindung (Abschnitt 7).
           </p>

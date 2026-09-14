@@ -73,11 +73,60 @@ describe("ChannelsPanel", () => {
   it("shows one connect button per platform block", () => {
     render(<ChannelsPanel channels={[]} />);
 
-    for (const label of ["Instagram", "Telegram", "WhatsApp", "Facebook", "Email"]) {
+    for (const label of [
+      "Instagram",
+      "Telegram",
+      "WhatsApp",
+      "Facebook",
+      "LinkedIn",
+      "Email",
+    ]) {
       expect(
         screen.getByRole("button", { name: `Подключить ${label}` }),
       ).toBeDefined();
     }
+  });
+
+  it("warns before the LinkedIn authorization that comments need a company page", async () => {
+    startChannelConnectionAction.mockResolvedValue({
+      ok: true,
+      url: "https://zernio.com/connect/linkedin?token=abc",
+    });
+
+    render(<ChannelsPanel channels={[]} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Подключить LinkedIn" }));
+
+    expect(screen.getByText(/Перед подключением LinkedIn/)).toBeDefined();
+    expect(screen.getByText(/только от страницы компании/)).toBeDefined();
+
+    fireEvent.click(screen.getByRole("button", { name: "Войти через LinkedIn" }));
+
+    await waitFor(() =>
+      expect(startChannelConnectionAction).toHaveBeenCalledWith({
+        platform: "linkedin",
+      }),
+    );
+  });
+
+  it("marks a LinkedIn personal profile as having no comments", () => {
+    render(
+      <ChannelsPanel
+        channels={[
+          {
+            id: "chc_linkedin",
+            name: "Jonas Weber",
+            platform: "linkedin",
+            status: "active",
+            supportsComments: false,
+          },
+        ]}
+      />,
+    );
+
+    expect(
+      screen.getByText("LinkedIn · подключён · без комментариев"),
+    ).toBeDefined();
   });
 
   it("shows the onboarding prerequisites before the Instagram authorization", () => {

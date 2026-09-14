@@ -1,4 +1,5 @@
-import type { ChannelPlatform, ConnectCallbackResult } from "../types";
+import { CHANNEL_PLATFORMS } from "../capabilities";
+import type { ConnectCallbackResult } from "../types";
 
 /**
  * Parsing of Zernio's account-connect (OAuth) callback. The URL-building /
@@ -17,13 +18,6 @@ const ACCOUNT_ID_PARAM = "accountId";
 const PLATFORM_PARAM = "connected";
 const USERNAME_PARAM = "username";
 const ERROR_PARAMS = ["error", "denied"] as const;
-
-const KNOWN_PLATFORMS: readonly ChannelPlatform[] = [
-  "telegram",
-  "whatsapp",
-  "instagram",
-  "facebook",
-];
 
 /** Thrown when Zernio's connect callback reports an error or omits the account ID. */
 export class ZernioConnectCallbackError extends Error {
@@ -60,7 +54,7 @@ export function parseZernioConnectCallback(
   }
 
   const reported = query[PLATFORM_PARAM]?.trim();
-  const platform = KNOWN_PLATFORMS.find((candidate) => candidate === reported);
+  const platform = CHANNEL_PLATFORMS.find((candidate) => candidate === reported);
 
   // The account handle names the connection (the user doesn't type a name) —
   // optional here, the caller falls back to the platform label.

@@ -16,9 +16,9 @@ import {
 } from "@/lib/ai/knowledge-base";
 import {
   getDefaultChannelCapabilities,
+  isChannelPlatform,
   type ChannelCapabilities,
 } from "@/lib/channels/capabilities";
-import type { ChannelPlatform } from "@/lib/channels/types";
 import { createAdminSupabaseClient } from "@/lib/db/admin";
 import { recordAiRequest } from "@/lib/db/ai-request-log";
 import { recordAiUsage } from "@/lib/db/ai-usage";
@@ -135,15 +135,6 @@ function assertQuerySucceeded(error: QueryError, operation: string): void {
 
   const code = error.code ? ` (${error.code})` : "";
   throw new Error(`${operation} failed${code}.`);
-}
-
-function isChannelPlatform(value: unknown): value is ChannelPlatform {
-  return (
-    value === "telegram" ||
-    value === "whatsapp" ||
-    value === "instagram" ||
-    value === "facebook"
-  );
 }
 
 function channelCapabilities(

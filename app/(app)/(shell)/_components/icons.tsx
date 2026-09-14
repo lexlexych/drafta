@@ -222,6 +222,16 @@ export function FacebookIcon(props: IconProps) {
   );
 }
 
+/** LinkedIn: «in» в скруглённом квадрате. */
+export function LinkedInIcon(props: IconProps) {
+  return (
+    <Icon {...stroke} strokeWidth={1.9} strokeLinecap="round" {...props}>
+      <rect x="3.6" y="3.6" width="16.8" height="16.8" rx="3.5" />
+      <path d="M8.3 10.6v5.6M8.3 7.9v.01M11.7 16.2v-5.6M11.7 13.2c0-1.6 1-2.6 2.3-2.6s2 .9 2 2.4v3.2" />
+    </Icon>
+  );
+}
+
 /** Email: конверт. */
 export function MailIcon(props: IconProps) {
   return (

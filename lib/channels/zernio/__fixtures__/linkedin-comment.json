@@ -1,0 +1,34 @@
+{
+  "id": "wh_evt_01HZXLINKEDINCMT01",
+  "event": "comment.received",
+  "timestamp": "2026-09-14T09:12:05.118Z",
+  "comment": {
+    "id": "urn:li:comment:(urn:li:activity:7240011223344556677,7240019988776655443)",
+    "postId": null,
+    "platformPostId": "urn:li:activity:7240011223344556677",
+    "platform": "linkedin",
+    "text": "Bieten Sie auch Workshops für Teams an?",
+    "author": {
+      "id": "urn:li:person:Ab3xYz91Qw",
+      "username": "jonas-weber",
+      "name": "Jonas Weber",
+      "picture": "https://media.licdn.com/dms/image/jonas-weber.jpg"
+    },
+    "createdAt": "2026-09-14T09:12:04.000Z",
+    "isReply": false,
+    "parentCommentId": null
+  },
+  "post": {
+    "id": null,
+    "platformPostId": "urn:li:activity:7240011223344556677",
+    "content": "Neue Keramik-Kollektion ist da",
+    "imageUrl": null,
+    "permalink": "https://www.linkedin.com/feed/update/urn:li:activity:7240011223344556677/"
+  },
+  "account": {
+    "id": "acct_li_30017",
+    "accountId": "acct_li_30017",
+    "platform": "linkedin",
+    "username": "tonwerk-keramik"
+  }
+}

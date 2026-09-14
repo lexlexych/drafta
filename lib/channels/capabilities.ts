@@ -43,6 +43,11 @@ export interface ChannelCapabilities {
  * - Private replies are Instagram/Facebook only and expire 7 days after the
  *   comment — both stated by Zernio's `sendPrivateReplyToComment`
  *   (docs.zernio.com/api/openapi), which surfaces Meta's own rule.
+ * - LinkedIn has no DMs for third-party apps and exposes comments only for
+ *   company pages (docs.zernio.com/platforms/linkedin). The defaults describe a
+ *   company page; a personal profile is connected with `supportsComments: false`
+ *   as a per-connection override (`ConnectCallbackResult.capabilityOverrides`).
+ *   1250 characters is LinkedIn's comment length limit.
  */
 export const DEFAULT_CHANNEL_CAPABILITIES: Readonly<
   Record<ChannelPlatform, ChannelCapabilities>
@@ -87,7 +92,25 @@ export const DEFAULT_CHANNEL_CAPABILITIES: Readonly<
     supportsPrivateReply: true,
     privateReplyWindowHours: 24 * 7,
   },
+  linkedin: {
+    responseWindowHours: null,
+    supportsAttachments: false,
+    supportsReadReceipts: false,
+    maxMessageLength: 1250,
+    threadingStyle: "parent",
+    supportsComments: true,
+    supportsPrivateReply: false,
+    privateReplyWindowHours: null,
+  },
 };
+
+/**
+ * Every supported platform — the one list the rest of the code checks platform
+ * names against, so a new platform is added in exactly one place.
+ */
+export const CHANNEL_PLATFORMS = Object.keys(
+  DEFAULT_CHANNEL_CAPABILITIES,
+) as ChannelPlatform[];
 
 /** Returns a fresh copy of the platform's default capabilities (safe for the caller to mutate). */
 export function getDefaultChannelCapabilities(
@@ -96,12 +119,10 @@ export function getDefaultChannelCapabilities(
   return { ...DEFAULT_CHANNEL_CAPABILITIES[platform] };
 }
 
-function isChannelPlatform(value: unknown): value is ChannelPlatform {
+export function isChannelPlatform(value: unknown): value is ChannelPlatform {
   return (
-    value === "telegram" ||
-    value === "whatsapp" ||
-    value === "instagram" ||
-    value === "facebook"
+    typeof value === "string" &&
+    Object.prototype.hasOwnProperty.call(DEFAULT_CHANNEL_CAPABILITIES, value)
   );
 }
 

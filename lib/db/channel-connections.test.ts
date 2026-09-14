@@ -121,6 +121,26 @@ describe.skipIf(!hasLocalSupabaseConfig)("lib/db/channel-connections", () => {
     expect(result.data.status).toBe("active");
   });
 
+  it("lays the provider's per-account capability overrides over the platform defaults", async () => {
+    const workspaceId = await createTestWorkspace();
+
+    const result = await createChannelConnection(supabase, workspaceId, {
+      provider: "zernio",
+      platform: "linkedin",
+      externalId: "acct_li_personal_001",
+      name: "Jonas Weber",
+      capabilityOverrides: { supportsComments: false },
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.data.capabilities).toMatchObject({
+      supportsComments: false,
+      maxMessageLength: 1250,
+      supportsPrivateReply: false,
+    });
+  });
+
   it("rejects a duplicate (workspace, provider, external_id) with a friendly error, keeps the original row", async () => {
     const workspaceId = await createTestWorkspace();
 

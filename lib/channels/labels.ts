@@ -15,6 +15,7 @@ export const CHANNEL_PLATFORM_LABELS: Readonly<Record<ChannelPlatform, string>> 
   telegram: "Telegram",
   whatsapp: "WhatsApp",
   facebook: "Facebook",
+  linkedin: "LinkedIn",
 };
 
 /**

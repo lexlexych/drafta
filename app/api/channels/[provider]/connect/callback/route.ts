@@ -14,6 +14,7 @@ import {
   verifyConnectState,
 } from "@/lib/channels/connect-state";
 import { buildChannelConnectionName } from "@/lib/channels/labels";
+import type { ConnectCallbackResult } from "@/lib/channels/types";
 import {
   createChannelConnection,
   findChannelConnectionByExternalId,
@@ -87,11 +88,13 @@ export async function GET(
   let externalAccountId: string;
   let reportedPlatform: string | undefined;
   let accountUsername: string | undefined;
+  let capabilityOverrides: ConnectCallbackResult["capabilityOverrides"];
   try {
     const parsed = await adapter.parseConnectCallback({ query });
     externalAccountId = parsed.externalAccountId;
     reportedPlatform = parsed.platform;
     accountUsername = parsed.accountUsername;
+    capabilityOverrides = parsed.capabilityOverrides;
   } catch (error) {
     console.error(
       `[channels/${provider}] connect callback did not yield an account`,
@@ -114,6 +117,7 @@ export async function GET(
     // The connection is named after the authorized account — the user picks
     // no name up front and renames later if needed.
     name: buildChannelConnectionName(verified.state.platform, accountUsername),
+    capabilityOverrides,
   });
 
   if (!result.ok) {

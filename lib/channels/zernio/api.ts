@@ -513,6 +513,57 @@ export async function sendZernioCommentPrivateReply(
   return messageId;
 }
 
+export type ZernioLinkedInAccountType = "personal" | "organization";
+
+/**
+ * Which kind of LinkedIn account the user picked on Zernio's hosted selection
+ * page — a personal profile or a company page. The connect callback does not
+ * say, and the two differ in what the API allows: comments are readable for
+ * company pages only (docs.zernio.com/platforms/linkedin).
+ *
+ * Read from `GET /v1/accounts?platform=linkedin` → `accounts[].metadata`, whose
+ * shape Zernio documents only as "platform-specific". Both an explicit
+ * `accountType` and a selected organization are accepted; anything else is
+ * `null` ("unknown"), and the caller must not guess from it.
+ */
+export async function getZernioLinkedInAccountType(
+  config: ZernioApiConfig,
+  accountId: string,
+): Promise<ZernioLinkedInAccountType | null> {
+  const url = new URL(joinUrl(config.apiBaseUrl, "accounts"));
+  url.searchParams.set("platform", "linkedin");
+
+  const response = await fetch(url, { method: "GET", headers: authHeaders(config) });
+  if (!response.ok) {
+    throw await zernioHttpError(response, "Zernio account list failed");
+  }
+
+  const body = asRecord(await readJson(response));
+  const rows = Array.isArray(body?.accounts) ? body.accounts : [];
+  const account = rows
+    .map((row) => asRecord(row))
+    .find((row) => row?._id === accountId || row?.id === accountId);
+  const metadata = asRecord(account?.metadata);
+  if (!metadata) {
+    return null;
+  }
+
+  const declared = nonEmptyString(metadata.accountType)?.toLowerCase();
+  if (declared === "personal" || declared === "organization") {
+    return declared;
+  }
+
+  if (
+    asRecord(metadata.selectedOrganization) ||
+    nonEmptyString(metadata.organizationUrn) ||
+    nonEmptyString(metadata.organizationId)
+  ) {
+    return "organization";
+  }
+
+  return null;
+}
+
 /**
  * Asks Zernio for the hosted authorization URL for `platform` under
  * `profileId`, redirecting back to `redirectUrl` when done. Returns the

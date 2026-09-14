@@ -176,6 +176,7 @@ async function loadChannelsSectionData(): Promise<ChannelsSectionData> {
       name: row.name,
       platform: row.platform,
       status: row.status,
+      supportsComments: row.capabilities.supportsComments !== false,
     })),
     // Список привязан к платформе, а не к подключению, поэтому в
     // `ChannelConnectionListItem` он не встраивается — панель раскладывает его

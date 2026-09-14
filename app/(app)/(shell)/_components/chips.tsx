@@ -13,6 +13,7 @@ const PLATFORM_DOT_CLASSES: Record<ChannelPlatform | "all", string> = {
   whatsapp: styles.platformDotWhatsapp,
   instagram: styles.platformDotInstagram,
   facebook: styles.platformDotFacebook,
+  linkedin: styles.platformDotLinkedin,
   all: styles.platformDotAll,
 };
 

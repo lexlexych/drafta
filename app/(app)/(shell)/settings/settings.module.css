@@ -187,6 +187,10 @@
   background: var(--whatsapp);
 }
 
+.channelIcon[data-platform="linkedin"] {
+  background: var(--linkedin);
+}
+
 .channelOnboarding {
   display: flex;
   flex-direction: column;

@@ -331,4 +331,70 @@ describe("createZernioAdapter", () => {
     expect(result.externalAccountId).toBe("acct_tg_98213");
     expect(result.platform).toBe("telegram");
   });
+
+  function stubLinkedInAccounts(metadata: Record<string, unknown> | undefined) {
+    const fetchMock = vi.fn().mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        accounts: [
+          { _id: "acct_other", platform: "linkedin", metadata: { accountType: "personal" } },
+          { _id: "acct_li_30017", platform: "linkedin", metadata },
+        ],
+      }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    return fetchMock;
+  }
+
+  it("connects a LinkedIn personal profile without comments", async () => {
+    const fetchMock = stubLinkedInAccounts({ accountType: "personal" });
+    const adapter = createZernioAdapter(() => "secret", () => apiConfig);
+
+    const result = await adapter.parseConnectCallback!({
+      query: { accountId: "acct_li_30017", connected: "linkedin" },
+    });
+
+    expect(result.capabilityOverrides).toEqual({ supportsComments: false });
+    const url = new URL(fetchMock.mock.calls[0][0] as string);
+    expect(url.pathname).toBe("/api/v1/accounts");
+    expect(url.searchParams.get("platform")).toBe("linkedin");
+  });
+
+  it.each([
+    ["an explicit organization type", { accountType: "organization" }],
+    ["a selected organization", { selectedOrganization: { id: "123" } }],
+    ["no recognizable metadata", {}],
+  ])("keeps company-page defaults for %s", async (_label, metadata) => {
+    stubLinkedInAccounts(metadata);
+    const adapter = createZernioAdapter(() => "secret", () => apiConfig);
+
+    const result = await adapter.parseConnectCallback!({
+      query: { accountId: "acct_li_30017", connected: "linkedin" },
+    });
+
+    expect(result.externalAccountId).toBe("acct_li_30017");
+    expect(result.capabilityOverrides).toBeUndefined();
+  });
+
+  it("still connects LinkedIn when the account lookup fails", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValueOnce({
+        ok: false,
+        status: 500,
+        text: async () => "boom",
+      }),
+    );
+    const adapter = createZernioAdapter(() => "secret", () => apiConfig);
+
+    const result = await adapter.parseConnectCallback!({
+      query: { accountId: "acct_li_30017", connected: "linkedin" },
+    });
+
+    expect(result.platform).toBe("linkedin");
+    expect(result.capabilityOverrides).toBeUndefined();
+    warn.mockRestore();
+  });
 });
