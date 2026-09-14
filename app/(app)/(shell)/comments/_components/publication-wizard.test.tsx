@@ -4,11 +4,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PublicationWizard } from "./publication-wizard";
 import { DEFAULT_AUTHORING, type AuthoringState, type PostIdea } from "@/lib/publications/authoring";
 const channel="a1000000-0000-4000-8000-000000000001";
+let savedAssets:string[]=[];
 let state:AuthoringState; let fetchMock:ReturnType<typeof vi.fn>;let job:unknown;
 const idea=(index:number):PostIdea=>({topic:`Идея ${index}`,goal:"Записи на обслуживание",cta:"Написать нам",audience:"Владельцы велосипедов",tone:"Экспертный",description:`Подробности ${index}`});
 beforeEach(()=>{
-  state={input:structuredClone(DEFAULT_AUTHORING),revision:0,step:1,ideas:[],ideas_key:"",active_job_id:null,variants:[]};job=null;
+  state={input:structuredClone(DEFAULT_AUTHORING),revision:0,step:1,ideas:[],ideas_key:"",active_job_id:null,variants:[]};job=null;savedAssets=[];
   fetchMock=vi.fn(async(_url:string,init?:RequestInit)=>{
+    if(_url.endsWith("/publish"))return Response.json({channels:[],deliveries:[]});
     if(init?.method==="POST"){
       const body=JSON.parse(init.body as string);
       if(body.action==="save"){state={...state,input:body.input,step:body.step,revision:state.revision+1};return Response.json(state);}
@@ -20,18 +22,18 @@ beforeEach(()=>{
         job={id:"job",status:"ready",kind:body.kind,input_revision:state.revision,result:{title:"Готовый пост",variants:[{channelId:channel,body:"Готовый текст"}],assetIds:state.input.kind==="image"?[channel]:[]}};
         return Response.json(job);
       }
-      if(body.action==="edit"){state.variants=body.result.variants;state.step=6;state.revision++;return Response.json(state);}
+      if(body.action==="edit"){savedAssets=body.result.assetIds;state.variants=body.result.variants;state.step=6;state.revision++;return Response.json(state);}
     }
-    return Response.json({state,channels:[{id:channel,name:"Мастерская",platform:"instagram"}],categories:[],configured:true,job,draft:{title:"Черновик",asset_ids:[],status:"waiting"}});
+    return Response.json({state,channels:[{id:channel,name:"Мастерская",platform:"instagram"}],categories:[],configured:true,job,draft:{title:"Черновик",asset_ids:savedAssets,status:"waiting"}});
   });vi.stubGlobal("fetch",fetchMock);
 });
 afterEach(()=>{cleanup();vi.unstubAllGlobals();});
 async function start(){render(<PublicationWizard draftId={channel} onClose={()=>{}}/>);await screen.findByText("Куда готовим публикацию?");fireEvent.click(screen.getByRole("checkbox",{name:/Мастерская/}));}
 const actions=()=>fetchMock.mock.calls.filter(([,init])=>init?.method==="POST").map(([,init])=>JSON.parse(init!.body as string));
 describe("native publication wizard smoke",()=>{
-  it("shows only connected channels and disables future formats",async()=>{
-    await start();expect(screen.getByRole("radio",{name:/Текст \+ карусель/}).hasAttribute("disabled")).toBe(true);
-    expect(screen.getByRole("radio",{name:/Сценарий для видео/}).hasAttribute("disabled")).toBe(true);
+  it("shows only connected channels and enables all four formats",async()=>{
+    await start();expect(screen.getByRole("radio",{name:/Текст \+ карусель/}).hasAttribute("disabled")).toBe(false);
+    expect(screen.getByRole("radio",{name:/Сценарий для видео/}).hasAttribute("disabled")).toBe(false);
     expect(screen.queryByText("Facebook")).toBeNull();
   });
   it("skips ideas and image settings for text, generates and saves the edited result",async()=>{
@@ -62,4 +64,19 @@ describe("native publication wizard smoke",()=>{
     await screen.findByText("Идея и содержание");expect((screen.getByLabelText("О чём пост?") as HTMLInputElement).value).toBe("Идея 5");
     expect(actions()).toHaveLength(0);
   });
+});
+
+it("opens an instruction field and revises only the selected carousel slide",async()=>{
+  state.step=6;state.input.kind="carousel";state.input.slides=["Hook","Conclusion"];state.input.channelIds=[channel];state.input.brief=idea(1);state.variants=[{channelId:channel,body:"Saved caption"}];savedAssets=[channel,"a1000000-0000-4000-8000-000000000002"];
+  render(<PublicationWizard draftId={channel} onClose={()=>{}}/>);
+  const buttons=await screen.findAllByRole("button",{name:"Изменить изображение с AI"});fireEvent.click(buttons[1]);
+  expect(actions().filter(p=>p.action==="start")).toHaveLength(0);
+  fireEvent.change(screen.getByLabelText("Что изменить?"),{target:{value:"Сделай фон светлее"}});fireEvent.click(screen.getByRole("button",{name:"Предложить изменения"}));
+  await waitFor(()=>expect(actions().find(p=>p.action==="start"&&p.kind==="image")?.revisionRequest).toEqual({instruction:"Сделай фон светлее",assetId:"a1000000-0000-4000-8000-000000000002"}));
+});
+it("keeps video scripts separate from publication controls",async()=>{
+  state.step=6;state.input.kind="video";state.input.channelIds=[channel];state.variants=[{channelId:channel,body:"Сцена 1: вступление"}];
+  render(<PublicationWizard draftId={channel} onClose={()=>{}}/>);
+  await screen.findByRole("button",{name:"Скопировать сценарий"});expect(screen.queryByRole("button",{name:"Предпросмотр и публикация"})).toBeNull();
+  fireEvent.click(screen.getByRole("button",{name:"Изменить текст с AI"}));expect(screen.getByLabelText("Что изменить?")).toBeTruthy();
 });

@@ -2,14 +2,17 @@ import { validId } from "./types";
 
 export type PostIdea = { topic: string; goal: string; cta: string; audience: string; tone: string; description: string };
 export type AuthoringInput = {
-  channelIds: string[]; kbIds: string[]; kind: "image" | "text"; language: string;
+  channelIds: string[]; kbIds: string[]; kind: "image" | "text" | "carousel" | "video"; language: string;
+  slides?: string[];
+  video?: { duration: number; format: string };
   brief: PostIdea; aspectRatio: "1:1" | "4:5" | "9:16";
   image: { source: "generate" | "upload"; description: string; style: string; colors: string; caption: string; assetId: string | null; referenceId: string | null };
 };
 export type ChannelChoice = { id: string; name: string; platform: string };
 export type PublicationVariant = { channelId: string; body: string };
 export type AuthoringResult = { title: string; variants: PublicationVariant[]; imagePrompt?: string; assetIds: string[] };
-export type AuthoringJob = { id: string; kind: "ideas" | "post" | "text" | "image"; status: "pending" | "ready" | "error"; stage: string; error: string | null; result: AuthoringResult | null; input_revision: number };
+export type RevisionRequest = { instruction: string; channelId?: string; assetId?: string };
+export type AuthoringJob = { id: string; kind: "ideas" | "post" | "text" | "image" | "outline"; status: "pending" | "ready" | "error"; stage: string; error: string | null; result: AuthoringResult | null; input_revision: number };
 export type AuthoringState = {
   input: AuthoringInput; revision: number; step: number; ideas: PostIdea[]; ideas_key: string;
   active_job_id: string | null; variants: PublicationVariant[];
@@ -36,7 +39,9 @@ export function validIdea(value: unknown): value is PostIdea {
 export function validAuthoringInput(value: unknown): value is AuthoringInput {
   if (!object(value) || !object(value.image)) return false;
   const img = value.image;
-  return ids(value.channelIds, 20) && ids(value.kbIds, 100) && ["image", "text"].includes(String(value.kind))
+  return ids(value.channelIds, 20) && ids(value.kbIds, 100) && ["image", "text", "carousel", "video"].includes(String(value.kind))
+    && (value.slides === undefined || (Array.isArray(value.slides) && value.slides.length >= 2 && value.slides.length <= 10 && value.slides.every(s => text(s, 2000))))
+    && (value.video === undefined || (object(value.video) && Number.isInteger(value.video.duration) && Number(value.video.duration) >= 15 && Number(value.video.duration) <= 600 && text(value.video.format, 500)))
     && text(value.language, 100) && !!value.language.trim() && validIdea(value.brief)
     && ["1:1", "4:5", "9:16"].includes(String(value.aspectRatio))
     && ["generate", "upload"].includes(String(img.source)) && text(img.description, 4000) && text(img.style, 500)
@@ -52,11 +57,13 @@ export function generationIssue(input: AuthoringInput, kind: AuthoringJob["kind"
   if (!input.brief.topic.trim()) return "Укажите, о чём пост.";
   if (!input.brief.goal.trim()) return "Укажите цель публикации.";
   if (input.kind === "image" && kind !== "text" && input.image.source === "upload" && !input.image.assetId) return "Загрузите картинку или выберите генерацию AI.";
-  if (kind === "image" && input.kind !== "image") return "У текстового поста нет картинки.";
+  if (kind === "image" && !["image", "carousel"].includes(input.kind)) return "У этого формата нет картинки.";
+  if (kind === "outline" && input.kind !== "carousel") return "Структура доступна для карусели.";
+  if (kind === "post" && input.kind === "carousel" && (!input.slides || input.slides.some(s => !s.trim()))) return "Сначала подготовьте содержание каждого слайда.";
   return null;
 }
 export function validResult(value: unknown, channelIds: string[]): value is AuthoringResult {
-  if (!object(value) || !text(value.title, 200) || !value.title.trim() || !Array.isArray(value.variants) || !ids(value.assetIds, 1)) return false;
+  if (!object(value) || !text(value.title, 200) || !value.title.trim() || !Array.isArray(value.variants) || !ids(value.assetIds, 10)) return false;
   return value.variants.length === channelIds.length && new Set(value.variants.map(v => v?.channelId)).size === channelIds.length
     && value.variants.every(v => object(v) && typeof v.channelId === "string" && channelIds.includes(v.channelId) && text(v.body, 20000) && !!v.body.trim());
 }

@@ -8,6 +8,7 @@
  */
 
 import Link from "next/link";
+import {useState} from "react";
 
 import type { PostListItemView } from "@/lib/comments/types";
 import type { ChannelFilterView } from "@/lib/mock";
@@ -66,6 +67,7 @@ export function PostList({
     activityLabel: "Загружаем посты…",
   });
 
+  const [publicationFilter,setPublicationFilter]=useState("all");
   const isDefaultFilter = channelIds.length === 0;
 
   const subtitle = [
@@ -90,7 +92,9 @@ export function PostList({
         <span className={styles.paneSubtitle}>{subtitle}</span>
       </div>
 
-      <PublicationDraftLinks selectedId={selectedDraftId} />
+      <label style={{padding:"8px 16px"}}>Показать <select aria-label="Фильтр публикаций" value={publicationFilter} onChange={e=>setPublicationFilter(e.target.value)}><option value="all">Все материалы</option><option value="drafts">Черновики</option><option value="published">Опубликованные</option><option value="video">Сценарии</option><option value="errors">Ошибки отправки</option></select></label>
+      <PublicationDraftLinks selectedId={selectedDraftId} filter={publicationFilter} />
+      {["all","published"].includes(publicationFilter)&&<>
       <ListFilters
         channels={channels}
         selectedChannelIds={channelIds}
@@ -179,7 +183,7 @@ export function PostList({
             {isPending ? "Загружаем ещё…" : null}
           </div>
         ) : null}
-      </div>
+      </div></>}
     </section>
   );
 }

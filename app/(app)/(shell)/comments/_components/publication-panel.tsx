@@ -8,6 +8,7 @@ import { createBrowserSupabaseClient } from "@/lib/db/browser";
 import { DEFAULT_CONTEXT, MAX_UPLOAD_BYTES, type PublicationContext, type PublicationDraft } from "@/lib/publications/types";
 import styles from "./publication-panel.module.css";
 import ui from "../../_components/ui.module.css";
+import {PublicationPublish,DeletePublication} from "./publication-publish";
 import { PublicationWizard } from "./publication-wizard";
 
 type PanelData = { drafts: PublicationDraft[]; selectedDraft?: PublicationDraft | null; categories: { id: string; name: string }[]; connected: boolean; authorizedKbIds: string[]; gptUrl: string | null };
@@ -22,7 +23,8 @@ async function api(path: string, init?: RequestInit) {
 }
 function patch(id: string, data: unknown) { return api(`/api/publications/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }); }
 
-export function PublicationDraftLinks({ selectedId }: { selectedId?: string | null }) {
+export function PublicationDraftLinks({ selectedId,filter="all" }: { selectedId?: string | null;filter?:string }) {
+  const router=useRouter();
   const [drafts, setDrafts] = useState<PublicationDraft[]>([]);
   useEffect(() => {
     let active = true;
@@ -32,13 +34,15 @@ export function PublicationDraftLinks({ selectedId }: { selectedId?: string | nu
     return () => { active = false; clearInterval(timer); window.removeEventListener("publication-changed", refresh); };
   }, []);
   if (!drafts.length) return null;
-  return <details className={styles.drafts} open><summary>Черновики · {drafts.length}</summary>
-    {drafts.map(d => <Link key={d.id} href={`/comments?draft=${d.id}`} aria-current={selectedId === d.id ? "page" : undefined}>{d.title}</Link>)}
+  return <details className={styles.drafts} open><summary>Материалы Drafta · {drafts.length}</summary>
+
+    {drafts.filter(d=>filter==="all"?true:filter==="video"?d.kind==="video":filter==="errors"?d.deliveries?.some(p=>["failed","uncertain"].includes(p.status)):filter==="published"?d.deliveries?.some(p=>p.status==="published"):d.kind!=="video"&&!d.deliveries?.some(p=>p.status==="published")).map(d => <div key={d.id}><Link href={`/comments?draft=${d.id}`} aria-current={selectedId === d.id ? "page" : undefined}>{d.title}{d.deliveries?.some(p=>["failed","uncertain"].includes(p.status))?" · Ошибка отправки":""}</Link><DeletePublication draftId={d.id} onDeleted={()=>{setDrafts(ds=>ds.filter(x=>x.id!==d.id));if(selectedId===d.id)router.push("/comments");}} /></div>)}
   </details>;
 }
 
 export function PublicationPanel({ draftId, workspaceId }: { draftId: string; workspaceId: string }) {
   const router = useRouter();
+  const [publicationLocked,setPublicationLocked]=useState(false);
   const [data, setData] = useState<PanelData | null>(null);
   const [draft, setDraft] = useState<PublicationDraft | null>(null);
   const [context, setContext] = useState<PublicationContext>(DEFAULT_CONTEXT);
@@ -106,7 +110,7 @@ export function PublicationPanel({ draftId, workspaceId }: { draftId: string; wo
     else { setEditing(true); setAssets(a => replaceIndex === undefined ? [...a, result.id] : a.map((id, i) => i === replaceIndex ? result.id : id)); }
     change();
   }
-  const frozen = busy || draft?.status === "importing";
+  const frozen = busy || publicationLocked || draft?.status === "importing";
   if (draft?.source === "draft") return <PublicationWizard key={draft.id} draftId={draft.id} onClose={() => router.push("/comments")} />;
   return <div className={styles.panel}>
     <div className={styles.header}><h2>{draft ? "Черновик публикации" : "Создание публикации"}</h2>
@@ -170,6 +174,8 @@ export function PublicationPanel({ draftId, workspaceId }: { draftId: string; wo
         {editing && <label>Добавить изображение<input type="file" accept="image/png,image/jpeg,image/webp" disabled={assets.length >= 10} onChange={e => { const file = e.target.files?.[0]; if (file) void perform(() => upload(file, "image")); e.target.value = ""; }} /></label>}
       </fieldset>
       {editing && <button className={primary} disabled={frozen} onClick={() => void perform(save)}>Сохранить черновик</button>}
+      {draft&&draft.status==="ready"&&<PublicationPublish draftId={draft.id} kind={kind} result={{title,variants:[{channelId:"legacy",body}],assetIds:assets}} onLockedChange={setPublicationLocked} beforePublish={async()=>{if(dirty&&!publicationLocked)await save();const current=await api(`/api/publications?draft_id=${draft.id}`);return current.selectedDraft.updated_at;}}/>}
+      {draft&&<DeletePublication draftId={draft.id} disabled={busy} onDeleted={()=>router.push("/comments")}/>}
     </div>}
   </div>;
 }

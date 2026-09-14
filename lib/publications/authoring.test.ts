@@ -8,8 +8,8 @@ describe("native authoring contract",()=>{
     input.channelIds=[channel];expect(generationIssue(input,"ideas")).toBeNull();expect(generationIssue(input,"post")).toContain("о чём");
     input.brief.topic="Осень";input.brief.goal="Записи";input.kind="text";expect(generationIssue(input,"post")).toBeNull();
   });
-  it("rejects disabled formats, duplicate IDs and oversized fields",()=>{
-    for(const kind of ["carousel","video"])expect(validAuthoringInput({...DEFAULT_AUTHORING,kind})).toBe(false);
+  it("accepts all formats and rejects duplicate IDs and oversized fields",()=>{
+    for(const kind of ["carousel","video"])expect(validAuthoringInput({...DEFAULT_AUTHORING,kind})).toBe(true);
     expect(validAuthoringInput({...DEFAULT_AUTHORING,channelIds:[channel,channel]})).toBe(false);
     expect(validAuthoringInput({...DEFAULT_AUTHORING,brief:{...DEFAULT_AUTHORING.brief,topic:"x".repeat(501)}})).toBe(false);
     expect(validAuthoringInput(null)).toBe(false);
@@ -30,4 +30,13 @@ describe("native authoring contract",()=>{
     expect(validResult({...result,variants:[...result.variants,...result.variants]},[channel])).toBe(false);
     expect(validResult(result,["b1000000-0000-4000-8000-000000000001"])).toBe(false);
   });
+});
+
+it("requires an approved carousel outline and bounds slide/video inputs",()=>{
+  const input={...structuredClone(DEFAULT_AUTHORING),kind:"carousel" as const,channelIds:[channel],brief:{...DEFAULT_AUTHORING.brief,topic:"Topic",goal:"Goal"},slides:["Hook",""]};
+  expect(generationIssue(input,"outline")).toBeNull();expect(generationIssue(input,"post")).toContain("слайда");
+  expect(generationIssue({...input,slides:["Hook","Conclusion"]},"post")).toBeNull();
+  expect(validAuthoringInput({...input,slides:Array(11).fill("Slide")})).toBe(false);
+  expect(validAuthoringInput({...input,kind:"video",video:{duration:0,format:"Talking head"}})).toBe(false);
+  expect(generationIssue({...input,kind:"video"},"image")).toContain("нет картинки");
 });

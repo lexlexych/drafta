@@ -17,7 +17,7 @@ await db.exec(`
  create table auth.users(id uuid primary key);
  create table public.workspaces(id uuid primary key);
  create table public.workspace_members(workspace_id uuid,user_id uuid);
- create table public.channel_connections(id uuid primary key,workspace_id uuid,status text);
+ create table public.channel_connections(id uuid primary key,workspace_id uuid,status text,platform text default 'linkedin',name text,provider text,external_id text,unique(workspace_id,id));
  create table public.kb_files(id uuid primary key,workspace_id uuid,is_enabled boolean);
  create table storage.buckets(id text primary key,name text,public boolean,file_size_limit bigint,allowed_mime_types text[]);
  create table storage.objects(name text,bucket_id text,created_at timestamptz default now());
@@ -26,12 +26,13 @@ await db.exec(`
  insert into auth.users values('${u}');
  insert into workspaces values('${w}'),('${other}');
  insert into workspace_members values('${w}','${u}');
- insert into channel_connections values('${channel}','${w}','active'),('${foreignChannel}','${other}','active');
+ insert into channel_connections(id,workspace_id,status) values('${channel}','${w}','active'),('${foreignChannel}','${other}','active');
 `);
 // Replication is infrastructure, not part of these transaction/RLS contracts.
 const old = (await readFile("supabase/migrations/20260911120000_publication_drafts.sql","utf8")).replace("alter publication supabase_realtime add table public.publication_drafts;","");
 await db.exec(old);
 await db.exec(await readFile("supabase/migrations/20260914120000_publication_authoring.sql","utf8"));
+await db.exec(await readFile("supabase/migrations/20260914130000_publication_publishing.sql","utf8"));
 const input={channelIds:[channel],kbIds:[],kind:"text",language:"Русский",brief:{topic:"Тема",goal:"Цель",cta:"",audience:"",tone:"",description:""},aspectRatio:"4:5",image:{source:"generate",description:"",style:"",colors:"",caption:"",assetId:null,referenceId:null}};
 await db.query("insert into publication_drafts(id,workspace_id,created_by,source) values($1,$2,$3,'draft'),($4,$5,$3,'draft')",[d,w,u,foreignDraft,other]);
 await db.query("insert into publication_authoring(draft_id,workspace_id,input) values($1,$2,$3),($4,$5,$3)",[d,w,JSON.stringify(input),foreignDraft,other]);
@@ -92,9 +93,52 @@ await test("OAuth import cannot reserve a native draft",async()=>{
  await db.query("update publication_drafts set edited_at=null where id=$1",[d]);
  await assert.rejects(()=>db.query("select reserve_publication_import($1,$2,$3,'digest','{}')",[w,d,crypto.randomUUID()]),/native_draft/);
 });
+await test("carousel outline and revision prompts persist; deletion cannot race generation",async()=>{
+ const draft=crypto.randomUUID();
+ await db.query("insert into publication_drafts(id,workspace_id,created_by,source) values($1,$2,$3,'draft')",[draft,w,u]);
+ await db.query("insert into publication_authoring(draft_id,workspace_id,input) values($1,$2,$3)",[draft,w,JSON.stringify({...input,kind:"carousel",slides:["",""]})]);
+ const job=await rpc("start",{revision:0,kind:"outline",requestId:crypto.randomUUID()},w,draft);
+ await assert.rejects(()=>db.query("select delete_publication_draft($1,$2)",[w,draft]),/operation_in_progress/);
+ await db.query("update publication_generation_jobs set result=$1 where id=$2",[JSON.stringify({slides:["Hook","Conclusion"]}),job.id]);
+ const state=await rpc("complete",{jobId:job.id},w,draft);assert.deepEqual(state.input.slides,["Hook","Conclusion"]);assert.equal(state.revision,1);
+ const revisionRequest={instruction:"Shorten scene 2",channelId:channel};
+ const next=await rpc("start",{revision:1,kind:"text",requestId:crypto.randomUUID(),revisionRequest},w,draft);
+ assert.deepEqual(next.snapshot.revisionRequest,revisionRequest);
+ await rpc("fail",{jobId:next.id,error:"test"},w,draft);
+ await db.query("select delete_publication_draft($1,$2)",[w,draft]);
+ assert.equal((await db.query("select count(*)::int n from publication_generation_jobs where draft_id=$1",[draft])).rows[0].n,0);
+});
+const ig=crypto.randomUUID();
+await db.query("insert into channel_connections(id,workspace_id,status,platform) values($1,$2,'active','instagram')",[ig,w]);
+const queue=(ids,version="3",workspace=w)=>db.query("select queue_publication($1,$2,$3,$4,$5) result",[workspace,d,u,ids,version]);
+await test("publication snapshots and dispatch RPC are inaccessible to the browser",async()=>{
+ await db.exec("set role authenticated");await assert.rejects(()=>db.query("select * from publication_deliveries"),/permission denied/);
+ await assert.rejects(()=>queue([channel]),/permission denied/);await assert.rejects(()=>db.query("select delete_publication_draft($1,$2)",[w,d]),/permission denied/);await db.exec("reset role");
+});
+await test("publishing validates destination, workspace, revision and Instagram media",async()=>{
+ await assert.rejects(()=>queue([ig]),/instagram_requires_image/);
+ await assert.rejects(()=>queue([foreignChannel]),/channel_unavailable/);
+ await assert.rejects(()=>queue([channel],"3",other),/draft_not_found/);
+ await assert.rejects(()=>queue([channel],"0"),/revision_conflict/);
+});
+await test("repeated publish creates one target and freezes accepted contents",async()=>{
+ const first=(await queue([channel])).rows[0].result[0];const second=(await queue([channel])).rows[0].result[0];assert.equal(first.id,second.id);
+ await assert.rejects(()=>rpc("save",{revision:3,input,step:1}),/publication_locked/);
+ await assert.rejects(()=>db.query("select delete_publication_draft($1,$2)",[w,d]),/operation_in_progress/);
+ await db.query("update publication_deliveries set status='published' where id=$1",[first.id]);
+ assert.equal((await queue([channel])).rows[0].result[0].status,"published");
+});
+await test("prepared PDF remains referenced during delivery",async()=>{
+ const asset=crypto.randomUUID(),storagePath=`${w}/${d}/${asset}.pdf`;
+ await db.query("insert into publication_assets(id,workspace_id,draft_id,storage_path,mime_type) values($1,$2,$3,$4,'application/pdf')",[asset,w,d,storagePath]);
+ await db.query("insert into storage.objects values($1,'publication-assets',now()-interval '2 days')",[storagePath]);
+ await db.query("update publication_deliveries set media=$1 where draft_id=$2",[JSON.stringify([{path:storagePath}]),d]);
+ assert.equal((await db.query("select * from publication_orphan_paths() where path=$1",[storagePath])).rows.length,0);
+});
 await test("workspace deletion cascades authoring state and generation jobs",async()=>{
  await db.query("delete from workspaces where id=$1",[w]);
  assert.equal((await db.query("select count(*)::int n from publication_authoring where workspace_id=$1",[w])).rows[0].n,0);
  assert.equal((await db.query("select count(*)::int n from publication_generation_jobs where workspace_id=$1",[w])).rows[0].n,0);
 });
+assert.equal((await db.query("select count(*)::int n from publication_deliveries where workspace_id=$1",[w])).rows[0].n,0);
 await db.close();console.log(`${count} PostgreSQL authoring contracts passed.`);

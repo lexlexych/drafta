@@ -13,6 +13,7 @@ beforeEach(() => {
   state.push.mockClear(); state.replace.mockClear();
   draft = { id, title: "Публикация", body: "Исходный текст", kind: "image", status: "ready", context: structuredClone(DEFAULT_CONTEXT), asset_ids: [], edited_at: null, updated_at: "2026-09-11" };
   fetchMock = vi.fn(async (_path: string, init?: RequestInit) => {
+    if(_path.endsWith("/publish")) return Response.json({channels:[],deliveries:[]});
     if (init?.method === "PATCH") {
       const body = JSON.parse(init.body as string);
       if (body.action === "lock") draft.edited_at = "2026-09-11";

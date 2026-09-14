@@ -57,3 +57,10 @@
 @media(prefers-reduced-motion:reduce) { .spinner { animation:none; } }
 @media(max-width:850px) { .wizard { padding:20px; }.layout { grid-template-columns:1fr; gap:22px; }.steps ol { display:flex; overflow-x:auto; }.steps button { width:auto; white-space:nowrap; }.saveStatus { margin:0; }.steps small { display:none; } }
 @media(max-width:500px) { .wizard { padding:16px; }.cards { grid-template-columns:1fr; }.header h2 { font-size:21px; }.steps button { padding:8px 4px; font-size:12px; }.steps button>span { min-width:22px; height:22px; }.actions>.primary { flex:1; }.idea { padding:17px; } }
+
+.preview { border:1px solid var(--border,#ddd); border-radius:12px; padding:20px; display:grid; gap:16px; }
+.previewImages { display:flex; gap:12px; overflow:auto; }
+.previewImages img { width:180px; aspect-ratio:4/5; object-fit:contain; background:white; flex-shrink:0; }
+.slideCard { border:1px solid var(--border,#ddd); border-radius:12px; padding:16px; display:grid; gap:10px; }
+.slideGrid { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:16px; }
+.revisionForm { padding:16px; border:1px solid var(--border,#ddd); border-radius:12px; display:grid; gap:12px; }

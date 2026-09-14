@@ -1,3 +1,4 @@
+import { publicationSend, recoverPublicationDeliveries } from "./publication-send";
 import { autoReply } from "./auto-reply";
 import { cleanupAiRequestLog } from "./cleanup-ai-request-log";
 import { contactAvatar } from "./contact-avatar";
@@ -24,6 +25,7 @@ export { sendPush } from "./send-push";
 
 /** All functions served by app/api/inngest/route.ts. */
 export const inngestFunctions = [
+  publicationSend, recoverPublicationDeliveries,
   publicationGeneration,
   recoverPublicationGenerations,
   publicationImport,

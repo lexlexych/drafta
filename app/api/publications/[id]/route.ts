@@ -45,3 +45,15 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     return json({ ok: true });
   } catch (error) { return failure(error); }
 }
+
+export async function DELETE(request: Request, { params }: { params: Promise<{id: string}> }) {
+  try {
+    sameOrigin(request);
+    const {db, workspace} = await memberContext(); const {id} = await params;
+    if (!validId(id)) throw new PublicationError(400, "Некорректный черновик.");
+    const {error} = await db.rpc("delete_publication_draft", {w: workspace.id, d: id});
+    if (error?.message.includes("operation_in_progress")) throw new PublicationError(409, "Дождитесь завершения генерации, импорта или проверки отправки.");
+    if (error?.message.includes("draft_not_found")) throw new PublicationError(404, "Черновик не найден.");
+    check(error); return json({ok: true});
+  } catch(error) { return failure(error); }
+}

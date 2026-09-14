@@ -496,6 +496,10 @@ export interface ConnectCallbackResult {
  * may depend on provider specifics.
  */
 export interface ChannelAdapter {
+  findPublishedPost?(input: { requestId: string; externalAccountId: string; since: string }): Promise<PublishPostResult | null>;
+  publishPost?(input: PublishPostInput): Promise<PublishPostResult>;
+  getPublishedPost?(input: { remoteId: string; externalAccountId: string }): Promise<PublishPostResult>;
+  retryPublishPost?(input: { remoteId: string; externalAccountId: string }): Promise<PublishPostResult>;
   readonly provider: ChannelProvider;
 
   /** Verify the raw webhook request's signature. */
@@ -562,6 +566,18 @@ export interface ChannelAdapter {
   sendCommentPrivateReply?(
     input: SendCommentPrivateReplyInput,
   ): Promise<SendCommentPrivateReplyResult>;
+}
+
+export type PublishPostInput = {
+  requestId: string; externalAccountId: string; platform: "instagram" | "linkedin";
+  title: string; body: string; media: { type: "image" | "document"; url: string }[];
+};
+export type PublishPostResult = {
+  remoteId: string; status: "published" | "pending" | "failed";
+  externalId?: string; url?: string;
+};
+export class PublicationTransportError extends Error {
+  constructor(message: string, readonly retryable: boolean, readonly uncertain: boolean) { super(message); }
 }
 
 /**

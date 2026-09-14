@@ -1,3 +1,4 @@
+import { findZernioPublishedPost, publishZernioPost, getZernioPublishedPost, retryZernioPost } from "./publishing";
 import type {
   ChannelAdapter,
   ConnectCallbackResult,
@@ -64,6 +65,22 @@ export function createZernioAdapter(
 ): ChannelAdapter {
   const adapter: ChannelAdapter = {
     provider: PROVIDER,
+    async findPublishedPost(input) {
+      if (!getApiConfig) throw new ChannelOperationNotImplementedError(PROVIDER, "findPublishedPost");
+      return findZernioPublishedPost(getApiConfig(), input);
+    },
+    async publishPost(input) {
+      if (!getApiConfig) throw new ChannelOperationNotImplementedError(PROVIDER, "publishPost");
+      return publishZernioPost(getApiConfig(), input);
+    },
+    async getPublishedPost(input) {
+      if (!getApiConfig) throw new ChannelOperationNotImplementedError(PROVIDER, "getPublishedPost");
+      return getZernioPublishedPost(getApiConfig(), input);
+    },
+    async retryPublishPost(input) {
+      if (!getApiConfig) throw new ChannelOperationNotImplementedError(PROVIDER, "retryPublishPost");
+      return retryZernioPost(getApiConfig(), input);
+    },
 
     verifyWebhook(input: VerifyWebhookInput): boolean {
       return verifyZernioSignature(input, getWebhookSecret());

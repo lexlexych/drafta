@@ -6,7 +6,7 @@ vi.mock("openai",()=>{
   class Client { static APIError=APIError; responses={create:mocks.response};images={generate:mocks.image,edit:mocks.edit}; }
   return {default:Client,toFile:vi.fn(async value=>value)};
 });
-import { generatePublicationIdeas, generatePublicationText, generatePublicationImage } from "./publications";
+import { generateCarouselOutline, generatePublicationIdeas, generatePublicationText, generatePublicationImage } from "./publications";
 import { DEFAULT_AUTHORING } from "@/lib/publications/authoring";
 const input={...structuredClone(DEFAULT_AUTHORING),channelIds:["a1000000-0000-4000-8000-000000000001"]};
 const context={input,channels:[{id:input.channelIds[0],name:"Shop",platform:"instagram"}],knowledge:[{name:"Контакт",content:"sales@example.com"}]};
@@ -32,5 +32,24 @@ describe("OpenAI publication boundary",()=>{
     mocks.edit.mockResolvedValue({data:[{b64_json:Buffer.from("png").toString("base64")}]});
     await generatePublicationImage(input,"Shop");expect(mocks.image.mock.calls[0][0]).toMatchObject({size:"1024x1280",quality:"medium",n:1});
     await generatePublicationImage(input,"Shop",{bytes:new Uint8Array([1]),mime:"image/png"});expect(mocks.edit).toHaveBeenCalledOnce();
+  });
+});
+
+describe("targeted authoring revisions",()=>{
+  it("supplies the current text and masked revision instruction without storage IDs",async()=>{
+    mocks.response.mockResolvedValue({status:"completed",output_text:JSON.stringify({title:"Post",variants:[{channelIndex:0,body:"Shorter"}],imagePrompt:""})});
+    await generatePublicationText({...context,variants:[{channelId:input.channelIds[0],body:"Existing customer story"}],revision:{channelId:input.channelIds[0],instruction:"Shorten; remove sales@example.com"}});
+    const data=JSON.parse(mocks.response.mock.calls[0][0].input[1].content);
+    expect(data.currentVersions).toEqual([{channelIndex:0,body:"Existing customer story"}]);expect(data.targetChannelIndex).toBe(0);expect(data.revisionInstruction).not.toContain("sales@example.com");
+  });
+  it("edits the supplied original image using the user's request",async()=>{
+    mocks.edit.mockResolvedValue({data:[{b64_json:Buffer.from("png").toString("base64")}]});
+    await generatePublicationImage(input,"Shop",{bytes:new Uint8Array([1,2]),mime:"image/png"},"Make background lighter");
+    expect(mocks.image).not.toHaveBeenCalled();expect(mocks.edit.mock.calls[0][0].prompt).toContain("Make background lighter");expect(mocks.edit.mock.calls[0][0].prompt).toContain("current image to edit");
+  });
+  it("validates the approved carousel slide count before image generation",async()=>{
+    mocks.response.mockResolvedValue({status:"completed",output_text:JSON.stringify({slides:["Hook","Conclusion"]})});
+    expect((await generateCarouselOutline({...context,input:{...input,kind:"carousel",slides:["",""]}})).slides).toHaveLength(2);
+    await expect(generateCarouselOutline({...context,input:{...input,kind:"carousel",slides:["","",""]}})).rejects.toThrow("неполная структура");
   });
 });

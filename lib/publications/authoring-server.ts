@@ -4,6 +4,7 @@ import { check, PublicationError } from "./server";
 import type { AuthoringInput, AuthoringJob, AuthoringState, ChannelChoice } from "./authoring";
 
 const ERRORS: Record<string, string> = {
+  publication_locked: "Материал уже отправлен. Его сохранённое содержимое зафиксировано.",
   revision_conflict: "Черновик изменился. Обновите страницу, чтобы продолжить с актуальной версией.",
   generation_in_progress: "Дождитесь завершения генерации.", idea_limit: "Для этого черновика уже предложено 12 идей.",
   daily_limit: "Достигнут дневной лимит генераций рабочего пространства (100).", retry_limit: "Лимит повторов исчерпан. Измените вводные и запустите новую генерацию.",
