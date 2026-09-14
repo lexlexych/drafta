@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint .",
     "test": "vitest run",
-    "test:rls": "vitest run --config vitest.rls.config.ts"
+    "test:rls": "vitest run --config vitest.rls.config.ts",
+    "seed:demo": "node --env-file=.env scripts/seed-demo-workspace.mjs"
   },
   "dependencies": {
     "@serwist/next": "^9.5.12",
