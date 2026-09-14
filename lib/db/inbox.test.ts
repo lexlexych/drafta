@@ -11,7 +11,7 @@ vi.mock("server-only", () => ({}));
 // These DB-backed tests need a live local Supabase (`supabase start`,
 // `supabase db reset`) reachable through the same env vars production code
 // reads (lib/db/env.ts / lib/db/admin.ts) — skipped (not failed) otherwise,
-// same convention as lib/db/channel-connections.test.ts (T-04) so `npm test`
+// same convention as lib/db/channel-connections.test.ts (T-04) so `pnpm test`
 // stays green in a fresh clone.
 const hasLocalSupabaseConfig = Boolean(
   process.env.NEXT_PUBLIC_SUPABASE_URL &&
@@ -55,7 +55,7 @@ describe.skipIf(!hasLocalSupabaseConfig)("lib/db/inbox", () => {
     // as channel-connections.test.ts: these tests exercise the business
     // logic in inbox.ts (sorting, filtering, aggregation, mapping), not RLS
     // itself. RLS isolation is covered separately by
-    // tests/rls/isolation.integration.ts (`npm run test:rls`), extended by
+    // tests/rls/isolation.integration.ts (`pnpm test:rls`), extended by
     // this ticket with a `markConversationRead` cross-workspace case.
     supabase = createAdminSupabaseClient();
   });

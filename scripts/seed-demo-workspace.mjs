@@ -9,7 +9,7 @@
 //
 // Usage:
 //   node --env-file=.env scripts/seed-demo-workspace.mjs <workspace-id>
-//   npm run seed:demo -- <workspace-id>
+//   pnpm seed:demo -- <workspace-id>
 //
 // Requires NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SECRET_KEY (service role —
 // server-side only, never ship this key to a browser).
@@ -38,7 +38,7 @@ function fail(message) {
 const workspaceId = process.argv[2]?.trim();
 
 if (!workspaceId || !UUID_PATTERN.test(workspaceId)) {
-  fail("pass the workspace id as the first argument, e.g.\n  npm run seed:demo -- 06d00a63-cd53-4257-a836-e626b604a773");
+  fail("pass the workspace id as the first argument, e.g.\n  pnpm seed:demo -- 06d00a63-cd53-4257-a836-e626b604a773");
 }
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;

@@ -1,5 +1,5 @@
 // Isolated PostgreSQL contract test; never connects to a configured Supabase project.
-// npm install --prefix <temporary-directory> @electric-sql/pglite
+// pnpm add --dir <temporary-directory> @electric-sql/pglite
 // PUBLICATION_SQL_RUNTIME=<temporary-directory> node scripts/test-publication-authoring.mjs
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";

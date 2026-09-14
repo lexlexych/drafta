@@ -62,12 +62,12 @@
 
 ## Проверки
 
-`npm test`, `npm run lint`, `npx tsc --noEmit`, `npm run build`.
+`pnpm test`, `pnpm lint`, `pnpm exec tsc --noEmit`, `pnpm build`.
 
 SQL-контракты можно прогнать без Docker в изолированном PostgreSQL WASM:
 
 ```powershell
-npm install --prefix "$env:TEMP/drafta-publication-sql" --no-audit --no-fund @electric-sql/pglite
+pnpm add --dir "$env:TEMP/drafta-publication-sql" @electric-sql/pglite
 $env:PUBLICATION_SQL_RUNTIME = Join-Path $env:TEMP 'drafta-publication-sql'
 node scripts/test-publication-authoring.mjs
 ```

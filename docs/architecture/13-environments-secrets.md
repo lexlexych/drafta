@@ -38,7 +38,7 @@ updated: 2026-07-20
 
 ```
 supabase start
-npx inngest-cli dev
+pnpm dlx inngest-cli dev
 + туннель (cloudflared / ngrok) для вебхуков Zernio и OAuth-callback подключения канала
 ```
 

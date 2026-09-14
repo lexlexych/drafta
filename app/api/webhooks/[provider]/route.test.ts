@@ -40,12 +40,12 @@ process.env.ZERNIO_WEBHOOK_SECRET = ZERNIO_WEBHOOK_SECRET;
 // (`supabase start`, `supabase db reset` — see this ticket's Definition of
 // Done) reachable through the same env vars production code reads
 // (lib/db/env.ts / lib/db/admin.ts). Skipped (not failed) when they aren't
-// set, so `npm test` stays green in a fresh clone that hasn't run
+// set, so `pnpm test` stays green in a fresh clone that hasn't run
 // `supabase start` yet — DB-dependent tests in this repo are opt-in via env
 // (see tests/rls/setup.ts for the same idea applied to the RLS suite,
 // though that one is gated behind a separate `test:rls` script; these are
 // gated by env presence instead because T-03's Definition of Done runs them
-// under plain `npm test`).
+// under plain `pnpm test`).
 const hasLocalSupabaseConfig = Boolean(
   process.env.NEXT_PUBLIC_SUPABASE_URL &&
     process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY &&

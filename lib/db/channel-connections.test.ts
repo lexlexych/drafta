@@ -14,7 +14,7 @@ import { DEFAULT_CHANNEL_CAPABILITIES } from "@/lib/channels/capabilities";
 // `supabase db reset`) reachable through the same env vars production code
 // reads (lib/db/env.ts / lib/db/admin.ts) — skipped (not failed) otherwise,
 // same convention as app/api/webhooks/[provider]/route.test.ts (T-03) so
-// `npm test` stays green in a fresh clone.
+// `pnpm test` stays green in a fresh clone.
 const hasLocalSupabaseConfig = Boolean(
   process.env.NEXT_PUBLIC_SUPABASE_URL &&
     process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY &&
@@ -53,7 +53,7 @@ describe.skipIf(!hasLocalSupabaseConfig)("lib/db/channel-connections", () => {
     // exercise the business logic in channel-connections.ts (validation,
     // capability defaults, friendly duplicate errors, workspace scoping),
     // not the RLS policy itself. RLS row-level isolation is a separate
-    // concern covered by tests/rls/isolation.integration.ts (`npm run
+    // concern covered by tests/rls/isolation.integration.ts (`pnpm
     // test:rls`), which this ticket extends with a channel_connections case.
     supabase = createAdminSupabaseClient();
   });
