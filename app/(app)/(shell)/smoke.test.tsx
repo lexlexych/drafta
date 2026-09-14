@@ -119,7 +119,13 @@ const INBOX_CHANNELS = [
 ];
 
 vi.mock("@/lib/db/channel-connections", () => ({
-  SUPPORTED_CHANNEL_PLATFORMS: ["telegram", "whatsapp", "instagram", "facebook"],
+  SUPPORTED_CHANNEL_PLATFORMS: [
+    "telegram",
+    "whatsapp",
+    "instagram",
+    "facebook",
+    "linkedin",
+  ],
   listChannelConnections: async () => INBOX_CHANNELS,
 }));
 

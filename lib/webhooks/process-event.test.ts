@@ -450,6 +450,50 @@ describe("processInboundEvent — две доставки создают кон�
   });
 });
 
+describe("processInboundEvent — аккаунт отключён у провайдера", () => {
+  let stub: ReturnType<typeof createSupabaseStub>;
+
+  const run = (event: NormalizedEvent) =>
+    processInboundEvent(stub.client as unknown as SupabaseClient, event);
+
+  const disconnected = (
+    disconnection: "intentional" | "unintentional",
+  ): NormalizedEvent => ({
+    type: "account.disconnected",
+    providerEventId: `wh_disconnect_${disconnection}`,
+    provider: "zernio",
+    platform: "instagram",
+    externalAccountId: ACCOUNT_ID,
+    disconnection,
+    rawMetadata: {},
+  });
+
+  beforeEach(() => {
+    stub = createSupabaseStub(baseTables());
+  });
+
+  it("помечает канал ошибкой, когда истёк доступ платформы", async () => {
+    await run(disconnected("unintentional"));
+
+    expect(stub.tables.channel_connections[0]!.status).toBe("error");
+    expect(stub.tables.webhook_events[0]!.processing_error).toBeNull();
+  });
+
+  it("помечает канал отключённым, когда его отключили намеренно", async () => {
+    await run(disconnected("intentional"));
+
+    expect(stub.tables.channel_connections[0]!.status).toBe("disconnected");
+  });
+
+  it("помечает ошибкой и канал, который пользователь уже поставил на паузу", async () => {
+    stub.tables.channel_connections[0]!.status = "disconnected";
+
+    await run(disconnected("unintentional"));
+
+    expect(stub.tables.channel_connections[0]!.status).toBe("error");
+  });
+});
+
 describe("processInboundEvent — outbound DM lifecycle", () => {
   let stub: ReturnType<typeof createSupabaseStub>;
 

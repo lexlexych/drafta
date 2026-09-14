@@ -1,6 +1,7 @@
 ﻿import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type {
+  NormalizedAccountDisconnectedEvent,
   NormalizedCommentEvent,
   NormalizedConversationStartedEvent,
   NormalizedDirectMessageEvent,
@@ -180,6 +181,21 @@ export async function processInboundEvent(
     return;
   }
 
+  // Handled before the `active` gate: an account that is already paused by the
+  // user still has to show that its token died, or turning it back on would
+  // look like it worked.
+  if (event.type === "account.disconnected") {
+    await processAccountDisconnected({
+      supabase,
+      event,
+      channelConnectionId: channelConnection.id,
+      workspaceId: channelConnection.workspace_id,
+      markProcessed,
+      markUnprocessedWithError,
+    });
+    return;
+  }
+
   if (channelConnection.status !== "active") {
     await markProcessed(
       `channel_connection "${channelConnection.id}" is not active (status: "${channelConnection.status}")`,
@@ -278,6 +294,48 @@ const DELIVERY_STATUS_BY_EVENT_TYPE: Partial<
 
 type MarkProcessed = (processingError: string | null) => Promise<void>;
 type MarkUnprocessedWithError = (processingError: string) => Promise<void>;
+
+/**
+ * The provider stopped serving the account. An unintentional disconnect (the
+ * platform token expired or was revoked) marks the channel `error` — Settings →
+ * Channels then asks the user to reconnect. An intentional one made outside
+ * drafta marks it `disconnected`. drafta's own channel deletion also fires this
+ * event, but by then the row is gone and the event ends at "unknown connection".
+ */
+async function processAccountDisconnected(params: {
+  supabase: SupabaseClient;
+  event: NormalizedAccountDisconnectedEvent;
+  channelConnectionId: string;
+  workspaceId: string;
+  markProcessed: MarkProcessed;
+  markUnprocessedWithError: MarkUnprocessedWithError;
+}): Promise<void> {
+  const {
+    supabase,
+    event,
+    channelConnectionId,
+    workspaceId,
+    markProcessed,
+    markUnprocessedWithError,
+  } = params;
+
+  try {
+    const { error } = await supabase
+      .from("channel_connections")
+      .update({
+        status:
+          event.disconnection === "unintentional" ? "error" : "disconnected",
+      })
+      .eq("workspace_id", workspaceId)
+      .eq("id", channelConnectionId);
+    if (error) throw error;
+
+    await markProcessed(null);
+  } catch (error) {
+    console.error("[webhooks] failed to process an account disconnect", error);
+    await markUnprocessedWithError(describeError(error));
+  }
+}
 
 async function processIncomingDirectMessage(params: {
   supabase: SupabaseClient;

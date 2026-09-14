@@ -22,6 +22,7 @@ import {
   deleteZernioAccount,
   getZernioConversationParticipant,
   getZernioConnectAuthUrl,
+  getZernioLinkedInAccountType,
   listZernioConversationParticipants,
   listZernioPostThumbnails,
   sendZernioCommentPrivateReply,
@@ -53,8 +54,9 @@ const MAX_POST_THUMBNAIL_PAGES = 10;
  * `getApiConfig` is optional: the operations that call Zernio's REST API —
  * `getConnectUrl` and `disconnectAccount` — are only wired when the REST
  * config is supplied, so unit tests that only exercise webhooks can construct
- * the adapter with just the webhook secret. `parseConnectCallback` needs no
- * config (it only parses the redirect's query), so it is always present.
+ * the adapter with just the webhook secret. `parseConnectCallback` is always
+ * present: it parses the redirect's query, and only for LinkedIn — when the
+ * REST config is there — also asks Zernio which kind of account was picked.
  */
 export function createZernioAdapter(
   getWebhookSecret: () => string,
@@ -120,8 +122,31 @@ export function createZernioAdapter(
       return { providerMessageId };
     },
 
-    parseConnectCallback(input: ParseConnectCallbackInput): ConnectCallbackResult {
-      return parseZernioConnectCallback(input.query);
+    async parseConnectCallback(
+      input: ParseConnectCallbackInput,
+    ): Promise<ConnectCallbackResult> {
+      const result = parseZernioConnectCallback(input.query);
+
+      if (result.platform !== "linkedin" || !getApiConfig) {
+        return result;
+      }
+
+      // A LinkedIn personal profile has no comments API. When the account type
+      // cannot be established the company-page defaults stand: hiding a real
+      // page's comments would be the worse mistake of the two.
+      try {
+        const accountType = await getZernioLinkedInAccountType(
+          getApiConfig(),
+          result.externalAccountId,
+        );
+        if (accountType === "personal") {
+          return { ...result, capabilityOverrides: { supportsComments: false } };
+        }
+      } catch (error) {
+        console.warn("[zernio] could not read the LinkedIn account type", error);
+      }
+
+      return result;
     },
   };
 

@@ -132,6 +132,95 @@ describe("parseZernioWebhook", () => {
     expect(events[0]).toEqual(expected);
   });
 
+  it("maps a LinkedIn comment.received fixture, keyed by the activity URN", () => {
+    const rawBody = readFixture("linkedin-comment.json");
+
+    const events = parseZernioWebhook({ rawBody, headers: {} }).events;
+
+    expect(events).toHaveLength(1);
+    const expected: NormalizedEvent = {
+      type: "comment.received",
+      providerEventId: "wh_evt_01HZXLINKEDINCMT01",
+      provider: "zernio",
+      platform: "linkedin",
+      externalAccountId: "acct_li_30017",
+      post: {
+        externalId: "urn:li:activity:7240011223344556677",
+        text: "Neue Keramik-Kollektion ist da",
+        permalink:
+          "https://www.linkedin.com/feed/update/urn:li:activity:7240011223344556677/",
+        metadata: {
+          platformPostId: "urn:li:activity:7240011223344556677",
+          postId: null,
+          platform: "linkedin",
+        },
+      },
+      comment: {
+        externalId:
+          "urn:li:comment:(urn:li:activity:7240011223344556677,7240019988776655443)",
+        text: "Bieten Sie auch Workshops für Teams an?",
+        attachments: [],
+        author: {
+          externalId: "urn:li:person:Ab3xYz91Qw",
+          displayName: "Jonas Weber",
+          avatarUrl: "https://media.licdn.com/dms/image/jonas-weber.jpg",
+        },
+      },
+      rawMetadata: JSON.parse(rawBody),
+    };
+
+    expect(events[0]).toEqual(expected);
+  });
+
+  it("maps an unintentional account.disconnected (expired token) to a disconnect event", () => {
+    const rawBody = JSON.stringify({
+      id: "wh_evt_disconnect_1",
+      event: "account.disconnected",
+      account: {
+        accountId: "acct_li_30017",
+        profileId: "prof_1",
+        platform: "linkedin",
+        username: "tonwerk-keramik",
+        disconnectionType: "unintentional",
+        reason: "Your linkedin access token is no longer valid.",
+      },
+      timestamp: "2026-11-13T08:00:00.000Z",
+    });
+
+    const { events, unparsed } = parseZernioWebhook({ rawBody, headers: {} });
+
+    expect(unparsed).toEqual([]);
+    expect(events).toEqual([
+      {
+        type: "account.disconnected",
+        providerEventId: "wh_evt_disconnect_1",
+        provider: "zernio",
+        platform: "linkedin",
+        externalAccountId: "acct_li_30017",
+        disconnection: "unintentional",
+        rawMetadata: JSON.parse(rawBody),
+      },
+    ]);
+  });
+
+  it("keeps an intentional account.disconnected intentional", () => {
+    const rawBody = JSON.stringify({
+      id: "wh_evt_disconnect_2",
+      event: "account.disconnected",
+      account: {
+        accountId: "acct_ig_55014",
+        platform: "instagram",
+        disconnectionType: "intentional",
+      },
+    });
+
+    const [event] = parseZernioWebhook({ rawBody, headers: {} }).events;
+
+    expect(
+      event?.type === "account.disconnected" && event.disconnection,
+    ).toBe("intentional");
+  });
+
   it("maps a comment reply (parentCommentId) to parentExternalId", () => {
     const rawBody = JSON.stringify({
       id: "wh_evt_reply",

@@ -8,7 +8,7 @@ import styles from "./publication-wizard.module.css";
 
 type WizardData = { state: AuthoringState; channels: ChannelChoice[]; categories: { id: string; name: string }[]; configured: boolean; job: AuthoringJob | null; draft: { title: string; asset_ids: string[]; status: string } };
 const STAGES: Record<string,string> = { queued: "Генерация в очереди…", ideas: "Подбираем три идеи…", text: "Готовим тексты для выбранных каналов…", image: "Создаём картинку…", ready: "Готово" };
-const PLATFORMS: Record<string,string> = { instagram: "Instagram", facebook: "Facebook", telegram: "Telegram", whatsapp: "WhatsApp" };
+const PLATFORMS: Record<string,string> = { instagram: "Instagram", facebook: "Facebook", telegram: "Telegram", whatsapp: "WhatsApp", linkedin: "LinkedIn" };
 async function api(url: string, init?: RequestInit) {
   const response = await fetch(url, { ...init, cache: "no-store" }); const data = await response.json();
   if (!response.ok) throw new Error(data.error || "Не удалось сохранить изменения."); return data;

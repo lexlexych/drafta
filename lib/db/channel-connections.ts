@@ -2,7 +2,10 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import { DEFAULT_CHANNEL_CAPABILITIES } from "@/lib/channels/capabilities";
+import {
+  DEFAULT_CHANNEL_CAPABILITIES,
+  type ChannelCapabilities,
+} from "@/lib/channels/capabilities";
 import type { ChannelPlatform } from "@/lib/channels/types";
 
 /**
@@ -174,13 +177,16 @@ export type CreateChannelConnectionInput = {
    */
   externalId: string;
   name: string;
+  /** Per-account differences from the platform defaults, reported by the provider on connect. */
+  capabilityOverrides?: Partial<ChannelCapabilities>;
 };
 
 /**
  * Creates a `channel_connections` row for a just-authorized account:
  * `provider`/`externalId` come from the OAuth connect callback
  * (`app/api/channels/[provider]/connect/callback/`), capabilities are filled
- * with the platform's defaults (T-01's `getDefaultChannelCapabilities`).
+ * with the platform's defaults (T-01's `getDefaultChannelCapabilities`), with
+ * the provider's per-account `capabilityOverrides` laid over them.
  * Friendly error on a duplicate platform or external account — enforced by
  * the table's unique constraints.
  */
@@ -217,7 +223,10 @@ export async function createChannelConnection(
       provider,
       platform,
       external_id: externalId,
-      capabilities: DEFAULT_CHANNEL_CAPABILITIES[platform],
+      capabilities: {
+        ...DEFAULT_CHANNEL_CAPABILITIES[platform],
+        ...input.capabilityOverrides,
+      },
     })
     .select(CHANNEL_CONNECTION_COLUMNS)
     .single();
