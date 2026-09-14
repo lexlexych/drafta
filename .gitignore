@@ -52,3 +52,6 @@ next-env.d.ts
 
 # pnpm only
 package-lock.json
+
+# Independent marketing website (owns its own Git repository)
+/website/

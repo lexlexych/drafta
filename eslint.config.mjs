@@ -20,6 +20,7 @@ const eslintConfig = defineConfig([
     // код под Deno, который иначе роняет `pnpm lint` на каждой машине с
     // поднятым локальным стеком. В git не попадает — supabase/.gitignore.
     "supabase/.temp/**",
+    "website/**",
   ]),
 ]);
 
