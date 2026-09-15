@@ -19,9 +19,5 @@
 .image img { display:block; width:100%; aspect-ratio:4/5; object-fit:contain; background:var(--bg); border-radius:6px; margin-bottom:8px; }
 .image button { font:inherit; padding:4px 8px; border:1px solid var(--line); background:var(--surface); border-radius:6px; color:var(--ink); cursor:pointer; }
 .image .actions { gap:5px; }
-.drafts { padding:8px 16px; max-height:210px; overflow-y:auto; border-bottom:1px solid var(--line); }
-.drafts summary { font-size:13px; color:var(--ink3); cursor:pointer; }
-.drafts a { display:block; padding:8px 0; color:var(--ink); font-size:13px; text-decoration:none; }
-.drafts a[aria-current=page] { font-weight:700; }
 .logo { max-width:120px; max-height:120px; object-fit:contain; }
 @media(max-width:650px) { .panel { padding:16px; } .row { grid-template-columns:1fr; } .header h2 {font-size:18px;} }

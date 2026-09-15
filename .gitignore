@@ -55,3 +55,6 @@ package-lock.json
 
 # Independent marketing website (owns its own Git repository)
 /website/
+
+# Landing page with product simulator (not tracked by the main repo)
+/web/

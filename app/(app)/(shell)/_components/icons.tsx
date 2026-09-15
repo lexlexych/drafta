@@ -549,3 +549,102 @@ export function AutoReplyIcon(props: IconProps) {
     </Icon>
   );
 }
+
+/** Контекстное меню: три точки. */
+export function MoreIcon(props: IconProps) {
+  return (
+    <Icon size={16} fill="currentColor" {...props}>
+      <circle cx="5.5" cy="12" r="1.7" />
+      <circle cx="12" cy="12" r="1.7" />
+      <circle cx="18.5" cy="12" r="1.7" />
+    </Icon>
+  );
+}
+
+export function UploadIcon(props: IconProps) {
+  return (
+    <Icon size={15} {...stroke} strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <path d="M12 15.5V4.5M7.5 9 12 4.5 16.5 9" />
+      <path d="M4.5 15v3a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-3" />
+    </Icon>
+  );
+}
+
+export function EyeIcon(props: IconProps) {
+  return (
+    <Icon size={15} {...stroke} strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z" />
+      <circle cx="12" cy="12" r="2.8" />
+    </Icon>
+  );
+}
+
+export function ArrowLeftIcon(props: IconProps) {
+  return (
+    <Icon size={15} {...stroke} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <path d="M19 12H5M11 6l-6 6 6 6" />
+    </Icon>
+  );
+}
+
+export function ArrowRightIcon(props: IconProps) {
+  return (
+    <Icon size={15} {...stroke} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <path d="M5 12h14M13 6l6 6-6 6" />
+    </Icon>
+  );
+}
+
+/** Правка с AI: волшебная палочка. */
+export function WandIcon(props: IconProps) {
+  return (
+    <Icon size={15} {...stroke} strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <path d="M4.5 19.5 15 9M13 7l4 4" />
+      <path d="M18.5 3v3M17 4.5h3M20 12.5v2M19 13.5h2M9.5 3.5v2M8.5 4.5h2" />
+    </Icon>
+  );
+}
+
+export function CopyIcon(props: IconProps) {
+  return (
+    <Icon size={15} {...stroke} strokeLinejoin="round" {...props}>
+      <rect x="8.5" y="8.5" width="11" height="11" rx="2" />
+      <path d="M15.5 8.5V6.5a2 2 0 0 0-2-2h-7a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h2" />
+    </Icon>
+  );
+}
+
+export function TextIcon(props: IconProps) {
+  return (
+    <Icon size={16} {...stroke} strokeLinecap="round" {...props}>
+      <path d="M5 6.5h14M5 11h14M5 15.5h9" />
+    </Icon>
+  );
+}
+
+export function CarouselIcon(props: IconProps) {
+  return (
+    <Icon size={16} {...stroke} strokeLinejoin="round" {...props}>
+      <rect x="6.5" y="5" width="11" height="14" rx="2" />
+      <path d="M3.5 7v10M20.5 7v10" strokeLinecap="round" />
+    </Icon>
+  );
+}
+
+export function VideoIcon(props: IconProps) {
+  return (
+    <Icon size={16} {...stroke} strokeLinejoin="round" {...props}>
+      <rect x="3.5" y="6" width="12" height="12" rx="2" />
+      <path d="M15.5 10.5 20.5 7.5v9l-5-3" />
+    </Icon>
+  );
+}
+
+export function LightbulbIcon(props: IconProps) {
+  return (
+    <Icon size={15} {...stroke} strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <path d="M9 18h6M10 21h4" />
+      <path d="M12 3a6 6 0 0 0-3.5 10.9c.6.4 1 1.1 1 1.8V16h5v-.3c0-.7.4-1.4 1-1.8A6 6 0 0 0 12 3z" />
+    </Icon>
+  );
+}

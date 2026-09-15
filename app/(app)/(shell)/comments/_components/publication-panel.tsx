@@ -1,7 +1,6 @@
 "use client";
 /* eslint-disable @next/next/no-img-element -- Authenticated media stays behind the workspace proxy. */
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createBrowserSupabaseClient } from "@/lib/db/browser";
@@ -22,23 +21,6 @@ async function api(path: string, init?: RequestInit) {
   return data;
 }
 function patch(id: string, data: unknown) { return api(`/api/publications/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }); }
-
-export function PublicationDraftLinks({ selectedId,filter="all" }: { selectedId?: string | null;filter?:string }) {
-  const router=useRouter();
-  const [drafts, setDrafts] = useState<PublicationDraft[]>([]);
-  useEffect(() => {
-    let active = true;
-    const refresh = () => { void api("/api/publications").then(data => { if (active) setDrafts(data.drafts); }).catch(() => {}); };
-    refresh(); const timer = setInterval(refresh, 15000);
-    window.addEventListener("publication-changed", refresh);
-    return () => { active = false; clearInterval(timer); window.removeEventListener("publication-changed", refresh); };
-  }, []);
-  if (!drafts.length) return null;
-  return <details className={styles.drafts} open><summary>Материалы Drafta · {drafts.length}</summary>
-
-    {drafts.filter(d=>filter==="all"?true:filter==="video"?d.kind==="video":filter==="errors"?d.deliveries?.some(p=>["failed","uncertain"].includes(p.status)):filter==="published"?d.deliveries?.some(p=>p.status==="published"):d.kind!=="video"&&!d.deliveries?.some(p=>p.status==="published")).map(d => <div key={d.id}><Link href={`/comments?draft=${d.id}`} aria-current={selectedId === d.id ? "page" : undefined}>{d.title}{d.deliveries?.some(p=>["failed","uncertain"].includes(p.status))?" · Ошибка отправки":""}</Link><DeletePublication draftId={d.id} onDeleted={()=>{setDrafts(ds=>ds.filter(x=>x.id!==d.id));if(selectedId===d.id)router.push("/comments");}} /></div>)}
-  </details>;
-}
 
 export function PublicationPanel({ draftId, workspaceId }: { draftId: string; workspaceId: string }) {
   const router = useRouter();

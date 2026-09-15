@@ -828,7 +828,12 @@ describe("comments page", () => {
     );
     expect(screen.getByText("Lena Fischer")).toBeDefined();
     // Интерфейс AI-черновиков снят с экрана до переработки этой логики.
-    expect(screen.queryByRole("button", { name: "Черновики" })).toBeNull();
+    // Чип «Черновики» в фильтре списка публикаций — не интерфейс AI-черновиков.
+    expect(
+      screen
+        .queryAllByRole("button", { name: "Черновики" })
+        .filter((button) => !button.closest('[aria-label="Фильтр публикаций"]')),
+    ).toHaveLength(0);
     expect(screen.queryByRole("button", { name: "Создать черновик" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Отправить все" })).toBeNull();
   });

@@ -9,7 +9,7 @@ export default defineConfig({
     },
   },
   test: {
-    exclude: [...configDefaults.exclude, "website/**"],
+    exclude: [...configDefaults.exclude, "website/**", "web/**"],
     environment: "node",
     setupFiles: ["./tests/support/setup.ts"],
     // Лимит теста должен быть заметно больше, чем ожидание внутри него

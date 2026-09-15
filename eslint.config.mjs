@@ -21,6 +21,7 @@ const eslintConfig = defineConfig([
     // поднятым локальным стеком. В git не попадает — supabase/.gitignore.
     "supabase/.temp/**",
     "website/**",
+    "web/**",
   ]),
 ]);
 

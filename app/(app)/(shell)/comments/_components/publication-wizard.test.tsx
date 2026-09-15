@@ -69,10 +69,31 @@ describe("native publication wizard smoke",()=>{
 it("opens an instruction field and revises only the selected carousel slide",async()=>{
   state.step=6;state.input.kind="carousel";state.input.slides=["Hook","Conclusion"];state.input.channelIds=[channel];state.input.brief=idea(1);state.variants=[{channelId:channel,body:"Saved caption"}];savedAssets=[channel,"a1000000-0000-4000-8000-000000000002"];
   render(<PublicationWizard draftId={channel} onClose={()=>{}}/>);
-  const buttons=await screen.findAllByRole("button",{name:"Изменить изображение с AI"});fireEvent.click(buttons[1]);
+  fireEvent.click(await screen.findByRole("button",{name:"Действия: слайд 2"}));fireEvent.click(screen.getByRole("menuitem",{name:"Изменить с AI"}));
   expect(actions().filter(p=>p.action==="start")).toHaveLength(0);
   fireEvent.change(screen.getByLabelText("Что изменить?"),{target:{value:"Сделай фон светлее"}});fireEvent.click(screen.getByRole("button",{name:"Предложить изменения"}));
   await waitFor(()=>expect(actions().find(p=>p.action==="start"&&p.kind==="image")?.revisionRequest).toEqual({instruction:"Сделай фон светлее",assetId:"a1000000-0000-4000-8000-000000000002"}));
+});
+it("reorders and removes carousel slides from the slide menu and saves the new order",async()=>{
+  const second="a1000000-0000-4000-8000-000000000002";const third="a1000000-0000-4000-8000-000000000003";
+  state.step=6;state.input.kind="carousel";state.input.slides=["Hook","Body","End"];state.input.channelIds=[channel];state.input.brief=idea(1);state.variants=[{channelId:channel,body:"Saved caption"}];savedAssets=[channel,second,third];
+  render(<PublicationWizard draftId={channel} onClose={()=>{}}/>);
+  fireEvent.click(await screen.findByRole("button",{name:"Действия: слайд 1"}));
+  expect(screen.getByRole("menuitem",{name:"Сдвинуть влево"}).hasAttribute("disabled")).toBe(true);
+  fireEvent.click(screen.getByRole("menuitem",{name:"Сдвинуть вправо"}));
+  fireEvent.click(screen.getByRole("button",{name:"Действия: слайд 3"}));fireEvent.click(screen.getByRole("menuitem",{name:"Удалить слайд"}));
+  expect(screen.queryByRole("button",{name:"Действия: слайд 3"})).toBeNull();
+  fireEvent.click(screen.getByRole("button",{name:"Сохранить черновик"}));
+  await waitFor(()=>expect(savedAssets).toEqual([second,channel]));
+});
+it("closes the slide menu with Escape and deletes the draft only after confirmation",async()=>{
+  state.step=6;state.input.kind="carousel";state.input.slides=["Hook","End"];state.input.channelIds=[channel];state.input.brief=idea(1);state.variants=[{channelId:channel,body:"Saved caption"}];savedAssets=[channel,"a1000000-0000-4000-8000-000000000002"];
+  render(<PublicationWizard draftId={channel} onClose={()=>{}}/>);
+  fireEvent.click(await screen.findByRole("button",{name:"Действия: слайд 1"}));
+  expect(screen.getByRole("menu")).toBeTruthy();fireEvent.keyDown(document,{key:"Escape"});expect(screen.queryByRole("menu")).toBeNull();
+  fireEvent.click(screen.getByRole("button",{name:"Действия с черновиком"}));fireEvent.click(screen.getByRole("menuitem",{name:"Удалить черновик"}));
+  expect(screen.getByRole("dialog",{name:"Удалить черновик?"})).toBeTruthy();
+  expect(fetchMock.mock.calls.some(([,init])=>init?.method==="DELETE")).toBe(false);
 });
 it("keeps video scripts separate from publication controls",async()=>{
   state.step=6;state.input.kind="video";state.input.channelIds=[channel];state.variants=[{channelId:channel,body:"Сцена 1: вступление"}];

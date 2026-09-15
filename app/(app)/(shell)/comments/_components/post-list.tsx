@@ -8,7 +8,8 @@
  */
 
 import Link from "next/link";
-import {useState} from "react";
+import { useRouter } from "next/navigation";
+import { useState } from "react";
 
 import type { PostListItemView } from "@/lib/comments/types";
 import type { ChannelFilterView } from "@/lib/mock";
@@ -16,14 +17,15 @@ import { countWithNoun } from "@/lib/mock/plural";
 
 import { LinkActivity } from "../../_components/activity";
 import { ChannelChip } from "../../_components/chips";
-import { CommentsIcon } from "../../_components/icons";
+import { CommentsIcon, PlusIcon } from "../../_components/icons";
 import { ListFilters, scopeLabel } from "../../_components/list-filters";
 import { QUERY_KEYS, buildHref } from "../../_components/navigation";
 import { usePagedList } from "../../_components/use-paged-list";
 import styles from "../../_components/panes.module.css";
 import uiStyles from "../../_components/ui.module.css";
 import { loadPostsAction } from "../actions";
-import { PublicationDraftLinks } from "./publication-panel";
+import { PUBLICATION_FILTERS, PublicationDrafts, type PublicationFilter } from "./publication-drafts";
+import listStyles from "./publication-list.module.css";
 
 const PATHNAME = "/comments";
 
@@ -67,8 +69,30 @@ export function PostList({
     activityLabel: "Загружаем посты…",
   });
 
-  const [publicationFilter,setPublicationFilter]=useState("all");
+  const router = useRouter();
+  const [publicationFilter, setPublicationFilter] = useState<PublicationFilter>("all");
+  const [draftCount, setDraftCount] = useState(0);
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState("");
+  const showPosts = publicationFilter === "all" || publicationFilter === "published";
   const isDefaultFilter = channelIds.length === 0;
+
+  // «Создать» сразу заводит черновик Drafta и открывает мастер.
+  async function createDraft() {
+    setCreating(true);
+    setCreateError("");
+    try {
+      const response = await fetch("/api/publications?source=draft", { method: "POST", cache: "no-store" });
+      const created = await response.json();
+      if (!response.ok) throw new Error(created.error || "Не удалось создать черновик.");
+      window.dispatchEvent(new Event("publication-changed"));
+      router.push(`/comments?draft=${created.id}`);
+    } catch (e) {
+      setCreateError(e instanceof Error ? e.message : "Не удалось создать черновик.");
+    } finally {
+      setCreating(false);
+    }
+  }
 
   const subtitle = [
     scopeLabel(channelIds, channels, "все каналы", [
@@ -84,24 +108,44 @@ export function PostList({
       <div className={styles.paneHead}>
         <div className={styles.paneHeadRow}>
           <h2>Публикации</h2>
-          <Link className={`${uiStyles.button} ${uiStyles.buttonSmall}`} href="/comments?draft=new">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
-            Создать
-          </Link>
+          <button type="button" className={listStyles.create} disabled={creating} onClick={() => void createDraft()}>
+            <PlusIcon />
+            {creating ? "Создаём…" : "Создать"}
+          </button>
         </div>
-        <span className={styles.paneSubtitle}>{subtitle}</span>
+        <span className={styles.paneSubtitle}>{createError || subtitle}</span>
       </div>
 
-      <label style={{padding:"8px 16px"}}>Показать <select aria-label="Фильтр публикаций" value={publicationFilter} onChange={e=>setPublicationFilter(e.target.value)}><option value="all">Все материалы</option><option value="drafts">Черновики</option><option value="published">Опубликованные</option><option value="video">Сценарии</option><option value="errors">Ошибки отправки</option></select></label>
-      <PublicationDraftLinks selectedId={selectedDraftId} filter={publicationFilter} />
-      {["all","published"].includes(publicationFilter)&&<>
-      <ListFilters
-        channels={channels}
-        selectedChannelIds={channelIds}
-        onChannelsChange={setChannelIds}
-      />
+      <div className={listStyles.filterRow} role="group" aria-label="Фильтр публикаций">
+        {PUBLICATION_FILTERS.map((option) => (
+          <button
+            key={option.id}
+            type="button"
+            className={listStyles.filterChip}
+            aria-pressed={publicationFilter === option.id}
+            onClick={() => setPublicationFilter(option.id)}
+          >
+            {option.label}
+          </button>
+        ))}
+      </div>
+
+      {showPosts ? (
+        <ListFilters
+          channels={channels}
+          selectedChannelIds={channelIds}
+          onChannelsChange={setChannelIds}
+        />
+      ) : null}
 
       <div className={styles.list} ref={listRef}>
+        <PublicationDrafts selectedId={selectedDraftId} filter={publicationFilter} onCountChange={setDraftCount} />
+
+        {showPosts && draftCount > 0 ? (
+          <div className={listStyles.groupLabel}>Посты в соцсетях</div>
+        ) : null}
+
+        {showPosts ? <>
         {error ? <div className={styles.empty}>{error}</div> : null}
 
         {!error && !hasCommentChannels ? (
@@ -183,7 +227,8 @@ export function PostList({
             {isPending ? "Загружаем ещё…" : null}
           </div>
         ) : null}
-      </div></>}
+        </> : null}
+      </div>
     </section>
   );
 }
