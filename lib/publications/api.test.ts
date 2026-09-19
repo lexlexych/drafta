@@ -61,4 +61,12 @@ describe("GPT business endpoints", () => {
     mocks.rpc.mockResolvedValue({ data: "import-id", error: null });
     expect((await POST(request())).status).toBe(200); expect(mocks.send).not.toHaveBeenCalled();
   });
+  it("marks a failed dispatch as an import error instead of leaving it pending", async () => {
+    mocks.from.mockReturnValueOnce(query({ data: { id: draftId }, error: null }))
+      .mockReturnValueOnce(query({ data: { status: "pending" }, error: null }));
+    mocks.rpc.mockResolvedValue({ data: "import-id", error: null });
+    mocks.send.mockRejectedValueOnce(new Error("transport"));
+    expect((await POST(request())).status).toBe(503);
+    expect(mocks.rpc).toHaveBeenCalledWith("finish_publication_import", { w: "workspace-a", i: "import-id", a: [], failed: true });
+  });
 });

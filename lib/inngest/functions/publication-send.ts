@@ -16,9 +16,3 @@ export const publicationSend = inngest.createFunction({
   await step.run("publish",async()=>{await runPublicationDelivery(event.data.workspaceId,event.data.deliveryId);});
   return {deliveryId:event.data.deliveryId};
 });
-export const recoverPublicationDeliveries=inngest.createFunction({id:"recover-publication-deliveries",triggers:[{cron:"* * * * *"}],retries:1},async({step})=>{
-  const ids=await step.run("pending-ids",async()=>{
-    const {data,error}=await createAdminSupabaseClient().from("publication_deliveries").select("id,workspace_id").in("status",["pending","sending"]).lt("updated_at",new Date(Date.now()-60000).toISOString()).limit(100);check(error);return data ?? [];
-  });
-  if(ids.length)await step.sendEvent("recover",ids.map(j=>publicationSendRequested.create({workspaceId:j.workspace_id,deliveryId:j.id})));
-});

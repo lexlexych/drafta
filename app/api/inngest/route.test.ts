@@ -31,16 +31,22 @@ const { SEND_COMMENT_CONCURRENCY } = await import(
 const { AUTO_REPLY_CONCURRENCY } = await import(
   "@/lib/inngest/functions/auto-reply"
 );
-const { publicationImport, recoverPublicationImports, cleanupPublicationAssets } = await import("@/lib/inngest/functions/publication-import");
-const { publicationGeneration, recoverPublicationGenerations } = await import("@/lib/inngest/functions/publication-generation");
+const { publicationImport, cleanupPublicationAssets } = await import("@/lib/inngest/functions/publication-import");
+const { publicationGeneration } = await import("@/lib/inngest/functions/publication-generation");
+const { publicationSend } = await import("@/lib/inngest/functions/publication-send");
 
 describe("Inngest serve route", () => {
+  it("never schedules publication work or recovery", () => {
+    for (const fn of [publicationGeneration, publicationImport, publicationSend]) {
+      expect(fn.opts.triggers).not.toEqual(expect.arrayContaining([expect.objectContaining({ cron: expect.any(String) })]));
+    }
+    expect(inngestFunctions.some(fn => fn.opts.id.startsWith("recover-publication-"))).toBe(false);
+  });
   it("registers generation and send functions", () => {
     expect(inngestFunctions).toEqual([
+      publicationSend,
       publicationGeneration,
-      recoverPublicationGenerations,
       publicationImport,
-      recoverPublicationImports,
       cleanupPublicationAssets,
       generateDraft,
       generateCommentDrafts,

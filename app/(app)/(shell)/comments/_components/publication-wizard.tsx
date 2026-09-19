@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { DEFAULT_AUTHORING, EMPTY_IDEA, IDEA_FIELDS, generationIssue, ideaContextKey, type AuthoringInput, type AuthoringJob, type AuthoringResult, type AuthoringState, type ChannelChoice, type PostIdea, type RevisionRequest } from "@/lib/publications/authoring";
 import { MAX_UPLOAD_BYTES } from "@/lib/publications/types";
+import { generationStalled } from "@/lib/publications/progress";
 import { ActionMenu } from "../../_components/action-menu";
 import { ArrowLeftIcon, BackIcon, CarouselIcon, CheckIcon, CopyIcon, LightbulbIcon, PictureIcon, SparkIcon, TextIcon, TrashIcon, UploadIcon, VideoIcon, WandIcon } from "../../_components/icons";
 import {PublicationPublish, DeletePublication} from "./publication-publish";
@@ -111,7 +112,7 @@ export function PublicationWizard({ draftId, onClose }: { draftId: string; onClo
   },[]);
   function change(next:AuthoringInput){inputRef.current=next;setInput(next);dirty.current=true;setMessage("");setError("");}
   function brief(key:keyof PostIdea,value:string){change({...input,brief:{...input.brief,[key]:value}});}
-  async function perform(work:()=>Promise<void>){setBusy(true);setError("");try{await work();}catch(e){setError(e instanceof Error?e.message:"Не удалось выполнить действие.");}finally{setBusy(false);}}
+  async function perform(work:()=>Promise<void>){setBusy(true);setError("");try{await work();}catch(e){setError(e instanceof Error?e.message:"Не удалось выполнить действие.");await refresh().catch(()=>{});}finally{setBusy(false);}}
   async function go(step:number){stepRef.current=step;setStep(step);dirty.current=true;await flush();await refresh();}
   function toggle(key:"channelIds"|"kbIds",id:string){change({...input,[key]:input[key].includes(id)?input[key].filter(v=>v!==id):[...input[key],id]});}
   async function generate(kind:AuthoringJob["kind"],revisionRequest?:RevisionRequest){
@@ -217,7 +218,8 @@ export function PublicationWizard({ draftId, onClose }: { draftId: string; onClo
       <div className={styles.content}>
         {error&&<div className={styles.banner} data-tone="error" role="alert"><span>{error}</span><button className={`${styles.btn} ${styles.btnSm}`} onClick={()=>void perform(async()=>{await flush();await refresh();setError("");})}>Повторить сохранение</button></div>}
         {!data.configured&&<div className={styles.banner} data-tone="draft"><span>Генерация Drafta ещё не настроена. Вводные можно сохранить, генерация станет доступна после настройки.</span></div>}
-        {active&&<div className={`${styles.banner} ${styles.progress}`} data-tone="draft" role="status"><span><span className={styles.spinner}/><span><strong>{STAGES[data.job?.stage||"queued"]||"Генерируем…"}</strong>Можно закрыть мастер и вернуться позже — результат сохранится здесь.</span></span></div>}
+        {active&&!generationStalled(data.job)&&<div className={`${styles.banner} ${styles.progress}`} data-tone="draft" role="status"><span><span className={styles.spinner}/><span><strong>{STAGES[data.job?.stage||"queued"]||"Генерируем…"}</strong>Можно закрыть мастер и вернуться позже — результат сохранится здесь.</span></span></div>}
+        {active&&generationStalled(data.job)&&<div className={styles.banner} data-tone="error" role="alert"><span>{data.job?.error || "Генерация давно не обновлялась. Можно повторить запуск незавершённых этапов."}</span><button className={`${styles.btn} ${styles.btnSm}`} disabled={busy||saving} onClick={()=>void perform(async()=>{await post({action:"retry",revision:revision.current,jobId:data.job!.id});await refresh();})}>Повторить запуск</button></div>}
         {data.job?.status==="error"&&<div className={styles.banner} data-tone="error" role="alert"><span>{data.job.error}</span><button className={`${styles.btn} ${styles.btnSm}`} disabled={frozen||saving||data.job.input_revision!==data.state.revision} onClick={()=>void perform(async()=>{await flush();await post({action:"retry",revision:revision.current,jobId:data.job!.id});await refresh();})}>Повторить незавершённые этапы</button></div>}
 
         {showResult&&result ? <>

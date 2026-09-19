@@ -45,17 +45,6 @@ export const publicationImport = inngest.createFunction({
   return { importId };
 });
 
-export const recoverPublicationImports = inngest.createFunction({
-  id: "recover-publication-imports", triggers: [{ cron: "* * * * *" }], retries: 1,
-}, async ({ step }) => {
-  const jobs = await step.run("pending-ids", async () => {
-    const { data, error } = await createAdminSupabaseClient().from("publication_imports").select("id,workspace_id")
-      .eq("status", "pending").lt("created_at", new Date(Date.now() - 30000).toISOString()).limit(100);
-    check(error); return data ?? [];
-  });
-  if (jobs.length) await step.sendEvent("recover", jobs.map(job => publicationImportRequested.create({ workspaceId: job.workspace_id, importId: job.id })));
-});
-
 export const cleanupPublicationAssets = inngest.createFunction({
   id: "cleanup-publication-assets", triggers: [{ cron: "17 * * * *" }], retries: 2,
 }, async ({ step }) => {
@@ -70,6 +59,8 @@ export const cleanupPublicationAssets = inngest.createFunction({
     const { error: grantError } = await db.from("gpt_oauth_grants").delete().lt("expires_at", new Date().toISOString()); check(grantError);
     const { error: importError } = await db.from("publication_imports").delete().neq("status", "pending")
       .lt("created_at", new Date(Date.now() - 30 * 86400_000).toISOString()); check(importError);
+    const { error: generationError } = await db.from("publication_generation_jobs").delete().neq("status", "pending")
+      .lt("created_at", new Date(Date.now() - 30 * 86400_000).toISOString()); check(generationError);
     return { removed: paths.length };
   });
 });

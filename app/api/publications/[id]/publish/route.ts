@@ -23,7 +23,15 @@ export async function POST(request:Request,{params}:Context){
       check(error);
     }
     for(const job of data ?? [])if(["pending","sending"].includes(job.status)){
-      try{await inngest.send(publicationSendRequested.create({workspaceId:workspace.id,deliveryId:job.id}));}catch{/* Durable recovery handles event transport failure. */}
+      try{await inngest.send(publicationSendRequested.create({workspaceId:workspace.id,deliveryId:job.id}));}
+      catch {
+        // Keep the state and transport IDs: an acknowledgement may be lost
+        // after acceptance. A manual retry must reconcile the same delivery.
+        const {error:dispatchError}=await db.from("publication_deliveries")
+          .update({error:"Не удалось подтвердить запуск отправки. Нажмите «Повторить»."})
+          .eq("workspace_id",workspace.id).eq("id",job.id).in("status",["pending","sending"]);
+        check(dispatchError);
+      }
     }
     return json({deliveries:await deliveryStatus(workspace.id,id)},202);
   }catch(error){return failure(error);}

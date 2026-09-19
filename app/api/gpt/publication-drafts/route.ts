@@ -26,8 +26,13 @@ export async function POST(request: Request) {
       .eq("workspace_id", grant.workspace_id).eq("id", importId).single();
     check(jobError);
     if (job!.status === "pending") {
-      // Durable row first. A retry or the recovery cron re-emits after a dispatch failure.
-      await inngest.send(publicationImportRequested.create({ workspaceId: grant.workspace_id, importId }));
+      try {
+        await inngest.send(publicationImportRequested.create({ workspaceId: grant.workspace_id, importId }));
+      } catch {
+        const { error: finishError } = await db.rpc("finish_publication_import", { w: grant.workspace_id, i: importId, a: [], failed: true });
+        check(finishError);
+        throw new PublicationError(503, "Не удалось запустить импорт. Повторите отправку с новым request_id и свежими файлами.");
+      }
     }
     return json({ draft_id: draft.id, status: job!.status, url: `${new URL(request.url).origin}/comments?draft=${draft.id}`,
       message: job!.status === "ready" ? "Черновик сохранён." : job!.status === "error" ? "Изображения не загружены. Повторите отправку с новым request_id и свежими файлами." : "Принято. Изображения загружаются; это ещё не подтверждение завершения." }, job!.status === "pending" ? 202 : 200);

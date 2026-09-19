@@ -1,12 +1,12 @@
-import { publicationSend, recoverPublicationDeliveries } from "./publication-send";
+import { publicationSend } from "./publication-send";
 import { autoReply } from "./auto-reply";
 import { cleanupAiRequestLog } from "./cleanup-ai-request-log";
 import { contactAvatar } from "./contact-avatar";
 import { generateCommentDrafts } from "./generate-comment-drafts";
 import { generateDraft } from "./generate-draft";
 import { postThumbnail } from "./post-thumbnail";
-import { publicationImport, recoverPublicationImports, cleanupPublicationAssets } from "./publication-import";
-import { publicationGeneration, recoverPublicationGenerations } from "./publication-generation";
+import { publicationImport, cleanupPublicationAssets } from "./publication-import";
+import { publicationGeneration } from "./publication-generation";
 import { sendComment } from "./send-comment";
 import { sendCommentPrivateReply } from "./send-comment-private-reply";
 import { sendMessage } from "./send-message";
@@ -25,11 +25,9 @@ export { sendPush } from "./send-push";
 
 /** All functions served by app/api/inngest/route.ts. */
 export const inngestFunctions = [
-  publicationSend, recoverPublicationDeliveries,
+  publicationSend,
   publicationGeneration,
-  recoverPublicationGenerations,
   publicationImport,
-  recoverPublicationImports,
   cleanupPublicationAssets,
   generateDraft,
   generateCommentDrafts,

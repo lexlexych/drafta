@@ -12,7 +12,7 @@ export type ChannelChoice = { id: string; name: string; platform: string };
 export type PublicationVariant = { channelId: string; body: string };
 export type AuthoringResult = { title: string; variants: PublicationVariant[]; imagePrompt?: string; assetIds: string[] };
 export type RevisionRequest = { instruction: string; channelId?: string; assetId?: string };
-export type AuthoringJob = { id: string; kind: "ideas" | "post" | "text" | "image" | "outline"; status: "pending" | "ready" | "error"; stage: string; error: string | null; result: AuthoringResult | null; input_revision: number };
+export type AuthoringJob = { id: string; kind: "ideas" | "post" | "text" | "image" | "outline"; status: "pending" | "ready" | "error"; stage: string; error: string | null; result: AuthoringResult | null; input_revision: number; updated_at?: string };
 export type AuthoringState = {
   input: AuthoringInput; revision: number; step: number; ideas: PostIdea[]; ideas_key: string;
   active_job_id: string | null; variants: PublicationVariant[];

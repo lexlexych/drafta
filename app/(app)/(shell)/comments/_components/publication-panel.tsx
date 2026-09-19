@@ -9,6 +9,7 @@ import styles from "./publication-panel.module.css";
 import ui from "../../_components/ui.module.css";
 import {PublicationPublish,DeletePublication} from "./publication-publish";
 import { PublicationWizard } from "./publication-wizard";
+import { importExpired as isImportExpired } from "@/lib/publications/progress";
 
 type PanelData = { drafts: PublicationDraft[]; selectedDraft?: PublicationDraft | null; categories: { id: string; name: string }[]; connected: boolean; authorizedKbIds: string[]; gptUrl: string | null };
 const button = `${ui.button} ${ui.buttonSmall}`;
@@ -93,6 +94,7 @@ export function PublicationPanel({ draftId, workspaceId }: { draftId: string; wo
     change();
   }
   const frozen = busy || publicationLocked || draft?.status === "importing";
+  const importExpired = isImportExpired(draft);
   if (draft?.source === "draft") return <PublicationWizard key={draft.id} draftId={draft.id} onClose={() => router.push("/comments")} />;
   return <div className={styles.panel}>
     <div className={styles.header}><h2>{draft ? "Черновик публикации" : "Создание публикации"}</h2>
@@ -110,7 +112,13 @@ export function PublicationPanel({ draftId, workspaceId }: { draftId: string; wo
         router.replace(`/comments?draft=${created.id}`);
       })}>Создать через ChatGPT</button></div></>}
     {draft && <div className={styles.form}>
-      <p className={styles.notice} role="status">{statusLabel[draft.status]}{draft.edited_at && " · Ручное редактирование: ChatGPT больше не может перезаписать этот черновик."}</p>
+      <p className={styles.notice} role={draft.status === "error" || importExpired ? "alert" : "status"}>{importExpired ? "Импорт не завершился вовремя. Нажмите «Повторить импорт», чтобы запросить свежие файлы." : statusLabel[draft.status]}{draft.edited_at && " · Ручное редактирование: ChatGPT больше не может перезаписать этот черновик."}</p>
+      {!draft.edited_at && ["error", "importing"].includes(draft.status) && <div className={styles.actions}>
+        {draft.status === "error" && data?.gptUrl ? <a className={primary} href={data.gptUrl} target="_blank" rel="noopener noreferrer">Повторить через ChatGPT</a> : <button className={button} disabled={busy} onClick={() => void perform(async () => {
+          const response = await api(`/api/publications/${draft.id}/import`, { method: "POST" });
+          await refresh(); setMessage(response.message || "Импорт завершён.");
+        })}>Повторить импорт</button>}
+      </div>}
       <fieldset disabled={frozen}>
         <legend>Настройки для ChatGPT</legend>
         <label>Название черновика<input value={title} maxLength={200} onChange={e => { setTitle(e.target.value); change(); }} /></label>

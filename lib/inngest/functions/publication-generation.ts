@@ -19,7 +19,7 @@ async function load(workspaceId: string, jobId: string) {
   return { ...job, snapshot: job.snapshot as Snapshot, result: job.result as AuthoringResult | null, usage: job.usage as PublicationUsage[] };
 }
 async function checkpoint(workspaceId: string, jobId: string, patch: Record<string, unknown>) {
-  const { error } = await createAdminSupabaseClient().from("publication_generation_jobs").update({ ...patch, updated_at: new Date().toISOString() })
+  const { error } = await createAdminSupabaseClient().from("publication_generation_jobs").update({ error: null, ...patch, updated_at: new Date().toISOString() })
     .eq("workspace_id", workspaceId).eq("id", jobId).eq("status", "pending"); check(error);
 }
 async function imageBytes(workspaceId: string, draftId: string, assetId: string) {
@@ -123,16 +123,4 @@ export const publicationGeneration = inngest.createFunction({
     await authoringAction(workspaceId, job.draft_id, "complete", { jobId });
   });
   return { jobId };
-});
-
-export const recoverPublicationGenerations = inngest.createFunction({ id: "recover-publication-generations", triggers: [{ cron: "* * * * *" }], retries: 1 }, async ({ step }) => {
-  const jobs = await step.run("pending-ids", async () => {
-    const { data, error } = await createAdminSupabaseClient().from("publication_generation_jobs").select("id,workspace_id").eq("status", "pending")
-      .lt("updated_at", new Date(Date.now()-60000).toISOString()).limit(100); check(error); return data ?? [];
-  });
-  if (jobs.length) await step.sendEvent("recover", jobs.map(j=>publicationGenerationRequested.create({ workspaceId: j.workspace_id, jobId: j.id })));
-  await step.run("retention", async () => {
-    const { error } = await createAdminSupabaseClient().from("publication_generation_jobs").delete().neq("status","pending")
-      .lt("created_at",new Date(Date.now()-30*86400000).toISOString()); check(error);
-  });
 });

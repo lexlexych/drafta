@@ -55,10 +55,27 @@ describe("publication authoring smoke", () => {
   });
   it("offers category selection and prevents editing during import", async () => {
     draft.status = "importing";
+    draft.updated_at = new Date().toISOString();
     render(<PublicationPanel draftId={id} workspaceId="w" />);
     await screen.findByText("Загружаем изображения…");
     const category = screen.getByRole("checkbox", { name: "Продукт" });
     expect(category.closest("fieldset")?.disabled).toBe(true);
     expect(screen.getByRole("button", { name: "Сохранить настройки" }).hasAttribute("disabled")).toBe(true);
+  });
+  it("offers fresh-file retry for failed imports", async () => {
+    draft.status = "error";
+    render(<PublicationPanel draftId={id} workspaceId="w" />);
+    const retry = await screen.findByRole("link", { name: "Повторить через ChatGPT" });
+    expect(retry.getAttribute("href")).toBe("https://chatgpt.com/g/test");
+    expect(screen.getByRole("alert").textContent).toContain("Не удалось загрузить");
+    expect(fetchMock.mock.calls.some(([,init]) => init?.method === "POST")).toBe(false);
+  });
+  it("shows expired import failure and dispatches only after a retry click", async () => {
+    draft.status = "importing";
+    render(<PublicationPanel draftId={id} workspaceId="w" />);
+    await screen.findByText(/Импорт не завершился вовремя/);
+    expect(fetchMock.mock.calls.some(([,init]) => init?.method === "POST")).toBe(false);
+    fireEvent.click(screen.getByRole("button", { name: "Повторить импорт" }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(`/api/publications/${id}/import`, expect.objectContaining({ method: "POST" })));
   });
 });

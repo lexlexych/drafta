@@ -31,6 +31,22 @@ afterEach(()=>{cleanup();vi.unstubAllGlobals();});
 async function start(){render(<PublicationWizard draftId={channel} onClose={()=>{}}/>);await screen.findByText("Куда готовим публикацию?");fireEvent.click(screen.getByRole("checkbox",{name:/Мастерская/}));}
 const actions=()=>fetchMock.mock.calls.filter(([,init])=>init?.method==="POST").map(([,init])=>JSON.parse(init!.body as string));
 describe("native publication wizard smoke",()=>{
+  it("offers manual resume for stalled generation without automatically dispatching",async()=>{
+    state.active_job_id="job";
+    job={id:"job",kind:"ideas",status:"pending",stage:"queued",input_revision:0,updated_at:new Date(Date.now()-660000).toISOString()};
+    render(<PublicationWizard draftId={channel} onClose={()=>{}}/>);
+    await screen.findByText(/Генерация давно не обновлялась/);
+    expect(actions()).toEqual([]);
+    fireEvent.click(screen.getByRole("button",{name:"Повторить запуск"}));
+    await waitFor(()=>expect(actions()).toContainEqual({action:"retry",revision:0,jobId:"job"}));
+  });
+  it("retries failed generation using its existing job",async()=>{
+    job={id:"job",kind:"ideas",status:"error",error:"Сервис недоступен",input_revision:0};
+    render(<PublicationWizard draftId={channel} onClose={()=>{}}/>);
+    await screen.findByText("Сервис недоступен");
+    fireEvent.click(screen.getByRole("button",{name:"Повторить незавершённые этапы"}));
+    await waitFor(()=>expect(actions()).toContainEqual({action:"retry",revision:0,jobId:"job"}));
+  });
   it("shows only connected channels and enables all four formats",async()=>{
     await start();expect(screen.getByRole("radio",{name:/Текст \+ карусель/}).hasAttribute("disabled")).toBe(false);
     expect(screen.getByRole("radio",{name:/Сценарий для видео/}).hasAttribute("disabled")).toBe(false);

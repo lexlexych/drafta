@@ -58,3 +58,5 @@ package-lock.json
 
 # Landing page with product simulator (not tracked by the main repo)
 /web/
+
+/docs/presentation-assets/

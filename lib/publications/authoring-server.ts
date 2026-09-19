@@ -27,7 +27,7 @@ export async function loadAuthoring(workspaceId: string, draftId: string) {
     db.from("publication_drafts").select("id,title,body,kind,status,source,asset_ids,updated_at").eq("workspace_id", workspaceId).eq("id", draftId).eq("source", "draft").maybeSingle(),
     db.from("channel_connections").select("id,name,platform").eq("workspace_id", workspaceId).eq("status", "active").order("created_at"),
     db.from("kb_files").select("id,name").eq("workspace_id", workspaceId).eq("is_enabled", true).order("sort_order"),
-    db.from("publication_generation_jobs").select("id,kind,status,stage,error,result,input_revision").eq("workspace_id", workspaceId).eq("draft_id", draftId).order("created_at", { ascending: false }).limit(1),
+    db.from("publication_generation_jobs").select("id,kind,status,stage,error,result,input_revision,updated_at").eq("workspace_id", workspaceId).eq("draft_id", draftId).order("created_at", { ascending: false }).limit(1),
   ]);
   for (const response of [state,draft,channels,categories,jobs]) check(response.error);
   if (!state.data || !draft.data) throw new PublicationError(404, "Черновик не найден.");

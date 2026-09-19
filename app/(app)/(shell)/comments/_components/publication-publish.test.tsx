@@ -6,6 +6,15 @@ const channels=[{id:"ig",name:"Магазин Instagram",platform:"instagram"},{
 const result={title:"Post",variants:[{channelId:"ig",body:"Instagram caption"},{channelId:"li",body:"LinkedIn caption"}],assetIds:["image"]};
 afterEach(()=>{cleanup();vi.unstubAllGlobals();});
 describe("publishing UI smoke",()=>{
+ it.each(["failed","sending","uncertain"])("manually retries or checks only the selected %s destination",async(status)=>{
+  const deliveries=[{id:"one",channel_id:"ig",status:"published",error:null},{id:"two",channel_id:"li",status,error:null}];
+  const fetch=vi.fn(async()=>Response.json({channels,deliveries}));vi.stubGlobal("fetch",fetch);
+  render(<PublicationPublish draftId="draft" kind="image" result={result} beforePublish={async()=>"2"}/>);
+  const retry=await screen.findByRole("button",{name:status==="failed"?"Повторить":"Проверить статус"});
+  expect(fetch.mock.calls).toHaveLength(1);
+  fireEvent.click(retry);
+  await waitFor(()=>expect(fetch).toHaveBeenCalledWith("/api/publications/draft/publish",expect.objectContaining({method:"POST",body:JSON.stringify({channelIds:["li"],version:"2"})})));
+ });
  it("previews both versions and selects only the failed destination on retry",async()=>{
   const deliveries=[{id:"one",channel_id:"ig",status:"published",published_url:"https://instagram.com/post",error:null},{id:"two",channel_id:"li",status:"failed",published_url:null,error:"Temporary error"}];
   const fetch=vi.fn(async(_url:string,init?:RequestInit)=>Response.json(init?.method==="POST"?{deliveries}:{channels,deliveries:[]}));vi.stubGlobal("fetch",fetch);

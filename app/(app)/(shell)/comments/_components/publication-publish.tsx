@@ -7,7 +7,7 @@ import {Modal} from "../../_components/modal";
 import {ExternalIcon,EyeIcon,TrashIcon} from "../../_components/icons";
 import styles from "./publication-wizard.module.css";
 type Delivery={id:string;channel_id:string;status:string;published_url:string|null;error:string|null};
-const LABELS:Record<string,string>={pending:"В очереди",sending:"Публикуем…",published:"Опубликовано",failed:"Ошибка отправки",uncertain:"Требуется проверка статуса"};
+const LABELS:Record<string,string>={pending:"В очереди",sending:"Ожидает подтверждения — проверьте статус",published:"Опубликовано",failed:"Ошибка отправки",uncertain:"Требуется проверка статуса"};
 async function api(url:string,init?:RequestInit){const response=await fetch(url,{...init,cache:"no-store"});const data=await response.json();if(!response.ok)throw new Error(data.error||"Не удалось выполнить действие.");return data;}
 
 /**
@@ -43,6 +43,7 @@ export function PublicationPublish({draftId,kind,result,beforePublish,onLockedCh
   const mediaIssue=kind==="image"?result.assetIds.length!==1:kind==="carousel"?result.assetIds.length<2||result.assetIds.length>10:result.assetIds.length!==0;
   const issue=selected.some(id=>Array.from(body(id)).length>limitOf(id)||!body(id).trim());
   async function publish(){setBusy(true);setError("");try{const version=await beforePublish();const data=await api(`/api/publications/${draftId}/publish`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({channelIds:selected,version})});setDeliveries(data.deliveries);window.dispatchEvent(new Event("publication-changed"));setOpen(false);}catch(e){setError(e instanceof Error?e.message:"Ошибка отправки.");}finally{setBusy(false);}}
+  async function retry(delivery:Delivery){setBusy(true);setError("");try{const version=await beforePublish();const data=await api(`/api/publications/${draftId}/publish`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({channelIds:[delivery.channel_id],version})});setDeliveries(data.deliveries);window.dispatchEvent(new Event("publication-changed"));}catch(e){setError(e instanceof Error?e.message:"Ошибка отправки.");}finally{setBusy(false);}}
   if(kind==="video")return null;
 
   const statuses=(deliveries.length>0||(error&&!open))&&<div className={styles.section}>
@@ -50,6 +51,7 @@ export function PublicationPublish({draftId,kind,result,beforePublish,onLockedCh
       <span className={styles.dot} data-platform={channel?.platform}/><strong>{channel?.name||"Канал"}</strong><span className={styles.status} data-status={d.status}>{LABELS[d.status]}</span>
       {d.published_url?.startsWith("https://")&&<a href={d.published_url} target="_blank" rel="noopener noreferrer">Открыть пост <ExternalIcon/></a>}
       {d.error&&<p>{d.error}</p>}
+      {d.status!=="published"&&<button className={styles.btn} disabled={busy} onClick={()=>void retry(d)}>{d.status==="failed"||d.error?"Повторить":"Проверить статус"}</button>}
     </div>;})}</div>}
     {error&&!open&&<p role="alert" className={styles.error}>{error}</p>}
   </div>;
