@@ -196,6 +196,7 @@ const DELIVERY_LABELS: Record<string, string | null> = {
   delivered: "Доставлено",
   read: "Прочитано",
   failed: "Не доставлено",
+  uncertain: "Отправка не подтверждена",
 };
 
 function channelBadge(channel: ChannelConnectionRow): ChannelBadgeView {

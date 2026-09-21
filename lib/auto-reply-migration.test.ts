@@ -51,7 +51,7 @@ describe("auto reply migration contract", () => {
   });
 
   it("keeps the decision journal read-only for operators", () => {
-    // Журнал пишет только Inngest под service_role: строка «мы решили ответить»
+    // Журнал пишет только Workflow под service_role: строка «мы решили ответить»
     // не должна появляться из браузера.
     expect(migration).toContain(
       "grant select on table public.auto_reply_runs to authenticated;",
@@ -148,7 +148,7 @@ describe("auto reply migration contract", () => {
   });
 
   it("returns the message it already created instead of refusing a retry", () => {
-    // Шаг Inngest может вставить сообщение и упасть до сохранения результата.
+    // Шаг Workflow может вставить сообщение и упасть до сохранения результата.
     // Без этой ветки повтор получил бы NULL, и автоответ навсегда завис бы в
     // pending, никуда не отправившись.
     expect(migration).toContain(
@@ -199,7 +199,7 @@ describe("auto reply migration contract", () => {
 
   it("hands the send RPC to service_role only", () => {
     // У оператора для отправки есть accept_reply_for_send; эту функцию зовёт
-    // только Inngest.
+    // только Workflow.
     expect(migration).toContain(
       "revoke all on function public.create_auto_reply_message(uuid, uuid, uuid, text)\n  from public;",
     );

@@ -14,7 +14,7 @@
 | [E-001](epic_01/_index.md) | Фундамент: Next.js + Supabase Auth, схема БД v1, RLS | done | 7/8 | 2026-07-19 | 2026-07-20 |
 | [E-002](epic_02/_index.md) | Zernio-контур: адаптер, вебхук, Realtime-инбокс «Сообщения» | done | 6/7 | 2026-07-19 | 2026-07-20 |
 | [E-003](epic_03/_index.md) | AI-черновики с дебаунсом: Inngest + Mistral, generate-draft, панель черновика | manual_steps | 7/8 | 2026-07-19 | — |
-| [E-004](epic_04/_index.md) | Миграция основного приложения с Inngest на Vercel Workflow | in_progress | 0/8 | 2026-09-19 | — |
+| [E-004](epic_04/_index.md) | Миграция основного приложения с Inngest на Vercel Workflow | manual_steps | 7/8 | 2026-09-19 | — |
 
 ## E-001. Фундамент: Next.js + Supabase Auth, схема БД v1, RLS
 
@@ -66,12 +66,12 @@
 
 | # | Тикет | Тип | Статус |
 |---|---|---|---|
-| T-01 | [Vercel Workflow SDK: сборка, регион и безопасные границы шагов](epic_04/T-01-workflow-runtime.md) | dev | in_progress |
-| T-02 | [Операции и попытки: атомарный запуск, блокировки, отмена и восстановление](epic_04/T-02-workflow-operations.md) | dev | todo |
-| T-03 | [Отправки DM и комментариев с ручным повтором и сверкой результата](epic_04/T-03-workflow-message-delivery.md) | dev | todo |
-| T-04 | [AI-черновик и автоответ: отмена, пауза и ручной повтор в переписке](epic_04/T-04-workflow-drafts-auto-reply.md) | dev | todo |
-| T-05 | [Публикации: генерация и импорт с checkpoint, отправка со сверкой](epic_04/T-05-workflow-publications.md) | dev | todo |
-| T-06 | [Push, фото и очистки: пять Workflow и два защищённых Cron](epic_04/T-06-workflow-background-jobs.md) | dev | todo |
-| T-07 | [Переключение основного приложения, удаление Inngest и актуальная документация](epic_04/T-07-workflow-cutover-docs.md) | dev | todo |
+| T-01 | [Vercel Workflow SDK: сборка, регион и безопасные границы шагов](epic_04/T-01-workflow-runtime.md) | dev | done |
+| T-02 | [Операции и попытки: атомарный запуск, блокировки, отмена и восстановление](epic_04/T-02-workflow-operations.md) | dev | done |
+| T-03 | [Отправки DM и комментариев с ручным повтором и сверкой результата](epic_04/T-03-workflow-message-delivery.md) | dev | done |
+| T-04 | [AI-черновик и автоответ: отмена, пауза и ручной повтор в переписке](epic_04/T-04-workflow-drafts-auto-reply.md) | dev | done |
+| T-05 | [Публикации: генерация и импорт с checkpoint, отправка со сверкой](epic_04/T-05-workflow-publications.md) | dev | done |
+| T-06 | [Push, фото и очистки: пять Workflow и два защищённых Cron](epic_04/T-06-workflow-background-jobs.md) | dev | done |
+| T-07 | [Переключение основного приложения, удаление Inngest и актуальная документация](epic_04/T-07-workflow-cutover-docs.md) | dev | done |
 | T-08 | [Executive summary — ручные шаги](epic_04/T-08-executive-summary.md) | manual | todo |
 

@@ -1,0 +1,7 @@
+{
+  "regions": ["fra1"],
+  "crons": [
+    { "path": "/api/cron/ai-request-log", "schedule": "0 3 * * *" },
+    { "path": "/api/cron/publication-assets", "schedule": "17 * * * *" }
+  ]
+}

@@ -1,4 +1,5 @@
 import withSerwistInit from "@serwist/next";
+import { withWorkflow } from "workflow/next";
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
@@ -25,4 +26,4 @@ const withSerwist = withSerwistInit({
   disable: process.env.NODE_ENV === "development",
 });
 
-export default withSerwist(nextConfig);
+export default withWorkflow(withSerwist(nextConfig));

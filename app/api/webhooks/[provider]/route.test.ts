@@ -16,16 +16,16 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 // вызывается напрямую" integration tests T-03 step 5 asks for.
 vi.mock("server-only", () => ({}));
 
-// Emission is asserted at the unit level in lib/inngest/events.test.ts
+// Emission is asserted at the unit level in lib/workflows/start.test.ts
 // (exact payload shape, fail-safe on rejection). Mocked here too so the
 // route suite can (a) assert the route passes the right IDs through without
-// depending on network access to a real Inngest endpoint, and (b) prove a
+// depending on network access to a real Workflow endpoint, and (b) prove a
 // rejected emission still lets the webhook answer 200 with the message
-// already persisted — see the "Inngest emission failure" test below.
+// already persisted — see the "Workflow emission failure" test below.
 const emitPushNotifyRequestedMock = vi.fn().mockResolvedValue(undefined);
 const emitContactAvatarSyncRequestedMock = vi.fn().mockResolvedValue(undefined);
 const emitPostThumbnailSyncRequestedMock = vi.fn().mockResolvedValue(undefined);
-vi.mock("@/lib/inngest/events", () => ({
+vi.mock("@/lib/workflows/events", () => ({
   emitPushNotifyRequested: (...args: unknown[]) => emitPushNotifyRequestedMock(...args),
   emitContactAvatarSyncRequested: (...args: unknown[]) =>
     emitContactAvatarSyncRequestedMock(...args),
@@ -240,7 +240,7 @@ describe.skipIf(!hasLocalSupabaseConfig)("POST /api/webhooks/[provider] (zernio)
     expect(webhookEvent?.processing_error).toBeNull();
 
     // Rule 7 (docs/architecture/14-vibecoding-rules.md#7): only IDs cross
-    // into the Inngest payload — see lib/inngest/events.test.ts for the
+    // into the Workflow payload — see lib/workflows/start.test.ts for the
     // exact-keys check; here we confirm the route wires the *right* IDs
     // through (not e.g. the workspace's other conversation, or nothing).
     expect(emitPushNotifyRequestedMock).toHaveBeenCalledWith({
@@ -322,7 +322,7 @@ describe.skipIf(!hasLocalSupabaseConfig)("POST /api/webhooks/[provider] (zernio)
       .eq("external_id", "tg_msg_55210");
     expect(messages).toHaveLength(1);
 
-    // Only the first delivery reaches Inngest — the second is a pure
+    // Only the first delivery reaches Workflow — the second is a pure
     // idempotency no-op (docs/architecture/07-data-flows.md#61).
     expect(emitPushNotifyRequestedMock).toHaveBeenCalledTimes(1);
   });
@@ -484,8 +484,8 @@ describe.skipIf(!hasLocalSupabaseConfig)("POST /api/webhooks/[provider] (zernio)
     expect(response.status).toBe(404);
   });
 
-  it("Inngest emission failure is fail-safe: the webhook still returns 200 and the message is still persisted", async () => {
-    emitPushNotifyRequestedMock.mockRejectedValueOnce(new Error("inngest down"));
+  it("Workflow emission failure is fail-safe: the webhook still returns 200 and the message is still persisted", async () => {
+    emitPushNotifyRequestedMock.mockRejectedValueOnce(new Error("workflow down"));
 
     const workspaceId = await createTestWorkspace();
     await createTestChannelConnection(workspaceId, {
@@ -494,7 +494,7 @@ describe.skipIf(!hasLocalSupabaseConfig)("POST /api/webhooks/[provider] (zernio)
     });
 
     // emitPushNotifyRequested itself never rejects by contract (see
-    // lib/inngest/events.ts / events.test.ts) — this mock deliberately
+    // lib/workflows/events.ts / events.test.ts) — this mock deliberately
     // bypasses that contract to prove there's a second layer of defense:
     // even a rejecting emitter (lib/webhooks/process-event.ts's own
     // try/catch around the whole DM pipeline) must not turn into a failed

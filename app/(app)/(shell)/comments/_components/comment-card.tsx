@@ -307,6 +307,10 @@ function PrivateReplyAction({
     return <span className={styles.commentActionNote}>Отправляется в ЛС…</span>;
   }
 
+  if (privateReply.status === "uncertain") {
+    return <span className={styles.commentActionNote}>Отправка в ЛС не подтверждена — проверьте переписку</span>;
+  }
+
   if (privateReply.status === "failed") {
     return (
       <button type="button" className={styles.commentAction} onClick={onRetry}>

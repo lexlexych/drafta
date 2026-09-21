@@ -39,7 +39,7 @@ import {
   emitDraftGenerateCancelled,
   emitDraftGenerateRequested,
   emitMessageSendRequested,
-} from "@/lib/inngest/events";
+} from "@/lib/workflows/events";
 
 /** These actions belong to "/inbox" only — comments have their own actions. */
 function revalidateInboxViews() {
@@ -254,7 +254,7 @@ export async function discardDraftAction(
  * docs/architecture/07-data-flows.md#63-отправка-ответа): the outgoing
  * message is already persisted as `pending` — emit the ID-only
  * `message/send` event; the actual provider call happens in the
- * `send-message` Inngest function with retries (vibecoding rule 8), never
+ * `send-message` Workflow function with retries (vibecoding rule 8), never
  * inside this request. If even the emit fails, compensate to `failed` so
  * the thread shows the retry button instead of a forever-pending bubble.
  */
@@ -358,7 +358,7 @@ export async function retrySendMessageAction(
 /**
  * Значок AI в композере — единственный способ создать черновик к диалогу
  * (docs/architecture/07-data-flows.md#62-генерация-черновика). Работа идёт в
- * Inngest-функции `generate-draft` с ретраями (правило 8); сюда возвращается
+ * Workflow-функции `generate-draft` с ретраями (правило 8); сюда возвращается
  * только «запустили», а сам черновик приезжает в поле ввода через Realtime.
  */
 export async function generateDraftAction(conversationId: string) {
@@ -394,7 +394,7 @@ export async function generateDraftAction(conversationId: string) {
  * Кнопка «стоп» под спиннером генерации.
  *
  * Черновик гасится здесь и сейчас — именно это разблокирует поле ввода во всех
- * открытых вкладках. Отмена самого прогона Inngest идёт следом и только
+ * открытых вкладках. Отмена самого прогона Workflow идёт следом и только
  * экономит остаток работы, поэтому её неудача не превращается в ошибку.
  */
 export async function cancelDraftGenerationAction(conversationId: string) {
@@ -428,7 +428,7 @@ export async function cancelDraftGenerationAction(conversationId: string) {
  * «Настройки → Аккаунт» и кэшируется в `message_translations`.
  *
  * Единственный вызов LLM, который идёт синхронно в запросе, а не событием
- * Inngest: пользователь ждёт результат здесь и сейчас со спиннером на месте
+ * Workflow: пользователь ждёт результат здесь и сейчас со спиннером на месте
  * значка, и очередь с ретраями сделала бы это ожидание неопределённым. Правило
  * 8 сюда не распространяется — наружу ничего не отправляется, а вебхуки (правило
  * 6) это не затрагивает.

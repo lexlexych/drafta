@@ -3,3 +3,5 @@ allowBuilds:
   sharp: true
   unrs-resolver: true
   protobufjs: false
+  '@swc/core': true
+  cbor-extract: false

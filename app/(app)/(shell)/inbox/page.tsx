@@ -1,3 +1,4 @@
+import { WorkflowErrors } from "../_components/workflow-errors";
 import Link from "next/link";
 
 import { categoryBadges, listKnowledgeFiles } from "@/lib/db/knowledge-base";
@@ -174,6 +175,7 @@ export default async function InboxPage({
 
             {/* Лента клиентская: сервер отдаёт последнюю страницу переписки,
                 остальное она подтягивает при скролле вверх. */}
+            <WorkflowErrors resourceId={thread.conversationId} />
             <MessageList
               conversationId={thread.conversationId}
               messages={thread.messages}

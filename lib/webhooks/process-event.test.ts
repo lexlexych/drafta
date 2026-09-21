@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("server-only", () => ({}));
 // Emitted fail-safe after the DB work; irrelevant to what is asserted here.
 const emitted = vi.hoisted(() => ({ autoReply: [] as unknown[] }));
-vi.mock("@/lib/inngest/events", () => ({
+vi.mock("@/lib/workflows/events", () => ({
   emitContactAvatarSyncRequested: async () => {},
   emitPostThumbnailSyncRequested: async () => {},
   emitPushNotifyRequested: async () => {},
@@ -681,7 +681,7 @@ describe("processInboundEvent — запуск автоответа", () => {
 
   it("молчит, пока контур автоответов не включён", async () => {
     // Настроек у большинства workspace нет вовсе, и событие стоит денег:
-    // оплаченный прогон Inngest на каждое входящее вышел бы на первом шаге.
+    // оплаченный прогон Workflow на каждое входящее вышел бы на первом шаге.
     await run(whatsappIncoming("Alexey"));
 
     expect(emitted.autoReply).toEqual([]);

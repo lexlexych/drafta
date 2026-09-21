@@ -33,7 +33,7 @@ import {
 import {
   emitCommentPrivateReplySendRequested,
   emitCommentSendRequested,
-} from "@/lib/inngest/events";
+} from "@/lib/workflows/events";
 /**
  * Server actions of the «Публикации» screen. Nothing here is shared with
  * `/inbox`: comments have their own tables and their own send path.
@@ -230,7 +230,7 @@ export async function translateCommentAction(
  *
  * Строка `comments` появляется сразу в статусе `pending` — она и есть то, что
  * пользователь видит в треде как «Отправляется…». Наружу ответ уходит
- * Inngest-функцией `send-comment` с ретраями (правило 8), а не из этого
+ * Workflow-функцией `send-comment` с ретраями (правило 8), а не из этого
  * запроса; если событие не удалось отправить, ответ помечается `failed`, иначе
  * он остался бы «отправляющимся» навсегда.
  */
@@ -284,7 +284,7 @@ export async function replyToCommentAction(input: {
  * после него — держит уникальный ключ `comment_private_replies`, поэтому
  * повторное нажатие в двух вкладках не превращается в два сообщения у клиента.
  *
- * Наружу отправляет Inngest-функция с ретраями (правило 8); если событие не
+ * Наружу отправляет Workflow-функция с ретраями (правило 8); если событие не
  * ушло, строка помечается `failed`, иначе она осталась бы «отправляющейся»
  * навсегда.
  */

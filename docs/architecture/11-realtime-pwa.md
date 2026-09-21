@@ -33,10 +33,13 @@ updated: 2026-07-19
 
 ## Web Push
 
-Через Serwist-воркер; отправка — Inngest-функция `send-push`
-([7.6](07-data-flows.md#66-полный-список-inngest-функций)), библиотека web-push, VAPID
+Через Serwist-воркер; отправка — `sendPushWorkflow`
+([контур Workflow](../integrations/vercel-workflow.md)), библиотека web-push, VAPID
 (ключи — [13. Секреты](13-environments-secrets.md#секреты-vercel-env)).
 Подписки хранятся в [`push_subscriptions`](06-data-model.md#push_subscriptions).
+Каждое устройство обрабатывается отдельно: временный сбой допускает два повтора,
+успешная подписка пропускается при повторе. Служебные маршруты
+`/.well-known/workflow/` не кэшируются Serwist и исключены из auth proxy.
 
 ### Частота уведомлений
 

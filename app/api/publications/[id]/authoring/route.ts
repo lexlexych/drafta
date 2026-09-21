@@ -3,15 +3,21 @@ import { generationIssue, ideaContextKey, validAuthoringInput, validResult } fro
 import { check, failure, json, memberContext, PublicationError, readJson, sameOrigin } from "@/lib/publications/server";
 import { validId } from "@/lib/publications/types";
 import { publicationGenerationRequested } from "@/lib/publications/events";
-import { inngest } from "@/lib/inngest/client";
+import { dispatchWorkflow } from "@/lib/workflows/start";
 import { generationStalled } from "@/lib/publications/progress";
+import { reconcileSubject } from "@/lib/workflows/recovery";
 
 type Context = { params: Promise<{ id: string }> };
 export async function GET(_request: Request, { params }: Context) {
   try {
     const { workspace } = await memberContext(); const { id } = await params;
     if (!validId(id)) throw new PublicationError(400, "Некорректный черновик.");
-    return json(await loadAuthoring(workspace.id, id));
+    const current=await loadAuthoring(workspace.id,id);
+    if(current.job?.status==='pending') {
+      await reconcileSubject(workspace.id,'publication-generation',current.job.id);
+      return json(await loadAuthoring(workspace.id,id));
+    }
+    return json(current);
   } catch (error) { return failure(error); }
 }
 export async function POST(request: Request, { params }: Context) {
@@ -25,7 +31,11 @@ export async function POST(request: Request, { params }: Context) {
     if (p.action === "save") {
       if (!validAuthoringInput(p.input) || !Number.isInteger(p.step) || p.step<1 || p.step>6) throw new PublicationError(400, "Проверьте поля публикации.");
     } else if (["start","retry","apply","edit","discard"].includes(p.action)) {
-      const current = await loadAuthoring(workspace.id, id);
+      let current = await loadAuthoring(workspace.id, id);
+      if(p.action==='retry' && current.job?.status==='pending') {
+        await reconcileSubject(workspace.id,'publication-generation',current.job.id);
+        current=await loadAuthoring(workspace.id,id);
+      }
       if (p.action === "retry" && current.job?.status === "pending") {
         if (p.jobId !== current.job.id || current.state.active_job_id !== current.job.id || p.revision !== current.state.revision)
           throw new PublicationError(409, "Задача изменилась. Обновите страницу.");
@@ -56,7 +66,7 @@ export async function POST(request: Request, { params }: Context) {
     } else throw new PublicationError(400, "Недоступное действие.");
     const result = resumeJob ?? await authoringAction(workspace.id, id, p.action, p, user.id);
     if (["start","retry"].includes(p.action) && result.status === "pending") {
-      try { await inngest.send(publicationGenerationRequested.create({ workspaceId: workspace.id, jobId: result.id })); }
+      try { await dispatchWorkflow(publicationGenerationRequested.create({ workspaceId: workspace.id, jobId: result.id })); }
       catch {
         const message = "Не удалось подтвердить запуск генерации. Нажмите «Повторить».";
         // A lost acknowledgement does not prove the worker never started.

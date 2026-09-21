@@ -142,7 +142,7 @@ async function resolveWorkspaceId(
 }
 
 /** Same SQLSTATE check as `process-event.ts`, kept local to avoid importing
- * the whole inbound pipeline (and its Inngest dependencies) for three lines. */
+ * the whole inbound pipeline (and its Workflow dependencies) for three lines. */
 function isUniqueViolation(error: { code?: string }): boolean {
   return error.code === "23505";
 }

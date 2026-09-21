@@ -5,7 +5,7 @@ const mocks = vi.hoisted(() => ({ from: vi.fn(), rpc: vi.fn(), context: vi.fn(),
 vi.mock("@/lib/publications/server", async importOriginal => ({
   ...await importOriginal<typeof import("./server")>(), gptContext: mocks.context,
 }));
-vi.mock("@/lib/inngest/client", () => ({ inngest: { send: mocks.send } }));
+vi.mock("@/lib/workflows/start", () => ({ dispatchWorkflow: mocks.send }));
 import { GET } from "@/app/api/gpt/knowledge/route";
 import { POST } from "@/app/api/gpt/publication-drafts/route";
 import { DEFAULT_CONTEXT } from "./types";

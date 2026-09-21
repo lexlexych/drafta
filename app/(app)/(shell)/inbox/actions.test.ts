@@ -35,7 +35,7 @@ vi.mock("@/lib/db/drafts", () => ({
   discardGeneratingConversationDraft: mocks.discardGeneratingConversationDraft,
   canGenerateConversationDraft: mocks.canGenerateConversationDraft,
 }));
-vi.mock("@/lib/inngest/events", () => ({
+vi.mock("@/lib/workflows/events", () => ({
   emitDraftGenerateRequested: mocks.emitDraftGenerateRequested,
   emitDraftGenerateCancelled: mocks.emitDraftGenerateCancelled,
   emitMessageSendRequested: mocks.emitMessageSendRequested,
@@ -122,7 +122,7 @@ describe("draft server actions", () => {
     expect(mocks.emitDraftGenerateRequested).not.toHaveBeenCalled();
   });
 
-  it("discards the generating draft first, then asks Inngest to cancel the run", async () => {
+  it("discards the generating draft first, then asks Workflow to cancel the run", async () => {
     mocks.discardGeneratingConversationDraft.mockResolvedValue({ ok: true });
     mocks.emitDraftGenerateCancelled.mockResolvedValue(undefined);
 
@@ -234,7 +234,7 @@ describe("send server actions", () => {
       ok: true,
       messageId: "message-9",
     });
-    mocks.emitMessageSendRequested.mockRejectedValue(new Error("inngest down"));
+    mocks.emitMessageSendRequested.mockRejectedValue(new Error("workflow down"));
     mocks.markOutgoingMessageFailedAfterEmit.mockResolvedValue(undefined);
 
     const result = await sendManualMessageAction("conversation-1", "Ответ");

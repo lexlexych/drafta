@@ -4,7 +4,8 @@ const mocks = vi.hoisted(() => ({ context: vi.fn(), from: vi.fn(), rpc: vi.fn(),
 vi.mock("./server", async original => ({ ...await original<typeof import("./server")>(), memberContext: mocks.context }));
 vi.mock("./authoring-server", () => ({ loadAuthoring: mocks.load, authoringAction: mocks.action, loadSelectedContext: mocks.selected }));
 vi.mock("./publishing", () => ({ deliveryStatus: async () => [] }));
-vi.mock("@/lib/inngest/client", () => ({ inngest: { send: mocks.send } }));
+vi.mock("@/lib/workflows/start", () => ({ dispatchWorkflow: mocks.send }));
+vi.mock("@/lib/workflows/recovery", () => ({ reconcileSubject: vi.fn() }));
 import { POST as authoring } from "@/app/api/publications/[id]/authoring/route";
 import { POST as publish } from "@/app/api/publications/[id]/publish/route";
 import { POST as retryImport } from "@/app/api/publications/[id]/import/route";

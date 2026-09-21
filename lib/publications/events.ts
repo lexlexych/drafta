@@ -1,9 +1,5 @@
-import { eventType, staticSchema } from "inngest";
-export const publicationImportRequested = eventType("publication/import.requested", {
-  schema: staticSchema<{ workspaceId: string; importId: string }>(),
-});
-export const publicationGenerationRequested = eventType("publication/generation.requested", {
-  schema: staticSchema<{ workspaceId: string; jobId: string }>(),
-});
-
-export const publicationSendRequested = eventType("publication/send.requested", { schema: staticSchema<{workspaceId: string; deliveryId: string}>() });
+import type {JobInput,JobKind} from '@/lib/workflows/types';
+function event<P extends JobInput>(kind:JobKind) {return {create:(data:P)=>({kind,data})};}
+export const publicationImportRequested=event<{workspaceId:string;importId:string}>('publication-import');
+export const publicationGenerationRequested=event<{workspaceId:string;jobId:string}>('publication-generation');
+export const publicationSendRequested=event<{workspaceId:string;deliveryId:string}>('publication-send');

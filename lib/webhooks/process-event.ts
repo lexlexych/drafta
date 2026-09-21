@@ -20,7 +20,7 @@ import {
   emitContactAvatarSyncRequested,
   emitPostThumbnailSyncRequested,
   emitPushNotifyRequested,
-} from "@/lib/inngest/events";
+} from "@/lib/workflows/events";
 
 /**
  * One normalized event → the DB side of §6.1's pipeline
@@ -155,7 +155,7 @@ export async function processInboundEvent(
   // reconciliation pass can retry — see `webhook_events_processing_idx`
   // (supabase/migrations/20260720103000_create_schema_v1.sql) and the
   // `reconcile-webhooks` cron listed as a later stage
-  // (docs/architecture/07-data-flows.md#66-полный-список-inngest-функций).
+  // (docs/architecture/07-data-flows.md#66-полный-список-workflow).
   // Reserved for genuinely transient failures (a DB write erroring
   // mid-pipeline), not for definitive business outcomes like an unknown
   // channel_connection or an out-of-scope event type — those are terminal
@@ -382,7 +382,7 @@ async function processIncomingDirectMessage(params: {
     await markProcessed(null);
 
     // Контур выключен у подавляющего большинства workspace, а событие стоит
-    // денег: один индексный lookup здесь дешевле оплаченного прогона Inngest на
+    // денег: один индексный lookup здесь дешевле оплаченного прогона Workflow на
     // каждое входящее, который тут же вышел бы на первом шаге. Правило 6 не
     // нарушено — это тот же дешёвый запрос к своей же БД, что и остальные в
     // пайплайне, без LLM и без внешних вызовов.

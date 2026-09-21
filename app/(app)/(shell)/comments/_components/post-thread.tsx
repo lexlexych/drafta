@@ -1,3 +1,4 @@
+import { WorkflowErrors } from "../../_components/workflow-errors";
 import Link from "next/link";
 
 import type { PostThreadView } from "@/lib/comments/types";
@@ -68,6 +69,7 @@ export function PostThread({
         ) : null}
       </div>
 
+      <WorkflowErrors resourceId={post.postId} />
       <CommentThread
         postId={post.postId}
         comments={post.comments}

@@ -1,7 +1,7 @@
 import { check, failure, gptContext, json, PublicationError, readJson } from "@/lib/publications/server";
 import { hash } from "@/lib/publications/security";
 import { importIdentity, validateImport } from "@/lib/publications/import";
-import { inngest } from "@/lib/inngest/client";
+import { dispatchWorkflow } from "@/lib/workflows/start";
 import { publicationImportRequested } from "@/lib/publications/events";
 
 export async function POST(request: Request) {
@@ -27,7 +27,7 @@ export async function POST(request: Request) {
     check(jobError);
     if (job!.status === "pending") {
       try {
-        await inngest.send(publicationImportRequested.create({ workspaceId: grant.workspace_id, importId }));
+        await dispatchWorkflow(publicationImportRequested.create({ workspaceId: grant.workspace_id, importId }));
       } catch {
         const { error: finishError } = await db.rpc("finish_publication_import", { w: grant.workspace_id, i: importId, a: [], failed: true });
         check(finishError);

@@ -16,7 +16,7 @@ export type PushSubscriptionResult =
   | { ok: true }
   | { ok: false; error: string };
 
-/** Полная подписка для отправки push из Inngest (без persist-полей). */
+/** Полная подписка для отправки push из Workflow (без persist-полей). */
 export type PushSubscriptionRecord = {
   id: string;
   userId: string;
@@ -92,7 +92,7 @@ function mapRecord(row: Record<string, unknown>): PushSubscriptionRecord {
 /**
  * Все подписки workspace — получатели push о новом входящем. Отдельного режима
  * частоты у контура нет: push приходит на каждое входящее (§11). Admin-клиент
- * (обходит RLS) — вызывается только из Inngest-функции `send-push`.
+ * (обходит RLS) — вызывается только из Workflow-функции `send-push`.
  */
 export async function listWorkspaceSubscriptions(
   workspaceId: string,

@@ -54,10 +54,10 @@ const processors = [
     location: "Verarbeitung in den USA möglich",
   },
   {
-    name: "Inngest",
+    name: "Vercel Workflow",
     purpose: "Steuerung von Hintergrundaufgaben",
-    data: "Ausschließlich technische Kennungen (IDs), keine Inhalte",
-    location: "USA",
+    data: "Im gespeicherten Workflow-Zustand: technische Kennungen und Status. Inhalte werden innerhalb der Serverfunktionen verarbeitet.",
+    location: "Frankfurt (EU); Anbieter mit Sitz in den USA",
   },
   {
     name: "Postmark",

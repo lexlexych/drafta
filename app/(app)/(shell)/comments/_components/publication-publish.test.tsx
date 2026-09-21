@@ -13,7 +13,7 @@ describe("publishing UI smoke",()=>{
   const retry=await screen.findByRole("button",{name:status==="failed"?"Повторить":"Проверить статус"});
   expect(fetch.mock.calls).toHaveLength(1);
   fireEvent.click(retry);
-  await waitFor(()=>expect(fetch).toHaveBeenCalledWith("/api/publications/draft/publish",expect.objectContaining({method:"POST",body:JSON.stringify({channelIds:["li"],version:"2"})})));
+  await waitFor(()=>expect(fetch).toHaveBeenCalledWith("/api/publications/draft/publish",expect.objectContaining({method:"POST",body:JSON.stringify({channelIds:["li"],version:"2",checkOnly:status!=="failed"})})));
  });
  it("previews both versions and selects only the failed destination on retry",async()=>{
   const deliveries=[{id:"one",channel_id:"ig",status:"published",published_url:"https://instagram.com/post",error:null},{id:"two",channel_id:"li",status:"failed",published_url:null,error:"Temporary error"}];

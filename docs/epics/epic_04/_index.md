@@ -1,10 +1,10 @@
 ---
 id: E-004
 title: "Миграция основного приложения с Inngest на Vercel Workflow"
-status: in_progress
+status: manual_steps
 source: "docs/plans/inngest-to-vercel-workflow.md; подтверждённые решения пользователя от 2026-09-19"
 created: 2026-09-19
-updated: 2026-09-19
+updated: 2026-09-21
 ---
 
 # E-004. Миграция основного приложения с Inngest на Vercel Workflow
@@ -43,13 +43,13 @@ updated: 2026-09-19
 
 | # | Тикет | Тип | Зависит от | Статус |
 |---|---|---|---|---|
-| T-01 | [Vercel Workflow SDK: сборка, регион и безопасные границы шагов](T-01-workflow-runtime.md) | dev | — | in_progress |
-| T-02 | [Операции и попытки: атомарный запуск, блокировки, отмена и восстановление](T-02-workflow-operations.md) | dev | T-01 | todo |
-| T-03 | [Отправки DM и комментариев с ручным повтором и сверкой результата](T-03-workflow-message-delivery.md) | dev | T-01, T-02 | todo |
-| T-04 | [AI-черновик и автоответ: отмена, пауза и ручной повтор в переписке](T-04-workflow-drafts-auto-reply.md) | dev | T-02, T-03 | todo |
-| T-05 | [Публикации: генерация и импорт с checkpoint, отправка со сверкой](T-05-workflow-publications.md) | dev | T-02, T-03, T-04 | todo |
-| T-06 | [Push, фото и очистки: пять Workflow и два защищённых Cron](T-06-workflow-background-jobs.md) | dev | T-02, T-04, T-05 | todo |
-| T-07 | [Переключение основного приложения, удаление Inngest и актуальная документация](T-07-workflow-cutover-docs.md) | dev | T-01, T-02, T-03, T-04, T-05, T-06 | todo |
+| T-01 | [Vercel Workflow SDK: сборка, регион и безопасные границы шагов](T-01-workflow-runtime.md) | dev | — | done |
+| T-02 | [Операции и попытки: атомарный запуск, блокировки, отмена и восстановление](T-02-workflow-operations.md) | dev | T-01 | done |
+| T-03 | [Отправки DM и комментариев с ручным повтором и сверкой результата](T-03-workflow-message-delivery.md) | dev | T-01, T-02 | done |
+| T-04 | [AI-черновик и автоответ: отмена, пауза и ручной повтор в переписке](T-04-workflow-drafts-auto-reply.md) | dev | T-02, T-03 | done |
+| T-05 | [Публикации: генерация и импорт с checkpoint, отправка со сверкой](T-05-workflow-publications.md) | dev | T-02, T-03, T-04 | done |
+| T-06 | [Push, фото и очистки: пять Workflow и два защищённых Cron](T-06-workflow-background-jobs.md) | dev | T-02, T-04, T-05 | done |
+| T-07 | [Переключение основного приложения, удаление Inngest и актуальная документация](T-07-workflow-cutover-docs.md) | dev | T-01, T-02, T-03, T-04, T-05, T-06 | done |
 | T-08 | [Executive summary — ручные шаги](T-08-executive-summary.md) | manual | T-01–T-07 | todo |
 
 ## Критерий готовности эпика

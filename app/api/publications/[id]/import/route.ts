@@ -2,7 +2,8 @@ import { check, failure, json, memberContext, PublicationError, sameOrigin } fro
 import { validId } from "@/lib/publications/types";
 import { IMPORT_EXPIRY_MS } from "@/lib/publications/progress";
 import { publicationImportRequested } from "@/lib/publications/events";
-import { inngest } from "@/lib/inngest/client";
+import { dispatchWorkflow } from "@/lib/workflows/start";
+import { reconcileSubject } from "@/lib/workflows/recovery";
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -18,18 +19,23 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     if (draft.status === "ready") return json({ status: "ready" });
     const freshFiles = () => json({ status: "error", requiresFreshFiles: true,
       message: "Откройте ChatGPT и попросите повторно передать изображения в этот черновик со свежими ссылками." });
-    if (!draft.active_import_id || draft.status === "error") return freshFiles();
+    if (!draft.active_import_id) return freshFiles();
+    await reconcileSubject(workspace.id,'publication-import',draft.active_import_id);
     const { data: job, error: jobError } = await db.from("publication_imports").select("id,status,created_at")
       .eq("workspace_id", workspace.id).eq("draft_id", id).eq("id", draft.active_import_id).maybeSingle();
     check(jobError);
-    if (!job || job.status !== "pending") return freshFiles();
+    if (!job || !['pending','error'].includes(job.status)) return freshFiles();
     if (Date.now() - Date.parse(job.created_at) >= IMPORT_EXPIRY_MS) {
       const { error: finishError } = await db.rpc("finish_publication_import", { w: workspace.id, i: job.id, a: [], failed: true });
       check(finishError);
       return freshFiles();
     }
     try {
-      await inngest.send(publicationImportRequested.create({ workspaceId: workspace.id, importId: job.id }));
+      if(job.status==='error') {
+        const reset=await db.rpc('retry_workflow_import',{w:workspace.id,d:id,i:job.id});check(reset.error);
+        if(!reset.data)return freshFiles();
+      }
+      await dispatchWorkflow(publicationImportRequested.create({ workspaceId: workspace.id, importId: job.id }));
     } catch {
       throw new PublicationError(503, "Не удалось запустить импорт. Нажмите «Повторить импорт».");
     }

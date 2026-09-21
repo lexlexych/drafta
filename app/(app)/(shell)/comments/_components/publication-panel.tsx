@@ -114,10 +114,11 @@ export function PublicationPanel({ draftId, workspaceId }: { draftId: string; wo
     {draft && <div className={styles.form}>
       <p className={styles.notice} role={draft.status === "error" || importExpired ? "alert" : "status"}>{importExpired ? "Импорт не завершился вовремя. Нажмите «Повторить импорт», чтобы запросить свежие файлы." : statusLabel[draft.status]}{draft.edited_at && " · Ручное редактирование: ChatGPT больше не может перезаписать этот черновик."}</p>
       {!draft.edited_at && ["error", "importing"].includes(draft.status) && <div className={styles.actions}>
-        {draft.status === "error" && data?.gptUrl ? <a className={primary} href={data.gptUrl} target="_blank" rel="noopener noreferrer">Повторить через ChatGPT</a> : <button className={button} disabled={busy} onClick={() => void perform(async () => {
+        <button className={button} disabled={busy} onClick={() => void perform(async () => {
           const response = await api(`/api/publications/${draft.id}/import`, { method: "POST" });
           await refresh(); setMessage(response.message || "Импорт завершён.");
-        })}>Повторить импорт</button>}
+        })}>Повторить импорт</button>
+        {draft.status === 'error' && data?.gptUrl && <a className={button} href={data.gptUrl} target="_blank" rel="noopener noreferrer">Повторить через ChatGPT</a>}
       </div>}
       <fieldset disabled={frozen}>
         <legend>Настройки для ChatGPT</legend>

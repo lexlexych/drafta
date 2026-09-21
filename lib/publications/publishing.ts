@@ -49,11 +49,11 @@ export async function preparePublicationMedia(workspaceId: string, draftId: stri
   if (pdf) await store(await pdf.save(),"document");
   return media;
 }
-export async function runPublicationDelivery(workspaceId: string, deliveryId: string) {
+export async function runPublicationDelivery(workspaceId: string, deliveryId: string, beforeSend:()=>Promise<void> = async()=>{}) {
   const db = createAdminSupabaseClient();
   const row = await db.from("publication_deliveries").select("*").eq("workspace_id",workspaceId).eq("id",deliveryId).maybeSingle(); check(row.error);
   const job = row.data;
-  if (!job || !["pending","sending"].includes(job.status)) return;
+  if (!job || !["pending","sending","uncertain","failed"].includes(job.status)) return;
   async function update(patch: Record<string,unknown>) {
     const {error} = await db.from("publication_deliveries").update({...patch,updated_at:new Date().toISOString()}).eq("workspace_id",workspaceId).eq("id",deliveryId);check(error);
   }
@@ -69,13 +69,14 @@ export async function runPublicationDelivery(workspaceId: string, deliveryId: st
   try {
     if (job.remote_id) {
       outcome=await adapter.getPublishedPost({remoteId:job.remote_id,externalAccountId:c.external_id});
-      if(outcome.status==="failed" && job.status==="pending") {
+      if(outcome.status==="failed" && job.status==="pending" && !job.check_only) {
         await update({status:"sending"});
+        await beforeSend();
         outcome=await adapter.retryPublishPost({remoteId:job.remote_id,externalAccountId:c.external_id});
       }
     } else {
       // Provider idempotency lasts five minutes. Never blindly create another public post after that window.
-      if(job.first_sent_at && Date.now()-Date.parse(job.first_sent_at)>240000) {
+      if(job.first_sent_at || job.check_only) {
         const found=await adapter.findPublishedPost?.({requestId:job.id,externalAccountId:c.external_id,since:job.created_at});
         if(found){await update({remote_id:found.remoteId,status:found.status==="pending"?"sending":found.status,published_url:found.url??null,error:null});return;}
         await update({status:"uncertain",error:"Не удалось подтвердить результат отправки. Проверьте профиль в соцсети; повторная отправка остановлена, чтобы избежать дубля."});return;
@@ -87,6 +88,7 @@ export async function runPublicationDelivery(workspaceId: string, deliveryId: st
       const connection=await db.from("channel_connections").select("status").eq("workspace_id",workspaceId).eq("id",job.channel_id).maybeSingle();check(connection.error);
       if(!access.data||connection.data?.status!=="active"){await update({status:"failed",error:"Подключение или доступ автора изменились. Проверьте настройки."});return;}
       await update({status:"sending",first_sent_at:job.first_sent_at ?? new Date().toISOString()});
+      await beforeSend();
       outcome=await adapter.publishPost({requestId:job.id,externalAccountId:c.external_id,platform:c.platform as "instagram"|"linkedin",title:snapshot.title,body:snapshot.body,media:media.map(({type,url})=>({type,url}))});
     }
   } catch(error) {

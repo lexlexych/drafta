@@ -18,7 +18,7 @@ import {
  * `private.is_workspace_member`, что у остального. Явные `.eq("workspace_id")`
  * — defense-in-depth, как во всём `lib/db`.
  *
- * Прогон автоответчика (`lib/inngest/functions/auto-reply-pipeline.ts`) сюда не
+ * Прогон автоответчика (`lib/jobs/auto-reply-pipeline.ts`) сюда не
  * ходит: у него свой admin-клиент и свои запросы, потому что он работает без
  * пользовательской сессии.
  */

@@ -6,13 +6,28 @@ type: manual
 status: todo
 depends_on: [T-01, T-02, T-03, T-04, T-05, T-06, T-07]
 created: 2026-09-19
-updated: 2026-09-19
+updated: 2026-09-21
 ---
 
 # T-08. Executive summary — ручные шаги
 
 > Этот тикет выполняет **человек** после завершения всех dev-тикетов эпика.
 > Агенты сюда только дописывают шаги. Формат шага: зачем → что сделать → как проверить.
+
+## Результаты локальных проверок — 2026-09-21
+
+Dev-тикеты T-01–T-07 реализованы. Production не переключён.
+
+- `pnpm exec vitest run --maxWorkers=2`: **111 файлов / 871 тест прошли**, 6 файлов / 45 DB-backed тестов пропущены из-за отсутствия работающей Supabase.
+- Дополнительно `pnpm exec vitest run lib/workflows/background.test.ts --maxWorkers=1 --no-file-parallelism`: **5 тестов прошли**. Файл добавлен после начала общего прогона.
+- Общий прогон включает все **32 smoke-теста** основного интерфейса; отдельный профильный прогон ранее: 15 файлов / 114 тестов, успешно.
+- `pnpm exec tsc --noEmit`, `pnpm lint` и дополнительный lint нового background-теста: успешно.
+- `pnpm build`: успешно; компилятор обнаружил **13 Workflow и 26 steps**, служебные маршруты и оба Cron присутствуют. TypeScript-проверка production build также успешна.
+- Настоящая новая SQL-миграция исполнена в PGlite: 9 тестов операций, RLS, fencing, lease, лимитов, повторов и импорта прошли. Это минимальная схема-фикстура, не полный Supabase/PostgREST/Storage.
+- Docker Desktop Linux engine недоступен (отсутствует named pipe). `pnpm test:rls` и `pnpm exec supabase test db` на полной изолированной Supabase **не выполнены**; применить миграции и выполнить их в шаге 1. Облачный target для тестов не использовался.
+- Живой SDK start/status/cancel, реальные провайдеры, история/retention/регион Workflow и поведение двух браузеров требуют staging acceptance ниже; автоматические тесты SDK используют моки.
+
+Точные пути, настройки и порядок переключения/rollback: [инструкция Workflow](../../integrations/vercel-workflow.md). Миграция: `supabase/migrations/20260919100000_workflow_operations.sql`. Cron: `/api/cron/ai-request-log` и `/api/cron/publication-assets`; секрет `CRON_SECRET`. Облачные шаги ниже не отмечены выполненными.
 
 ## Предусловия
 
@@ -78,4 +93,3 @@ updated: 2026-09-19
 - [ ] Шаг 5 — Inngest отключён только в основном проекте
 - [ ] Шаг 6 — описание данных и история Workflow проверены
 - [ ] Финальная проверка пройдена
-

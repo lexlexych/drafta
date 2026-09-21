@@ -6,7 +6,7 @@ import webpush from "web-push";
  * Обёртка над библиотекой `web-push` (docs/architecture/11-realtime-pwa.md#web-push).
  * VAPID-ключи — серверные секреты (`VAPID_PRIVATE_KEY` только на сервере,
  * vibecoding rule 5); публичный ключ дублируется в `NEXT_PUBLIC_VAPID_PUBLIC_KEY`
- * для браузера. Отправка идёт только из Inngest-функции `send-push`
+ * для браузера. Отправка идёт только из Workflow-функции `send-push`
  * (rule 8), не из запросов.
  */
 
@@ -26,7 +26,7 @@ export type WebPushPayload = {
 export type WebPushSendResult =
   | { status: "sent" }
   | { status: "expired" }
-  | { status: "error"; message: string };
+  | { status: "error"; message: string; retryable?: boolean };
 
 let configured = false;
 
@@ -79,7 +79,7 @@ export function isWebPushConfigured(): boolean {
 /**
  * Отправляет один push. `expired` (404/410) — подписка мертва, её нужно удалить
  * (см. `pruneSubscription`). Прочие ошибки возвращаются как `error`, чтобы
- * вызывающая Inngest-функция решила про ретрай.
+ * вызывающая Workflow-функция решила про ретрай.
  */
 export async function sendWebPush(
   target: WebPushTarget,
@@ -103,6 +103,7 @@ export async function sendWebPush(
     }
     return {
       status: "error",
+      retryable: statusCode === undefined || statusCode === 429 || statusCode >= 500,
       message: error instanceof Error ? error.message : "web-push failed",
     };
   }

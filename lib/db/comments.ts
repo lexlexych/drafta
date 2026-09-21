@@ -34,7 +34,7 @@ import { formatListTime, formatMessageTime } from "@/lib/mock/time";
  *
  * `comment_drafts` is deliberately absent: the AI-draft surface was removed from
  * the screen while that flow is redesigned, and its pipeline lives entirely in
- * `lib/inngest/functions/comment-draft-pipeline.ts`.
+ * `lib/jobs/comment-draft-pipeline.ts`.
  *
  * Every function takes an already-constructed `SupabaseClient` + `workspaceId`;
  * RLS (`posts_member_access` / `comments_member_access` /
@@ -87,6 +87,7 @@ const DELIVERY_LABELS: Record<string, string | null> = {
   sent: "Отправлено",
   delivered: "Доставлено",
   failed: "Не доставлено",
+  uncertain: "Отправка не подтверждена",
 };
 
 type PostRow = {
@@ -842,7 +843,7 @@ export async function markPostRead(
 
 /**
  * Ручной ответ на комментарий: строка `comments` в статусе `pending`, готовая к
- * отправке через Inngest. Текст приходит из поля под комментарием — сам набран
+ * отправке через Workflow. Текст приходит из поля под комментарием — сам набран
  * или подставлен шаблоном.
  *
  * Вся проверка внутри RPC (`accept_manual_comment_reply`): комментарий должен
