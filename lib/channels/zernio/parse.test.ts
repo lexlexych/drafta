@@ -172,6 +172,74 @@ describe("parseZernioWebhook", () => {
     expect(events[0]).toEqual(expected);
   });
 
+  it("maps a Facebook Messenger message.received fixture to a normalized event, field for field", () => {
+    const rawBody = readFixture("facebook-dm.json");
+
+    const events = parseZernioWebhook({ rawBody, headers: {} }).events;
+
+    expect(events).toHaveLength(1);
+    const expected: NormalizedEvent = {
+      type: "message.received",
+      providerEventId: "wh_evt_01HZXFACEBOOKDM001",
+      provider: "zernio",
+      platform: "facebook",
+      externalAccountId: "acct_fb_55120",
+      conversation: { externalId: "zc_conv_fb_40117" },
+      message: {
+        externalId: "zm_msg_fb_90231",
+        // Messenger's `mid` — what an echo of our own reply is matched on.
+        platformExternalId: "m_Aa9xQk2LrT0fbTestMid",
+        text: "Guten Tag! Haben Sie am Samstag geöffnet?",
+        attachments: [],
+        sender: {
+          // Page-scoped ID: the same person has a different one per Page, and
+          // Messenger exposes no public handle to match on.
+          externalId: "fb_psid_7712093344",
+          displayName: "Anna Weber",
+          handles: ["t_122104455667788990"],
+        },
+      },
+      rawMetadata: JSON.parse(rawBody),
+    };
+
+    expect(events[0]).toEqual(expected);
+  });
+
+  it("maps a Facebook Page comment.received fixture to a normalized comment event", () => {
+    const rawBody = readFixture("facebook-comment.json");
+
+    const events = parseZernioWebhook({ rawBody, headers: {} }).events;
+
+    expect(events).toHaveLength(1);
+    const expected: NormalizedEvent = {
+      type: "comment.received",
+      providerEventId: "wh_evt_01HZXFACEBOOKCMT01",
+      provider: "zernio",
+      platform: "facebook",
+      externalAccountId: "acct_fb_55120",
+      post: {
+        // Graph API post ids are `<pageId>_<postId>`.
+        externalId: "102740000000002_3003",
+        text: "Wir sind umgezogen! Tonwerk jetzt in der Weserstraße 12.",
+        permalink: "https://www.facebook.com/102740000000002/posts/3003",
+        metadata: {
+          platformPostId: "102740000000002_3003",
+          postId: null,
+          platform: "facebook",
+        },
+      },
+      comment: {
+        externalId: "102740000000002_3003_551208",
+        text: "Ist der Eingang barrierefrei?",
+        attachments: [],
+        author: { externalId: "fb_user_9901244", displayName: "Jonas Becker" },
+      },
+      rawMetadata: JSON.parse(rawBody),
+    };
+
+    expect(events[0]).toEqual(expected);
+  });
+
   it("maps an unintentional account.disconnected (expired token) to a disconnect event", () => {
     const rawBody = JSON.stringify({
       id: "wh_evt_disconnect_1",

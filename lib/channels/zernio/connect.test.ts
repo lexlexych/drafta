@@ -56,6 +56,38 @@ describe("parseZernioConnectCallback", () => {
     expect(connected.externalAccountId).toBe(event.externalAccountId);
   });
 
+  /**
+   * Same guard for Facebook: the account id comes back from Zernio's hosted
+   * Page picker, and has to be the one its Messenger and comment webhooks
+   * carry — not the Page's own Graph id.
+   */
+  it("returns the same account id the Facebook webhooks report", () => {
+    const events = ["facebook-dm.json", "facebook-comment.json"].flatMap(
+      (name) =>
+        parseZernioWebhook({ rawBody: readFixture(name), headers: {} }).events,
+    );
+
+    const connected = parseZernioConnectCallback({
+      connected: "facebook",
+      profileId: "prof_1",
+      accountId: "acct_fb_55120",
+      username: "tonwerk.berlin",
+    });
+
+    expect(connected.platform).toBe("facebook");
+    expect(events).toHaveLength(2);
+    for (const event of events) {
+      expect(event.platform).toBe("facebook");
+      expect(event.externalAccountId).toBe(connected.externalAccountId);
+    }
+  });
+
+  it("treats a declined Facebook consent as a failed connect", () => {
+    expect(() =>
+      parseZernioConnectCallback({ error: "oauth_denied", platform: "facebook" }),
+    ).toThrow(ZernioConnectCallbackError);
+  });
+
   it("leaves the account handle undefined when the provider omits it", () => {
     const result = parseZernioConnectCallback({
       connected: "instagram",

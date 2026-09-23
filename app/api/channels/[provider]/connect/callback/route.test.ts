@@ -148,6 +148,48 @@ describe("GET /api/channels/[provider]/connect/callback", () => {
     expect(location.searchParams.get("connect")).toBe("connected");
   });
 
+  it("connects the Facebook Page picked on Zernio's hosted selection screen", async () => {
+    createChannelConnectionMock.mockResolvedValue({ ok: true, data: {} });
+
+    const location = await callCallback({
+      search: {
+        [CONNECT_STATE_NONCE_PARAM]: NONCE,
+        connected: "facebook",
+        profileId: "prof_1",
+        accountId: "acct_fb_55120",
+        username: "tonwerk.berlin",
+      },
+      cookieToken: mintState({ platform: "facebook" }),
+    });
+
+    expect(createChannelConnectionMock).toHaveBeenCalledWith(
+      expect.anything(),
+      "ws_1",
+      {
+        provider: "zernio",
+        platform: "facebook",
+        externalId: "acct_fb_55120",
+        name: "tonwerk.berlin",
+      },
+    );
+    expect(location.searchParams.get("connect")).toBe("connected");
+  });
+
+  it("reports a failed connect when the user declines Facebook's consent", async () => {
+    const location = await callCallback({
+      search: {
+        [CONNECT_STATE_NONCE_PARAM]: NONCE,
+        error: "oauth_denied",
+        platform: "facebook",
+      },
+      cookieToken: mintState({ platform: "facebook" }),
+    });
+
+    expect(createChannelConnectionMock).not.toHaveBeenCalled();
+    expect(location.searchParams.get("connect")).toBe("error");
+    expect(location.searchParams.get("reason")).toBe("callback");
+  });
+
   it("redirects with reason=duplicate when another account of the platform is connected", async () => {
     createChannelConnectionMock.mockResolvedValue({
       ok: false,

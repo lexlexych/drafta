@@ -19,7 +19,7 @@ related:
   - "[[14-vibecoding-rules]]"
   - "[[17-risks]]"
 created: 2026-07-19
-updated: 2026-09-03
+updated: 2026-09-23
 ---
 
 # 5. Слой абстракции каналов
@@ -58,8 +58,8 @@ callback), а переименовать канал можно в любой м�
 своего канала. «Подключить» — это OAuth-подключение (см.
 [Подключение аккаунта](#подключение-аккаунта-oauth)): пользователь авторизует аккаунт
 соцсети, не открывая дашборд провайдера. Платформы, для которых флоу ещё не готов,
-показывают заглушку «в разработке» (сейчас работают Instagram, WhatsApp и LinkedIn; у
-Email пока нет и адаптера).
+показывают заглушку «в разработке» (сейчас работают Instagram, WhatsApp, Facebook и
+LinkedIn; у Email пока нет и адаптера).
 
 ### Отключить ≠ удалить
 
@@ -185,6 +185,42 @@ WhatsApp Business Account (WABA) и номер, а Zernio завершает п�
 Намеренно не поддержано: WABA **с несколькими номерами** (Zernio вернёт callback с
 `step=select_phone_number` вместо `accountId`, и подключение завершится ошибкой) и
 **шаблоны сообщений** для отправки вне 24-часового окна.
+
+### Facebook: страница, а не профиль
+
+Facebook идёт по тому же редиректу ([docs.zernio.com/guides/connecting-accounts](https://docs.zernio.com/guides/connecting-accounts),
+[docs.zernio.com/platforms/facebook](https://docs.zernio.com/platforms/facebook)):
+`GET /v1/connect/facebook` → Facebook Login, где пользователь даёт доступ к своим
+страницам → **страница выбора Zernio** (standard mode, hosted selection) → наш callback
+с `connected=facebook`, `accountId`, `username`, `profileId`. Отказ на экране согласия
+Meta приходит как `?error=oauth_denied&platform=facebook` — подключение завершается
+ошибкой `reason=callback`.
+
+Свой экран выбора (headless-режим: `headless=true` → callback с `tempToken`,
+`userProfile`, `connect_token`, `step=select_page` → `…/connect/facebook/select-page` с
+заголовком `X-Connect-Token`) не делаем — как и для LinkedIn.
+
+Что из этого протекает в онбординг перед авторизацией:
+
+- подключается **страница** Facebook; личный профиль через API недоступен — ни для
+  сообщений, ни для публикаций;
+- пользователь должен быть **администратором** страницы, иначе её не будет в списке;
+- Zernio одним OAuth запрашивает все нужные scopes (`pages_show_list`,
+  `pages_messaging`, `pages_manage_engagement`, `pages_read_engagement`,
+  `pages_manage_posts`), но экран Meta позволяет их снять — тогда сообщения Messenger
+  и комментарии не придут; онбординг просит оставить разрешения включёнными;
+- в workspace, как и везде, **одна** страница Facebook.
+
+После подключения работают **Messenger** (`message.received`/`message.sent`/статусы,
+окно ответа 24 часа) и **комментарии к постам страницы** (`comment.received`, ответ в
+треде, личный ответ автору в течение 7 дней). `message.deleted` у Messenger не бывает.
+ID участника Messenger — page-scoped (PSID): у одного человека он свой для каждой
+страницы, публичного хендла нет.
+
+Намеренно не поддержано: **публикация постов** в Facebook (мастер публикаций и
+`publication_publishing` ограничены Instagram и LinkedIn), **список игнорируемых
+отправителей** для Facebook, **message tags** для отправки вне 24-часового окна и
+подключение **Meta Ads** (`/v1/connect/facebook/ads`).
 
 ### LinkedIn: страница компании или личный профиль
 

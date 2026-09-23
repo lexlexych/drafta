@@ -2,7 +2,7 @@
 
 /**
  * Client-side behavior of the Channels panel: one block per platform, the
- * Instagram and WhatsApp onboarding → OAuth flow, the "в разработке" stub for
+ * Instagram, WhatsApp, Facebook and LinkedIn onboarding → OAuth flow, the "в разработке" stub for
  * the platforms whose flow is not built yet, inline rename, disable/enable
  * with confirmation, and the post-OAuth result banner. Server actions (`./actions.ts`) are mocked — the actual DB-backed
  * business logic they delegate to is covered by
@@ -210,11 +210,42 @@ describe("ChannelsPanel", () => {
   it("shows a work-in-progress stub for platforms without a connect flow", () => {
     render(<ChannelsPanel channels={[]} />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Подключить Facebook" }));
+    fireEvent.click(screen.getByRole("button", { name: "Подключить Telegram" }));
 
-    expect(screen.getByText(/«Facebook» пока в разработке/)).toBeDefined();
+    expect(screen.getByText(/«Telegram» пока в разработке/)).toBeDefined();
     expect(startChannelConnectionAction).not.toHaveBeenCalled();
     expect(assignMock).not.toHaveBeenCalled();
+  });
+
+  it("warns before the Facebook authorization that a Page is connected, not a profile", async () => {
+    startChannelConnectionAction.mockResolvedValue({
+      ok: true,
+      url: "https://zernio.com/connect/facebook?token=abc",
+    });
+
+    render(<ChannelsPanel channels={[]} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Подключить Facebook" }));
+
+    expect(screen.getByText(/Перед подключением Facebook/)).toBeDefined();
+    // A personal profile can't be connected at all, and Meta's consent screen
+    // lets the user switch off the Messenger/comment permissions — the two
+    // ways a Facebook connection silently comes out useless.
+    expect(screen.getByText(/не личный профиль/)).toBeDefined();
+    expect(screen.getByText(/разрешения включёнными/)).toBeDefined();
+
+    fireEvent.click(screen.getByRole("button", { name: "Войти через Facebook" }));
+
+    await waitFor(() =>
+      expect(startChannelConnectionAction).toHaveBeenCalledWith({
+        platform: "facebook",
+      }),
+    );
+    await waitFor(() =>
+      expect(assignMock).toHaveBeenCalledWith(
+        "https://zernio.com/connect/facebook?token=abc",
+      ),
+    );
   });
 
   it("shows the WhatsApp prerequisites before its authorization", () => {

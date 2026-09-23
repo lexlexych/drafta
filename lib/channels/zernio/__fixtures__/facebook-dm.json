@@ -1,0 +1,33 @@
+{
+  "id": "wh_evt_01HZXFACEBOOKDM001",
+  "event": "message.received",
+  "timestamp": "2026-09-23T10:41:08.204Z",
+  "account": {
+    "id": "acct_fb_55120",
+    "accountId": "acct_fb_55120",
+    "platform": "facebook",
+    "username": "tonwerk.berlin"
+  },
+  "conversation": {
+    "id": "zc_conv_fb_40117",
+    "platformConversationId": "t_122104455667788990",
+    "participantId": "fb_psid_7712093344",
+    "participantName": "Anna Weber",
+    "status": "active"
+  },
+  "message": {
+    "id": "zm_msg_fb_90231",
+    "conversationId": "zc_conv_fb_40117",
+    "platform": "facebook",
+    "platformMessageId": "m_Aa9xQk2LrT0fbTestMid",
+    "direction": "incoming",
+    "text": "Guten Tag! Haben Sie am Samstag geöffnet?",
+    "attachments": [],
+    "sender": {
+      "id": "fb_psid_7712093344",
+      "name": "Anna Weber"
+    },
+    "sentAt": "2026-09-23T10:41:07.000Z",
+    "isRead": false
+  }
+}

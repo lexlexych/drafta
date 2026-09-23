@@ -1,0 +1,32 @@
+{
+  "id": "wh_evt_01HZXFACEBOOKCMT01",
+  "event": "comment.received",
+  "timestamp": "2026-09-23T10:52:31.771Z",
+  "comment": {
+    "id": "102740000000002_3003_551208",
+    "postId": null,
+    "platformPostId": "102740000000002_3003",
+    "platform": "facebook",
+    "text": "Ist der Eingang barrierefrei?",
+    "author": {
+      "id": "fb_user_9901244",
+      "name": "Jonas Becker",
+      "picture": null
+    },
+    "createdAt": "2026-09-23T10:52:30.000Z",
+    "isReply": false,
+    "parentCommentId": null
+  },
+  "post": {
+    "id": null,
+    "platformPostId": "102740000000002_3003",
+    "content": "Wir sind umgezogen! Tonwerk jetzt in der Weserstraße 12.",
+    "permalink": "https://www.facebook.com/102740000000002/posts/3003"
+  },
+  "account": {
+    "id": "acct_fb_55120",
+    "accountId": "acct_fb_55120",
+    "platform": "facebook",
+    "username": "tonwerk.berlin"
+  }
+}
