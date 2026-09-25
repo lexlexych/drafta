@@ -6,6 +6,7 @@ import { createAdminSupabaseClient } from "@/lib/db/admin";
 
 // Registers the provider adapter in this Workflow module graph.
 import "@/lib/channels/zernio";
+import "@/lib/channels/telegram";
 
 export type ContactAvatarPipelineInput = {
   workspaceId: string;

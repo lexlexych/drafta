@@ -14,7 +14,7 @@
 import type { ChannelCapabilities } from "./capabilities";
 
 /** Providers that implement the channel adapter interface. */
-export type ChannelProvider = "zernio" | "postmark" | "meta";
+export type ChannelProvider = "zernio" | "telegram" | "postmark" | "meta";
 
 /** Social/messaging platforms normalized events and channel_connections reference. */
 export type ChannelPlatform =

@@ -1,0 +1,10 @@
+{
+  "update_id": 918273647,
+  "message": {
+    "message_id": 7,
+    "from": { "id": 555003, "is_bot": false, "first_name": "Peter" },
+    "chat": { "id": -1001234567890, "title": "Stammtisch", "type": "supergroup" },
+    "date": 1758614520,
+    "text": "@drafta_shop_bot hallo"
+  }
+}

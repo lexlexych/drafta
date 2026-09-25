@@ -9,6 +9,7 @@ import { createAdminSupabaseClient } from "@/lib/db/admin";
 // `resolveChannelAdapter("zernio")` works in the Workflow route's module
 // graph, same as the webhook route does before resolving.
 import "@/lib/channels/zernio";
+import "@/lib/channels/telegram";
 
 export type SendMessagePipelineInput = {
   workspaceId: string;

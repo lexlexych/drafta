@@ -78,7 +78,7 @@ pnpm dev
 | `VAPID_PRIVATE_KEY` | Web Push — **только сервер** |
 | `VAPID_SUBJECT` | контакт VAPID (`mailto:`/URL); по умолчанию `mailto:support@drafta.app` |
 | `POSTMARK_TOKEN` | API-токен — для будущих `notify-existing-user` и email-канала. **SMTP-креды живут в дашборде Supabase, не в env приложения** |
-| `CREDENTIALS_ENCRYPTION_KEY` | шифрование токенов каналов — на будущее для Meta ([`channel_connections`](06-data-model.md#channel_connections)) |
+| `CREDENTIALS_ENCRYPTION_KEY` | шифрование токенов прямых каналов (токены Telegram-ботов в `channel_connection_secrets`, AES-256-GCM) — 32 байта в base64 (`openssl rand -base64 32`). **Только сервер.** Смена ключа делает сохранённые токены нечитаемыми — ботов придётся подключить заново ([§5 Telegram](05-channels.md#telegram-напрямую-bot-api)) |
 
 > [!note] LLM-провайдер выбирается окружением
 > В `.env` заполняется ровно один вариант: либо `MISTRAL_API_KEY` (Mistral),

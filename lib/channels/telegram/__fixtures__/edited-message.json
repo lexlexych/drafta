@@ -1,0 +1,11 @@
+{
+  "update_id": 918273648,
+  "edited_message": {
+    "message_id": 42,
+    "from": { "id": 555001, "is_bot": false, "first_name": "Anna" },
+    "chat": { "id": 555001, "type": "private" },
+    "date": 1758614400,
+    "edit_date": 1758614500,
+    "text": "Hallo! Habt ihr morgen offen?"
+  }
+}

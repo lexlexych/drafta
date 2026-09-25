@@ -9,6 +9,17 @@ import { cookies, headers } from "next/headers";
 // on (app/api/webhooks/[provider]/route.ts).
 import "@/lib/channels/zernio";
 import {
+  inspectTelegramBotToken,
+  isTelegramBotTokenFormat,
+  normalizeTelegramBotToken,
+  registerTelegramWebhook,
+} from "@/lib/channels/telegram";
+import { buildChannelConnectionName } from "@/lib/channels/labels";
+import {
+  isProviderAccountConnectedAnywhere,
+  saveChannelConnectionSecrets,
+} from "@/lib/db/channel-connection-secrets";
+import {
   resolveChannelAdapter,
   UnknownChannelProviderError,
 } from "@/lib/channels/registry";
@@ -33,6 +44,7 @@ import {
   getProviderProfileId,
 } from "@/lib/db/channel-provider-profile";
 import {
+  createChannelConnection,
   deleteChannelConnection,
   getChannelConnection,
   hasChannelConnectionForPlatform,
@@ -72,6 +84,9 @@ const SETTINGS_PATH = "/settings";
  * lands, this becomes a platform→provider lookup.
  */
 const CONNECT_PROVIDER = "zernio";
+
+/** Telegram is connected directly through the Bot API, not through Zernio. */
+const TELEGRAM_PROVIDER = "telegram";
 
 export type StartChannelConnectionResult =
   | { ok: true; url: string }
@@ -119,6 +134,11 @@ export async function startChannelConnectionAction(input: {
 
   if (!SUPPORTED_CHANNEL_PLATFORMS.includes(platform)) {
     return { ok: false, error: "Выберите поддерживаемую платформу." };
+  }
+
+  if (platform === "telegram") {
+    // Connected by bot token — see connectTelegramBotAction.
+    return { ok: false, error: "Telegram подключается по токену бота." };
   }
 
   let adapter;
@@ -198,6 +218,129 @@ export async function startChannelConnectionAction(input: {
     console.error("[settings/channels] failed to start channel connection", error);
     return { ok: false, error: "Не удалось начать подключение канала." };
   }
+}
+
+export type ConnectTelegramBotResult =
+  | { ok: true; data: ChannelConnectionRow }
+  | { ok: false; error: string };
+
+const TELEGRAM_CONNECT_ERRORS = {
+  "invalid-format":
+    "Это не похоже на токен бота. Скопируйте его из сообщения @BotFather целиком — вида 123456789:AA…",
+  "invalid-token": "Telegram не принял токен. Проверьте, что он скопирован полностью и не был отозван.",
+  "not-a-bot": "Этот токен не принадлежит боту.",
+  network: "Не удалось связаться с Telegram. Попробуйте ещё раз.",
+} as const;
+
+/**
+ * Connects a Telegram bot directly through the Bot API — no aggregator, no
+ * OAuth redirect (docs/architecture/05-channels.md#telegram-напрямую-bot-api).
+ * The user pastes the token from @BotFather; drafta:
+ *
+ * 1. validates it with `getMe` (this also yields the bot id and @username —
+ *    the connection is named after the bot, the user never types a name);
+ * 2. refuses a bot already connected anywhere — a bot has one webhook;
+ * 3. creates the `channel_connections` row (RLS client, as the member);
+ * 4. stores the token and webhook secret encrypted in the service-role-only
+ *    `channel_connection_secrets`;
+ * 5. only then registers the webhook, so no update arrives that drafta could
+ *    not authenticate.
+ *
+ * A failure after step 3 deletes the row again (its secrets cascade). The
+ * token never leaves the server and is never logged.
+ */
+export async function connectTelegramBotAction(input: {
+  token: string;
+}): Promise<ConnectTelegramBotResult> {
+  const workspace = await requireCurrentWorkspaceId();
+
+  if (!workspace.ok) {
+    return workspace;
+  }
+
+  const token = normalizeTelegramBotToken(
+    typeof input.token === "string" ? input.token : "",
+  );
+  if (!isTelegramBotTokenFormat(token)) {
+    return { ok: false, error: TELEGRAM_CONNECT_ERRORS["invalid-format"] };
+  }
+
+  const origin = await resolveRequestOrigin();
+  if (!origin) {
+    return { ok: false, error: "Не удалось определить адрес приложения." };
+  }
+
+  const supabase = await createServerSupabaseClient();
+  const admin = createAdminSupabaseClient();
+
+  try {
+    if (
+      await hasChannelConnectionForPlatform(supabase, workspace.workspaceId, "telegram")
+    ) {
+      return {
+        ok: false,
+        error: "Канал этой платформы уже подключён к рабочему пространству.",
+      };
+    }
+  } catch (error) {
+    console.error("[settings/channels] failed to check telegram connection", error);
+    return { ok: false, error: "Не удалось подключить бота." };
+  }
+
+  const bot = await inspectTelegramBotToken(token);
+  if (!bot.ok) {
+    return { ok: false, error: TELEGRAM_CONNECT_ERRORS[bot.reason] };
+  }
+
+  try {
+    if (await isProviderAccountConnectedAnywhere(admin, TELEGRAM_PROVIDER, bot.botId)) {
+      return {
+        ok: false,
+        error:
+          "Этот бот уже подключён к другому рабочему пространству. У бота может быть только одно подключение — создайте отдельного бота в @BotFather.",
+      };
+    }
+  } catch (error) {
+    console.error("[settings/channels] failed to check telegram bot uniqueness", error);
+    return { ok: false, error: "Не удалось подключить бота." };
+  }
+
+  const created = await createChannelConnection(supabase, workspace.workspaceId, {
+    provider: TELEGRAM_PROVIDER,
+    platform: "telegram",
+    externalId: bot.botId,
+    name: buildChannelConnectionName("telegram", `@${bot.username}`),
+  });
+
+  if (!created.ok) {
+    return created;
+  }
+
+  try {
+    await saveChannelConnectionSecrets(admin, {
+      workspaceId: workspace.workspaceId,
+      channelConnectionId: created.data.id,
+      credentials: { botToken: token, webhookSecret: bot.webhookSecret },
+    });
+    await registerTelegramWebhook(token, {
+      url: `${origin}/api/webhooks/${TELEGRAM_PROVIDER}`,
+      webhookSecret: bot.webhookSecret,
+    });
+  } catch (error) {
+    console.error(
+      "[settings/channels] failed to finish connecting the telegram bot",
+      error instanceof Error ? error.message : "unknown error",
+    );
+    await deleteChannelConnection(supabase, workspace.workspaceId, created.data.id);
+    return {
+      ok: false,
+      error: "Не удалось настроить бота в Telegram. Попробуйте ещё раз.",
+    };
+  }
+
+  revalidatePath(SETTINGS_PATH);
+
+  return { ok: true, data: created.data };
 }
 
 /** Absolute origin of the current request, for building the OAuth redirect URI. */

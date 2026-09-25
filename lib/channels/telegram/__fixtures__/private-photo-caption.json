@@ -1,0 +1,15 @@
+{
+  "update_id": 918273646,
+  "message": {
+    "message_id": 43,
+    "from": { "id": 555002, "is_bot": false, "username": "kunde42" },
+    "chat": { "id": 555002, "username": "kunde42", "type": "private" },
+    "date": 1758614460,
+    "photo": [
+      { "file_id": "AgACAgIAAxkBAAIBsmall", "file_unique_id": "AQADsmall", "file_size": 1200, "width": 90, "height": 90 },
+      { "file_id": "AgACAgIAAxkBAAIBlarge", "file_unique_id": "AQADlarge", "file_size": 64000, "width": 1280, "height": 1280 }
+    ],
+    "document": { "file_id": "BQACAgIAAxkBAAIBdoc", "file_unique_id": "AgADdoc", "file_name": "rechnung.pdf", "mime_type": "application/pdf" },
+    "caption": "Das ist die Rechnung"
+  }
+}

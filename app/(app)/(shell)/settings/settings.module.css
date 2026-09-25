@@ -204,7 +204,8 @@
   font-size: 13.5px;
 }
 
-.channelOnboarding ul {
+.channelOnboarding ul,
+.channelOnboarding ol {
   display: flex;
   flex-direction: column;
   gap: 6px;

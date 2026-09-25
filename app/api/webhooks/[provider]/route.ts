@@ -4,9 +4,12 @@ import { NextResponse, type NextRequest } from "next/server";
 // provider name (lib/channels/registry.ts) — see
 // lib/channels/zernio/index.ts and docs/epics/epic_02/T-02-zernio-adapter.md
 // ("Ничего в этом эпике пока не импортирует index.ts — это сделает
-// вебхук-роут в T-03"). Postmark/Meta aren't registered yet — resolving
+// вебхук-роут в T-03"). The direct Telegram Bot API adapter registers as
+// "telegram" (lib/channels/telegram/index.ts) — its webhook URL is
+// /api/webhooks/telegram. Postmark/Meta aren't registered yet — resolving
 // those provider names 404s below, same as any other unrecognized value.
 import "@/lib/channels/zernio";
+import "@/lib/channels/telegram";
 import { resolveChannelAdapter, UnknownChannelProviderError } from "@/lib/channels/registry";
 import { createAdminSupabaseClient } from "@/lib/db/admin";
 import { journalUnparsedEnvelope } from "@/lib/webhooks/journal-unparsed";

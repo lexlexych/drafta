@@ -20,7 +20,7 @@ import type { ChannelPlatform } from "@/lib/channels/types";
  */
 export type Platform = ChannelPlatform;
 
-export type ChannelProvider = "zernio" | "postmark" | "meta";
+export type ChannelProvider = "zernio" | "telegram" | "postmark" | "meta";
 
 export type ChannelConnectionStatus = "connected" | "disconnected";
 

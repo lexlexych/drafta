@@ -12,6 +12,9 @@
  * (docs/architecture/05-channels.md). Строку подключения создаёт callback-роут
  * после авторизации — **имя канала подставляется из имени аккаунта**,
  * пользователь его не вводит и при необходимости переименовывает позже.
+ * Telegram подключается напрямую через Bot API: онбординг объясняет, как
+ * получить токен у @BotFather, и принимает его в поле формы
+ * (`connectTelegramBotAction`) — без редиректа.
  * Остальные платформы пока показывают заглушку «в разработке».
  *
  * Подключённый блок — строка канала с переименованием,
@@ -42,6 +45,7 @@ import uiStyles from "../../_components/ui.module.css";
 import {
   deleteChannelConnectionAction,
   renameChannelConnectionAction,
+  connectTelegramBotAction,
   setChannelConnectionStatusAction,
   startChannelConnectionAction,
 } from "./actions";
@@ -82,6 +86,12 @@ type ChannelBlock = {
    * готов, блок показывает заглушку «в разработке».
    */
   connect: ChannelPlatform | null;
+  /**
+   * Как подключается платформа: OAuth-редирект провайдера (по умолчанию) или
+   * токен бота, который пользователь вставляет сам (Telegram — напрямую через
+   * Bot API, docs/architecture/05-channels.md#telegram-напрямую-bot-api).
+   */
+  connectMode?: "oauth" | "bot-token";
 };
 
 /** Порядок блоков на странице. */
@@ -96,7 +106,8 @@ const CHANNEL_BLOCKS: readonly ChannelBlock[] = [
     key: "telegram",
     label: CHANNEL_PLATFORM_LABELS.telegram,
     Icon: TelegramIcon,
-    connect: null,
+    connect: "telegram",
+    connectMode: "bot-token",
   },
   {
     key: "whatsapp",
@@ -130,7 +141,13 @@ const CONNECT_PREREQUISITES: Readonly<Record<ChannelPlatform, string[]>> = {
     "В этом браузере вы уже вошли именно в тот аккаунт Instagram, который подключаете, — иначе на следующем шаге легко подключить чужой аккаунт.",
     "У вас есть права на управление этим аккаунтом.",
   ],
-  telegram: [],
+  telegram: [
+    "Откройте в Telegram @BotFather и отправьте команду /newbot — или выберите уже существующего бота командой /mybots.",
+    "Придумайте имя и адрес бота (адрес должен заканчиваться на «bot»). Клиенты будут писать именно этому боту.",
+    "Скопируйте токен из ответа @BotFather — строку вида 123456789:AA… — и вставьте его ниже.",
+    "Один бот подключается только к одному рабочему пространству. Если бот уже работает с другим сервисом, после подключения сообщения будут приходить только в drafta.",
+    "В drafta попадают личные сообщения боту; сообщения из групп и каналов не сохраняются.",
+  ],
   whatsapp: [
     "У вас есть бизнес-номер телефона. Отдельный номер покупать не нужно — подойдёт тот, которым вы уже пользуетесь. Личный WhatsApp подключить нельзя.",
     "На номере отключена двухшаговая проверка (PIN) — иначе WhatsApp отклонит подключение.",
@@ -375,6 +392,28 @@ export function ChannelsPanel({
     setStubKey(null);
   }
 
+  /**
+   * «Подключить бота» — токен уходит только в Server Action; в состоянии
+   * компонента он живёт до ответа и сразу стирается.
+   */
+  function submitBotToken(token: string, onDone: () => void) {
+    setError(null);
+
+    startTransition(async () => {
+      const result = await connectTelegramBotAction({ token });
+      onDone();
+
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+
+      setOnboardingKey(null);
+      setBanner({ kind: "success", text: "Канал подключён." });
+      router.refresh();
+    });
+  }
+
   /** «Войти через …» — уходим на страницу авторизации провайдера. */
   function submitConnect(platform: ChannelPlatform) {
     setError(null);
@@ -447,6 +486,15 @@ export function ChannelsPanel({
                     renameValue={renameValue}
                   />
                 )
+              ) : onboardingKey === block.key &&
+                connectPlatform &&
+                block.connectMode === "bot-token" ? (
+                <BotTokenOnboarding
+                  block={block}
+                  isPending={isPending}
+                  onCancel={closeConnect}
+                  onSubmit={submitBotToken}
+                />
               ) : onboardingKey === block.key && connectPlatform ? (
                 <ConnectOnboarding
                   block={block}
@@ -557,6 +605,81 @@ function ConnectOnboarding({
         </button>
       </div>
     </div>
+  );
+}
+
+/**
+ * Онбординг подключения по токену бота: как получить токен у @BotFather +
+ * поле для него. Поле — `type="password"`: токен даёт полный контроль над
+ * ботом и не должен оставаться на экране или в автозаполнении.
+ */
+function BotTokenOnboarding({
+  block,
+  isPending,
+  onCancel,
+  onSubmit,
+}: {
+  block: ChannelBlock;
+  isPending: boolean;
+  onCancel: () => void;
+  onSubmit: (token: string, onDone: () => void) => void;
+}) {
+  const [token, setToken] = useState("");
+  const steps = block.connect ? CONNECT_PREREQUISITES[block.connect] : [];
+
+  function handleSubmit(event: FormEvent) {
+    event.preventDefault();
+    onSubmit(token, () => setToken(""));
+  }
+
+  return (
+    <form className={setStyles.channelOnboarding} onSubmit={handleSubmit}>
+      <b>
+        <ChannelIcon block={block} />
+        Подключение бота {block.label}
+      </b>
+      <ol>
+        {steps.map((item) => (
+          <li key={item}>{item}</li>
+        ))}
+      </ol>
+      <label className={setStyles.channelStub} htmlFor="telegram-bot-token">
+        Токен бота
+      </label>
+      <input
+        aria-label="Токен бота"
+        autoComplete="off"
+        className={setStyles.renameInput}
+        disabled={isPending}
+        id="telegram-bot-token"
+        onChange={(event) => setToken(event.target.value)}
+        placeholder="123456789:AA…"
+        spellCheck={false}
+        type="password"
+        value={token}
+      />
+      <p className={setStyles.channelStub}>
+        Имя канала подставится автоматически из имени бота — переименовать его
+        можно позже.
+      </p>
+      <div className={uiStyles.cardRow}>
+        <button
+          className={`${uiStyles.button} ${uiStyles.buttonPrimary}`}
+          disabled={isPending || token.trim().length === 0}
+          type="submit"
+        >
+          {isPending ? "Подключаем…" : "Подключить бота"}
+        </button>
+        <button
+          className={`${uiStyles.button} ${uiStyles.buttonSecondary}`}
+          disabled={isPending}
+          onClick={onCancel}
+          type="button"
+        >
+          Отмена
+        </button>
+      </div>
+    </form>
   );
 }
 

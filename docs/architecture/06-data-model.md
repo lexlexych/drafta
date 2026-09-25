@@ -69,15 +69,21 @@ Email, токен, роль, срок действия, статус.
 
 - **name** — имя, которое каналу задаёт пользователь («WhatsApp Магазин»);
   показывается во всех списках, меню и тредах ([10. UI](10-ui.md#откуда-пришло-входящее))
-- провайдер (`zernio` | `postmark` | `meta`…)
+- провайдер (`zernio` | `telegram` | `postmark` | `meta`…) — `telegram` означает прямое
+  подключение бота через Bot API ([5. Telegram](05-channels.md#telegram-напрямую-bot-api));
+  один Telegram-бот — только в одном workspace (частичный уникальный индекс
+  `(provider, external_id) where provider = 'telegram'`)
 - платформа (`telegram` | `whatsapp` | `instagram`…)
 - внешний ID аккаунта соцсети — **приходит из OAuth-callback провайдера**, а не
   вводится пользователем ([5. Подключение аккаунта](05-channels.md#подключение-аккаунта-oauth));
   уникальность подключения — (workspace, платформа), дополнительно
   (workspace, провайдер, внешний ID)
 - **capabilities** (jsonb) — см. [5. Capabilities канала](05-channels.md#capabilities-канала)
-- зашифрованные credentials (пусто для Zernio — токены платформ держит сам Zernio;
-  понадобится для прямого Meta App)
+- колонка `encrypted_credentials` не используется (пусто для Zernio — токены платформ
+  держит сам Zernio). Секреты прямых провайдеров лежат в **`channel_connection_secrets`**:
+  `channel_connection_id` (PK, каскад от подключения), `workspace_id`,
+  `encrypted_credentials` (AES-256-GCM, `CREDENTIALS_ENCRYPTION_KEY`). RLS без политик,
+  гранты только `service_role` — участники workspace токен не видят даже через Data API
 - статус
 
 ### ignored_senders

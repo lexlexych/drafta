@@ -4,6 +4,7 @@ import { resolveChannelAdapter } from "./registry";
 
 // Registers the server-side provider adapters used by this operation.
 import "./zernio";
+import "./telegram";
 
 export type ChannelParticipantAvatarLookup = {
   supported: boolean;

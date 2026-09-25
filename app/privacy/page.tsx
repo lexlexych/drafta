@@ -207,7 +207,10 @@ export default function PrivacyPage() {
             </li>
           </ul>
           <p>
-            Die Anbindung der Kanäle erfolgt über Zernio. Profilbilder liefern wir
+            Die Anbindung der Kanäle erfolgt über Zernio; Telegram-Bots des
+            Unternehmens verbinden wir direkt über die Telegram Bot API. Dabei
+            speichern wir nur Direktnachrichten an den Bot, keine Nachrichten aus
+            Gruppen oder Kanälen. Profilbilder liefern wir
             über unseren eigenen Server aus, sodass der Browser der Nutzer keine
             Verbindung zu den Servern der Plattform aufbaut.
           </p>

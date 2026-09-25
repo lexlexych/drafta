@@ -2,7 +2,8 @@
 
 /**
  * Client-side behavior of the Channels panel: one block per platform, the
- * Instagram, WhatsApp, Facebook and LinkedIn onboarding → OAuth flow, the "в разработке" stub for
+ * Instagram, WhatsApp, Facebook and LinkedIn onboarding → OAuth flow, the Telegram
+ * bot-token onboarding, the "в разработке" stub for
  * the platforms whose flow is not built yet, inline rename, disable/enable
  * with confirmation, and the post-OAuth result banner. Server actions (`./actions.ts`) are mocked — the actual DB-backed
  * business logic they delegate to is covered by
@@ -18,6 +19,7 @@ const startChannelConnectionAction = vi.fn();
 const renameChannelConnectionAction = vi.fn();
 const setChannelConnectionStatusAction = vi.fn();
 const deleteChannelConnectionAction = vi.fn();
+const connectTelegramBotAction = vi.fn();
 
 vi.mock("./actions", () => ({
   startChannelConnectionAction: (...args: unknown[]) =>
@@ -28,6 +30,8 @@ vi.mock("./actions", () => ({
     setChannelConnectionStatusAction(...args),
   deleteChannelConnectionAction: (...args: unknown[]) =>
     deleteChannelConnectionAction(...args),
+  connectTelegramBotAction: (...args: unknown[]) =>
+    connectTelegramBotAction(...args),
   // Список исключений живёт в том же файле экшенов; его собственное поведение
   // проверяет `ignored-senders.test.tsx`.
   createIgnoredSenderAction: vi.fn(),
@@ -210,11 +214,58 @@ describe("ChannelsPanel", () => {
   it("shows a work-in-progress stub for platforms without a connect flow", () => {
     render(<ChannelsPanel channels={[]} />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Подключить Telegram" }));
+    fireEvent.click(screen.getByRole("button", { name: "Подключить Email" }));
 
-    expect(screen.getByText(/«Telegram» пока в разработке/)).toBeDefined();
+    expect(screen.getByText(/«Email» пока в разработке/)).toBeDefined();
     expect(startChannelConnectionAction).not.toHaveBeenCalled();
     expect(assignMock).not.toHaveBeenCalled();
+  });
+
+  it("connects a Telegram bot by token, without an OAuth redirect", async () => {
+    connectTelegramBotAction.mockResolvedValue({
+      ok: true,
+      data: { id: "chc_new", name: "@drafta_shop_bot" },
+    });
+
+    render(<ChannelsPanel channels={[]} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Подключить Telegram" }));
+
+    expect(screen.getByText(/@BotFather и отправьте команду \/newbot/)).toBeDefined();
+    const input = screen.getByLabelText("Токен бота") as HTMLInputElement;
+    expect(input.type).toBe("password");
+
+    const submit = screen.getByRole("button", { name: "Подключить бота" }) as HTMLButtonElement;
+    expect(submit.disabled).toBe(true);
+
+    fireEvent.change(input, { target: { value: " 7012345678:AAHdqTcvCH1vGWJxfSeofSAs0K5PALDsaw " } });
+    fireEvent.click(submit);
+
+    await waitFor(() => expect(screen.getByText("Канал подключён.")).toBeDefined());
+    expect(connectTelegramBotAction).toHaveBeenCalledWith({
+      token: " 7012345678:AAHdqTcvCH1vGWJxfSeofSAs0K5PALDsaw ",
+    });
+    expect(startChannelConnectionAction).not.toHaveBeenCalled();
+    expect(assignMock).not.toHaveBeenCalled();
+    expect(refresh).toHaveBeenCalled();
+  });
+
+  it("shows the server's error and clears the token when a bot cannot be connected", async () => {
+    connectTelegramBotAction.mockResolvedValue({
+      ok: false,
+      error: "Telegram не принял токен.",
+    });
+
+    render(<ChannelsPanel channels={[]} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Подключить Telegram" }));
+    const input = screen.getByLabelText("Токен бота") as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "7012345678:wrong" } });
+    fireEvent.click(screen.getByRole("button", { name: "Подключить бота" }));
+
+    await waitFor(() => expect(screen.getByText("Telegram не принял токен.")).toBeDefined());
+    expect((screen.getByLabelText("Токен бота") as HTMLInputElement).value).toBe("");
+    expect(refresh).not.toHaveBeenCalled();
   });
 
   it("warns before the Facebook authorization that a Page is connected, not a profile", async () => {

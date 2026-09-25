@@ -160,8 +160,9 @@ ID (`accountId`) из callback совпадает с тем, что провай
 > ID профиля Zernio для workspace хранится в
 > [`workspaces.settings.providerProfiles.<провайдер>`](06-data-model.md#workspaces).
 > Токены платформ держит сам Zernio — drafta сохраняет только внешний ID
-> (`channel_connections.encrypted_credentials` пусто). Прямой Meta App в будущем будет
-> складывать сюда собственные токены ([16. За горизонтом](16-rollout-plan.md)).
+> (`channel_connections.encrypted_credentials` пусто). Прямые провайдеры (первый —
+> [Telegram](#telegram-напрямую-bot-api)) хранят свои токены в отдельной server-only
+> таблице `channel_connection_secrets`.
 
 ### WhatsApp: свой номер, а не номер провайдера
 
@@ -259,6 +260,64 @@ LinkedIn идёт по тому же редиректу: `GET /v1/connect/linked
 
 Публикация постов в Instagram и LinkedIn выполняется через адаптер из фоновой
 задачи после предпросмотра и явной отправки ([18](18-publication-authoring.md)).
+
+## Telegram (напрямую, Bot API)
+
+Telegram — первый канал **без агрегатора**: провайдер `telegram`, адаптер
+`lib/channels/telegram/`, запросы к `api.telegram.org` идут прямо из drafta. Провайдер —
+свойство подключения (`channel_connections.provider`), поэтому Zernio-каналы живут
+рядом без изменений.
+
+**Подключение — по токену, без OAuth.** Пользователь создаёт бота у @BotFather
+(`/newbot`) и вставляет токен в онбординг «Каналы → Подключить Telegram» (поле-пароль).
+Server Action `connectTelegramBotAction`:
+
+1. проверяет формат и вызывает `getMe` — это и проверка токена, и `bot.id` / `@username`
+   (канал называется `@username`, пользователь имя не вводит);
+2. отказывает, если этот бот уже подключён к **любому** workspace — у бота один webhook,
+   второй `setWebhook` молча увёл бы апдейты первого (частичный уникальный индекс
+   `channel_connections (provider, external_id) where provider = 'telegram'`);
+3. создаёт `channel_connections` (`external_id = bot.id`);
+4. сохраняет токен и webhook-секрет зашифрованными в `channel_connection_secrets`;
+5. только затем вызывает `setWebhook` на `/api/webhooks/telegram` с
+   `allowed_updates: ["message"]` и `drop_pending_updates: true`.
+
+Сбой на шагах 4–5 удаляет созданную строку (секреты уходят каскадом). Токен не
+возвращается в браузер и не пишется в логи; `connect-state` (cookie + nonce) здесь не
+нужен — редиректа нет.
+
+**Вебхук.** Общий роут `app/api/webhooks/[provider]`. В апдейте Telegram нет ID бота,
+поэтому `secret_token` при `setWebhook` имеет вид `<botId>_<random>`: Telegram присылает
+его в заголовке `X-Telegram-Bot-Api-Secret-Token`, адаптер берёт из префикса `botId`
+(`externalAccountId`), а `verifyWebhook` сравнивает весь заголовок (constant-time) с
+сохранённым секретом этого бота. Резолвер секретов инжектится в адаптер из
+`lib/channels/telegram/index.ts` — сам адаптер БД не читает. `update_id` уникален только
+в пределах бота, поэтому `providerEventId = <botId>:<update_id>`.
+
+**Что попадает в инбокс.** Только `message` в личном чате (`chat.type = private`) →
+`message.received`; `conversation.external_id = chat.id`, `messages.external_id =
+message_id`, текст — `text` или `caption`. Сообщения из групп и каналов отбрасываются
+**без журналирования** (это люди, которые бизнесу не писали — минимизация данных);
+другие типы апдейтов уходят в `unparsed`. Вложения — только метаданные (тип, имя файла,
+MIME), **без URL**: файловый URL Bot API содержит токен бота. По той же причине в MVP нет
+фото контактов Telegram (`fetchParticipantAvatar` не реализован) — показываются инициалы.
+
+**Отправка** — `sendMessage` (`chat_id`, `text`) из send-пайплайна; `providerMessageId =
+message_id`. `error_code` Telegram становится `status` ошибки: 4xx (бот заблокирован,
+чат не найден) не ретраятся, 429 — ретраится. Эхо своих сообщений Telegram боту не
+присылает, и `message.sent` для этого канала не бывает.
+
+**Удаление канала** — `disconnectAccount` вызывает `deleteWebhook`; отозванный токен
+(401) считается успехом. «Отключить» только меняет статус: webhook остаётся, входящие
+отбрасываются пайплайном.
+
+> [!note] Хранение секретов прямых провайдеров
+> `channel_connections.encrypted_credentials` для этого не используется: таблица выдана
+> `authenticated` всем участникам workspace, и колонка читалась бы через Data API.
+> Секреты — в `channel_connection_secrets` (RLS без политик, гранты только
+> `service_role`, каскад от подключения и workspace). Значение шифрует приложение:
+> AES-256-GCM, ключ `CREDENTIALS_ENCRYPTION_KEY` (`lib/crypto/credentials.ts`), формат
+> `v1.<iv>.<tag>.<ciphertext>`.
 
 ### Создание workspace и Zernio Profile
 
